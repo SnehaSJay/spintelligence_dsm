@@ -1,19 +1,25 @@
 import { configureStore } from '@reduxjs/toolkit';
 import authReducer from './slices/authSlice';
-import  userReducer  from './slices/userSlice';
+import rolesReducer from './slices/rolesSlice';
+import operatorReducer from './slices/operatorSlice';
+import mixingReducer from './slices/mixing';
 import comberReducer from './slices/comber';
 import cardingReducer from './slices/carding';
+import spinningReducer from "./slices/spinSlice";
 
-// Configure the core Redux Store for the application
 export const store = configureStore({
-    reducer: {
-        auth: authReducer,
-        users: userReducer,
-        comber: comberReducer,
-        carding: cardingReducer,
-    },
-    middleware: (getDefaultMiddleware) =>
-        getDefaultMiddleware({
-            serializableCheck: false,
-        }),
+  reducer: {
+    auth: authReducer,
+    roles: rolesReducer,
+    mixing: mixingReducer,
+    comber: comberReducer,
+     carding: cardingReducer,
+    operator: operatorReducer,
+    spinning: spinningReducer,
+  },
+  middleware: (getDefaultMiddleware) =>
+    getDefaultMiddleware({
+      serializableCheck: false,
+    }),
 });
+
