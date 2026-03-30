@@ -3,6 +3,8 @@ import authReducer from './slices/authSlice';
 import rolesReducer from './slices/rolesSlice';
 import operatorReducer from './slices/operatorSlice';
 import mixingReducer from './slices/mixing';
+import comberReducer from './slices/comber';
+import cardingReducer from './slices/carding';
 import spinningReducer from "./slices/spinSlice";
 
 export const store = configureStore({
@@ -10,6 +12,8 @@ export const store = configureStore({
     auth: authReducer,
     roles: rolesReducer,
     mixing: mixingReducer,
+    comber: comberReducer,
+     carding: cardingReducer,
     operator: operatorReducer,
     spinning: spinningReducer,
   },

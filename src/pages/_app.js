@@ -1,4 +1,5 @@
 import "@/styles/globals.css";
+import "@/views/carding/betweenWithinCardEntry.css";
 import { Provider } from 'react-redux';
 import { store } from '../store';
 import "../styles/globals.css";
