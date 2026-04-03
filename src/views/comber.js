@@ -1,10 +1,15 @@
-import { useState } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/router";
 import { MdEditNote } from "react-icons/md";
 import RibbonLapCVDataEntry from "./comber/ribbonLapCVDataEntry";
 import NatiDataEntry from "./comber/natiDataEntry";
 import styles from "./comber/ribbonLapCVDataEntry.module.css";
-import UPercentDataEntry from "./carding/u%dataentry";
+import PreviewModal from "@/components/PreviewModal";
+import SuccessModal from "@/components/SuccessModal";
+import Footer from "@/components/Footer";
+import { useSelector, useDispatch } from "react-redux";
+import { clearComberState } from "@/store/slices/comber";
+
 const comberDepartmentTypes = [
     {
         id: 1,
@@ -21,7 +26,13 @@ const comberDepartmentTypes = [
 ];
 function Comber() {
     const router = useRouter();
+    const dispatch = useDispatch();
+    const { data, isLoading } = useSelector((state) => state.comber ?? {});
+    const childRef = useRef(null);
     const [checkingType, setCheckingType] = useState(null);
+    const [showSuccess, setShowSuccess] = useState(false);
+    const [showPreview, setShowPreview] = useState(false);
+    const [previewItems, setPreviewItems] = useState([]);
 
     const handleTypeChange = (value) => {
         const selectedType = comberDepartmentTypes.find((item) => item.name === value);
@@ -29,6 +40,49 @@ function Comber() {
     };
 
     const selectedType = comberDepartmentTypes.find((item) => item.id === checkingType)?.name || "";
+
+    useEffect(() => {
+        if (data) setShowSuccess(true);
+    }, [data]);
+
+    const handleSubmit = useCallback(async () => {
+        try {
+            const ok = await childRef.current?.submit?.();
+            if (ok) setShowSuccess(true);
+        } catch (e) {
+            // child handles its own errors
+        }
+    }, []);
+
+    const handleCalculate = useCallback(() => {
+        childRef.current?.calculateStats?.();
+    }, []);
+
+    const handleClear = useCallback(() => {
+        childRef.current?.clear?.();
+    }, []);
+
+    const openPreview = useCallback(() => {
+        const valid = childRef.current?.validate ? childRef.current.validate() : true;
+        if (valid === false) return;
+
+        const items = childRef.current?.getPreviewData ? childRef.current.getPreviewData() : [];
+        const headerItems = [
+            { label: "Type", value: selectedType || "Select Type" },
+        ];
+        setPreviewItems([...headerItems, ...items]);
+        setShowPreview(true);
+    }, [selectedType]);
+
+    const confirmSubmit = useCallback(async () => {
+        setShowPreview(false);
+        try {
+            const ok = await childRef.current?.submit?.();
+            if (ok) setShowSuccess(true);
+        } catch (e) {
+            // child handles errors
+        }
+    }, []);
 
     return (
         <div className={styles["cb-page"]}>
@@ -77,32 +131,36 @@ function Comber() {
                         <h3>Inspection Data Entry</h3>
                     </div>
 
-                   {selectedType === "Nati Data Entry" && (
-    <NatiDataEntry
-        types={comberDepartmentTypes}
-        selectedType={selectedType}
-        onTypeChange={handleTypeChange}
-        showForm={Boolean(checkingType)}
-    />
-)}
+                    {selectedType === "Nati Data Entry" ? (
+                        <>
+                            <NatiDataEntry
+                                ref={childRef}
+                                types={comberDepartmentTypes}
+                                selectedType={selectedType}
+                                onTypeChange={handleTypeChange}
+                                showForm={Boolean(checkingType)}
+                            />
 
-{selectedType === "U% Data Entry" && (
-    <UPercentDataEntry
-        types={comberDepartmentTypes}
-        selectedType={selectedType}
-        onTypeChange={handleTypeChange}
-    />
-)}
-
-{(!selectedType || selectedType === "Ribbon Lap CV Data Entry") && (
-    <RibbonLapCVDataEntry
-        types={comberDepartmentTypes}
-        selectedType={selectedType}
-        onTypeChange={handleTypeChange}
-        showForm={Boolean(checkingType)}
-    />
-)}
-                  
+                            <div style={{ margin: "16px -24px 0 -24px" }}>
+                                <Footer
+                                    onBack={() => router.push("/dashboard")}
+                                    onClear={handleClear}
+                                    onSave={openPreview}
+                                    saveLabel={isLoading ? "Submitting..." : "Save Record"}
+                                    disabled={isLoading}
+                                />
+                            </div>
+                        </>
+                    ) : (
+                        <RibbonLapCVDataEntry
+                            ref={childRef}
+                            types={comberDepartmentTypes}
+                            selectedType={selectedType}
+                            onTypeChange={handleTypeChange}
+                            showForm={Boolean(checkingType)}
+                            onPreview={openPreview}
+                        />
+                    )}
                 </div>
                     {selectedType === "U% Data Entry" && (
     <div
@@ -204,7 +262,27 @@ function Comber() {
     </div>
 )}
             </div>
-        
+
+            <PreviewModal
+                open={showPreview}
+                title="Quality Control - Comber Notebook"
+                subtitle="Preview"
+                items={previewItems}
+                typeValue={selectedType || "Select Type"}
+                onCancel={() => setShowPreview(false)}
+                onConfirm={confirmSubmit}
+                confirmLabel="Submit"
+            />
+
+            <SuccessModal
+                open={showSuccess}
+                message="Data Submitted"
+                typeValue={selectedType || "Comber"}
+                onClose={() => {
+                    setShowSuccess(false);
+                    dispatch(clearComberState());
+                }}
+            />
         </div>
     );
 }
