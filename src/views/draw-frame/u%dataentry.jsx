@@ -1,9 +1,7 @@
 import { useState } from "react";
 import styles from "@/styles/u%dataentry.module.css";
-import CustomSelect from "@/components/CustomSelect";
-import Footer from "@/components/Footer";
 
-function UPercentDataEntry({ types, selectedType, onTypeChange }) {
+function UPercentDataEntry() {
   const [form, setForm] = useState({
     date: new Date().toISOString().split("T")[0],
     shift: "",
@@ -37,16 +35,7 @@ function UPercentDataEntry({ types, selectedType, onTypeChange }) {
   };
 
   return (
-    <div className={styles.container}>
       <div className={styles.formGrid}>
-        <div>
-          <label>Type</label>
-          <CustomSelect
-            options={types}
-            value={selectedType}
-            onChange={onTypeChange}
-          />
-        </div>
 
         <div>
           <label>Date</label>
@@ -116,17 +105,11 @@ function UPercentDataEntry({ types, selectedType, onTypeChange }) {
           <label>Remarks</label>
           <textarea
             rows={3}
+            value={form.remarks}
             onChange={(e) => handleChange("remarks", e.target.value)}
           />
         </div>
       </div>
-
-      <Footer
-        onBack={() => console.log("Back")}
-        onClear={resetForm}
-        onSave={() => console.log(form)}
-      />
-    </div>
   );
 }
 

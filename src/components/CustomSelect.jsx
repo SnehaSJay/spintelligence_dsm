@@ -1,4 +1,4 @@
-function CustomSelect({ options, value, onChange }) {
+function CustomSelect({ options = [], value = "", onChange = () => {} }) {
     return (
         <select
             className="mixx-input"
@@ -7,7 +7,9 @@ function CustomSelect({ options, value, onChange }) {
         >
             <option value="">Select Type</option>
             {options.map((option) => (
-                <option key={option.id}>{option.name}</option>
+                <option key={option.id ?? option.name} value={option.name}>
+                    {option.name}
+                </option>
             ))}
         </select>
     )

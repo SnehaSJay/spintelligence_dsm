@@ -1,7 +1,6 @@
 import React, { forwardRef, useImperativeHandle, useMemo, useState } from "react";
 
 const today = new Date().toISOString().split("T")[0];
-const typeOptions = ["SMXCots Change Data Entry", "SMX Breaks Study Report"];
 const simplexOptions = ["SX-01", "SX-02", "SX-03", "SX-04", "SX-05", "SX-06"];
 const reportTypeOptions = ["", "Regular", "Trial", "Special"];
 
@@ -72,7 +71,7 @@ const parseNumber = (value) => {
 const formatTotal = (value) => parseNumber(value).toFixed(2);
 
 const SMXBreaksStudyReport = forwardRef(function SMXBreaksStudyReport(
-  { selectedTypeName, onTypeChange },
+  _,
   ref
 ) {
   const [form, setForm] = useState(createInitialForm);
@@ -172,24 +171,6 @@ const SMXBreaksStudyReport = forwardRef(function SMXBreaksStudyReport(
   return (
     <div className="flex flex-col gap-8">
       <div className="grid grid-cols-3 gap-[18px]">
-        <div className="flex flex-col gap-1.5 min-w-0">
-          <label className="text-[14px] font-semibold text-slate-700">Type</label>
-          <select
-            className={`${topFieldClass}${errorClass(errors.form?.type)}`}
-            value={selectedTypeName}
-            onChange={(e) => {
-              handleFormChange("type", e.target.value);
-              onTypeChange?.(e.target.value);
-            }}
-          >
-            {typeOptions.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
-        </div>
-
         <div className="flex flex-col gap-1.5 min-w-0">
           <label className="text-[14px] font-semibold text-slate-700">Simplex No.</label>
           <select

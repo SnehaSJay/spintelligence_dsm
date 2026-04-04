@@ -3,6 +3,8 @@ import {
     submitBetweenWithinCardEntry,
     submitCardThickPlaceEntry,
     submitNatiDataEntry,
+    submitCardingUqcEntry,
+    fetchCardingUqcEntries,
 } from "@/apis/carding";
 
 /* =======================
@@ -45,6 +47,28 @@ export const submitCardingNati = createAsyncThunk(
     }
 );
 
+export const submitCardingUqc = createAsyncThunk(
+    "carding/submitUqc",
+    async (payload, { rejectWithValue }) => {
+        try {
+            return await submitCardingUqcEntry(payload);
+        } catch (error) {
+            return rejectWithValue(error.message);
+        }
+    }
+);
+
+export const getCardingUqcEntries = createAsyncThunk(
+    "carding/getUqcEntries",
+    async ({ page = 1, limit = 10 } = {}, { rejectWithValue }) => {
+        try {
+            return await fetchCardingUqcEntries({ page, limit });
+        } catch (error) {
+            return rejectWithValue(error.message);
+        }
+    }
+);
+
 /* =======================
    INITIAL STATE
 ======================= */
@@ -53,7 +77,11 @@ const initialState = {
     betweenWithin: null,
     cardThickPlace: null,
     nati: null,
+    uqc: null,
+    uqcEntries: [],
+    uqcMeta: { page: 1, limit: 10, total: 0, totalPages: 0 },
     isLoading: false,
+    listLoading: false,
     error: null,
 };
 
@@ -69,7 +97,9 @@ const cardingSlice = createSlice({
             state.betweenWithin = null;
             state.cardThickPlace = null;
             state.nati = null;
+            state.uqc = null;
             state.isLoading = false;
+            state.listLoading = false;
             state.error = null;
         },
     },
@@ -121,6 +151,41 @@ const cardingSlice = createSlice({
             })
             .addCase(submitCardingNati.rejected, (state, action) => {
                 state.isLoading = false;
+                state.error = action.payload;
+            })
+
+            /* =======================
+               UQC DATA ENTRY
+            ======================= */
+            .addCase(submitCardingUqc.pending, (state) => {
+                state.isLoading = true;
+                state.error = null;
+            })
+            .addCase(submitCardingUqc.fulfilled, (state, action) => {
+                state.isLoading = false;
+                state.uqc = action.payload;
+            })
+            .addCase(submitCardingUqc.rejected, (state, action) => {
+                state.isLoading = false;
+                state.error = action.payload;
+            })
+
+            .addCase(getCardingUqcEntries.pending, (state) => {
+                state.listLoading = true;
+                state.error = null;
+            })
+            .addCase(getCardingUqcEntries.fulfilled, (state, action) => {
+                state.listLoading = false;
+                state.uqcEntries = action.payload?.data || [];
+                state.uqcMeta = {
+                    page: action.payload?.page || 1,
+                    limit: action.payload?.limit || 10,
+                    total: action.payload?.total || 0,
+                    totalPages: action.payload?.totalPages || 0,
+                };
+            })
+            .addCase(getCardingUqcEntries.rejected, (state, action) => {
+                state.listLoading = false;
                 state.error = action.payload;
             });
     },

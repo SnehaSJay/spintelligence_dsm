@@ -3,6 +3,7 @@ import { useRouter } from "next/router";
 import { MdEditNote } from "react-icons/md";
 import RibbonLapCVDataEntry from "./comber/ribbonLapCVDataEntry";
 import NatiDataEntry from "./comber/natiDataEntry";
+import UPercentDataEntry from "./comber/u%dataentry";
 import styles from "./comber/ribbonLapCVDataEntry.module.css";
 import PreviewModal from "@/components/PreviewModal";
 import SuccessModal from "@/components/SuccessModal";
@@ -27,7 +28,7 @@ const comberDepartmentTypes = [
 function Comber() {
     const router = useRouter();
     const dispatch = useDispatch();
-    const { data, isLoading } = useSelector((state) => state.comber ?? {});
+    const { data, isLoading, listLoading, uqcEntries = [] } = useSelector((state) => state.comber ?? {});
     const childRef = useRef(null);
     const [checkingType, setCheckingType] = useState(null);
     const [showSuccess, setShowSuccess] = useState(false);
@@ -141,7 +142,26 @@ function Comber() {
                                 showForm={Boolean(checkingType)}
                             />
 
-                            <div style={{ margin: "16px -24px 0 -24px" }}>
+                            <div style={{ margin: "0 -24px -20px -24px" }}>
+                                <Footer
+                                    onBack={() => router.push("/dashboard")}
+                                    onClear={handleClear}
+                                    onSave={openPreview}
+                                    saveLabel={isLoading ? "Submitting..." : "Save Record"}
+                                    disabled={isLoading}
+                                />
+                            </div>
+                        </>
+                    ) : selectedType === "U% Data Entry" ? (
+                        <>
+                            <UPercentDataEntry
+                                ref={childRef}
+                                types={comberDepartmentTypes}
+                                selectedType={selectedType}
+                                onTypeChange={handleTypeChange}
+                            />
+
+                            <div style={{ margin: "0 -24px -20px -24px" }}>
                                 <Footer
                                     onBack={() => router.push("/dashboard")}
                                     onClear={handleClear}
@@ -224,24 +244,30 @@ function Comber() {
             </thead>
 
             <tbody>
-                {[...Array(10)].map((_, i) => (
+                {listLoading ? (
+                    <tr>
+                        <td colSpan={10} style={{ padding: "14px", color: "#666" }}>
+                            Loading...
+                        </td>
+                    </tr>
+                ) : uqcEntries.length ? uqcEntries.map((entry, i) => (
                     <tr
-                        key={i}
+                        key={entry.id}
                         style={{
                             backgroundColor: i % 2 === 0 ? "#fff" : "#fafafa",
                         }}
                     >
                         {[
-                            "02/04/2026",
-                            "General",
-                            "WPSF 0.90",
-                            "FR Drawing",
-                            "FR DSS-1",
-                            "1.32",
-                            "1.67",
-                            "0.32",
-                            "1.55",
-                            "Sample remark text",
+                            entry.entry_date ? new Date(entry.entry_date).toLocaleDateString("en-GB") : "-",
+                            entry.shift || "-",
+                            entry.variety || "-",
+                            entry.department || "-",
+                            entry.mc_no || "-",
+                            entry.u_percent || "-",
+                            entry.cvm || "-",
+                            entry.cvm_1m || "-",
+                            entry.cvm_3m || "-",
+                            entry.remarks || "-",
                         ].map((cell, idx) => (
                             <td
                                 key={idx}
@@ -256,7 +282,13 @@ function Comber() {
                             </td>
                         ))}
                     </tr>
-                ))}
+                )) : (
+                    <tr>
+                        <td colSpan={10} style={{ padding: "14px", color: "#666" }}>
+                            No entries found.
+                        </td>
+                    </tr>
+                )}
             </tbody>
         </table>
     </div>

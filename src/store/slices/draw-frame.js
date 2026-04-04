@@ -1,7 +1,9 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 import {
   fetchDrawFrameCotsEntries as fetchDrawFrameCotsEntriesApi,
+  fetchDrawFrameUqcEntries as fetchDrawFrameUqcEntriesApi,
   submitDrawFrameCotsInspection as submitDrawFrameCotsInspectionApi,
+  submitDrawFrameUqcInspection as submitDrawFrameUqcInspectionApi,
   submitDrawFrameYarnCvInspection as submitDrawFrameYarnCvInspectionApi,
 } from "@/apis/draw-frame";
 
@@ -38,9 +40,33 @@ export const fetchDrawFrameCotsEntries = createAsyncThunk(
   }
 );
 
+export const submitDrawFrameUqcInspection = createAsyncThunk(
+  "drawFrame/submitUqcInspection",
+  async (payload, { rejectWithValue }) => {
+    try {
+      return await submitDrawFrameUqcInspectionApi(payload);
+    } catch (error) {
+      return rejectWithValue(error?.message || "Something went wrong");
+    }
+  }
+);
+
+export const fetchDrawFrameUqcEntries = createAsyncThunk(
+  "drawFrame/fetchUqcEntries",
+  async (params, { rejectWithValue }) => {
+    try {
+      return await fetchDrawFrameUqcEntriesApi(params);
+    } catch (error) {
+      return rejectWithValue(error?.message || "Something went wrong");
+    }
+  }
+);
+
 const initialState = {
   data: null,
   cotsEntries: [],
+  uqcEntries: [],
+  uqcMeta: { page: 1, limit: 10, total: 0, totalPages: 0 },
   actionLoading: false,
   actionSuccess: false,
   listLoading: false,
@@ -99,6 +125,39 @@ const drawFrameSlice = createSlice({
         state.cotsEntries = action.payload;
       })
       .addCase(fetchDrawFrameCotsEntries.rejected, (state, action) => {
+        state.listLoading = false;
+        state.error = action.payload;
+      })
+      .addCase(submitDrawFrameUqcInspection.pending, (state) => {
+        state.actionLoading = true;
+        state.actionSuccess = false;
+        state.error = null;
+      })
+      .addCase(submitDrawFrameUqcInspection.fulfilled, (state, action) => {
+        state.actionLoading = false;
+        state.actionSuccess = true;
+        state.data = action.payload;
+      })
+      .addCase(submitDrawFrameUqcInspection.rejected, (state, action) => {
+        state.actionLoading = false;
+        state.actionSuccess = false;
+        state.error = action.payload;
+      })
+      .addCase(fetchDrawFrameUqcEntries.pending, (state) => {
+        state.listLoading = true;
+        state.error = null;
+      })
+      .addCase(fetchDrawFrameUqcEntries.fulfilled, (state, action) => {
+        state.listLoading = false;
+        state.uqcEntries = action.payload?.data || [];
+        state.uqcMeta = {
+          page: action.payload?.page || 1,
+          limit: action.payload?.limit || 10,
+          total: action.payload?.total || 0,
+          totalPages: action.payload?.totalPages || 0,
+        };
+      })
+      .addCase(fetchDrawFrameUqcEntries.rejected, (state, action) => {
         state.listLoading = false;
         state.error = action.payload;
       });

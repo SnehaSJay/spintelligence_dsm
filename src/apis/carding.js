@@ -37,3 +37,29 @@ export const submitNatiDataEntry = async (payload) => {
         throw new Error(error.message || "Server error occurred");
     }
 };
+
+export const submitCardingUqcEntry = async (payload) => {
+    try {
+        const response = await apiConfig.post("/carding/uqc", payload);
+        return response.data;
+    } catch (error) {
+        if (error.response && error.response.data) {
+            throw new Error(error.response.data.message || "Invalid payload data.");
+        }
+        throw new Error(error.message || "Server error occurred");
+    }
+};
+
+export const fetchCardingUqcEntries = async ({ page = 1, limit = 10 } = {}) => {
+    try {
+        const response = await apiConfig.get("/carding/uqc", {
+            params: { page, limit },
+        });
+        return response.data;
+    } catch (error) {
+        if (error.response && error.response.data) {
+            throw new Error(error.response.data.message || "Unable to fetch entries.");
+        }
+        throw new Error(error.message || "Server error occurred");
+    }
+};
