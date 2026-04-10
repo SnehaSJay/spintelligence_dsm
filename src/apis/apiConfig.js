@@ -1,9 +1,28 @@
 import axios from 'axios';
 import { emitGlobalFailureModal } from "@/utils/globalFailureModal";
 
+let authToken = null;
+
 const resolvedBaseUrl = (
     process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
 ).trim();
+
+const buildNetworkErrorMessage = (error) => {
+    const method = String(error.config?.method || "request").toUpperCase();
+    const path = error.config?.url || "unknown endpoint";
+    const base = error.config?.baseURL || resolvedBaseUrl;
+    const endpoint = `${base}${path.startsWith("/") ? path : `/${path}`}`;
+
+    if (error.code === "ECONNABORTED") {
+        return `Request timed out for ${method} ${endpoint}`;
+    }
+
+    if (error.message === "Network Error" || error.request) {
+        return `Unable to reach ${method} ${endpoint}`;
+    }
+
+    return error.message || `Unable to complete ${method} ${endpoint}`;
+};
 
 // Create the base Axios instance with default settings
 const axiosInstance = axios.create({
@@ -13,15 +32,50 @@ const axiosInstance = axios.create({
     },
 });
 
+export const setAuthToken = (token) => {
+    authToken = token || null;
+};
+
+const buildRequestConfig = (options = {}) => {
+    if (!options || typeof options !== "object" || Array.isArray(options)) {
+        return {};
+    }
+
+    const {
+        headers,
+        skipGlobalErrorModal,
+        timeout,
+        signal,
+        ...rest
+    } = options;
+
+    const resolvedHeaders = headers ?? rest;
+    const config = {};
+
+    if (resolvedHeaders && Object.keys(resolvedHeaders).length > 0) {
+        config.headers = resolvedHeaders;
+    }
+
+    if (typeof skipGlobalErrorModal !== "undefined") {
+        config.skipGlobalErrorModal = skipGlobalErrorModal;
+    }
+
+    if (typeof timeout !== "undefined") {
+        config.timeout = timeout;
+    }
+
+    if (typeof signal !== "undefined") {
+        config.signal = signal;
+    }
+
+    return config;
+};
+
 // Request interceptor to automatically add the Bearer token and any other globally required headers
 axiosInstance.interceptors.request.use(
     (config) => {
-        // Only run safely in the browser context (Next.js)
-        if (typeof window !== 'undefined') {
-            const token = localStorage.getItem('token');
-            if (token) {
-                config.headers.Authorization = `Bearer ${token}`;
-            }
+        if (authToken) {
+            config.headers.Authorization = `Bearer ${authToken}`;
         }
         return config;
     },
@@ -37,7 +91,7 @@ axiosInstance.interceptors.response.use(
             const message =
                 error.response?.data?.message ||
                 error.response?.data?.error ||
-                (status ? `Request failed with status ${status}` : "API is not responsive. Please try again.");
+                (status ? `Request failed with status ${status}` : buildNetworkErrorMessage(error));
 
             emitGlobalFailureModal({ message, status });
         }
@@ -57,7 +111,7 @@ const apiConfig = {
     get: (url, params = {}, customHeaders = {}) => {
         return axiosInstance.get(url, {
             params,
-            headers: customHeaders,
+            ...buildRequestConfig(customHeaders),
         });
     },
 
@@ -69,7 +123,7 @@ const apiConfig = {
      */
     post: (url, data = {}, customHeaders = {}) => {
         return axiosInstance.post(url, data, {
-            headers: customHeaders,
+            ...buildRequestConfig(customHeaders),
         });
     },
 
@@ -81,7 +135,7 @@ const apiConfig = {
      */
     put: (url, data = {}, customHeaders = {}) => {
         return axiosInstance.put(url, data, {
-            headers: customHeaders,
+            ...buildRequestConfig(customHeaders),
         });
     },
 
@@ -93,7 +147,7 @@ const apiConfig = {
      */
     patch: (url, data = {}, customHeaders = {}) => {
         return axiosInstance.patch(url, data, {
-            headers: customHeaders,
+            ...buildRequestConfig(customHeaders),
         });
     },
 
@@ -106,7 +160,7 @@ const apiConfig = {
     delete: (url, params = {}, customHeaders = {}) => {
         return axiosInstance.delete(url, {
             params,
-            headers: customHeaders,
+            ...buildRequestConfig(customHeaders),
         });
     },
 };
