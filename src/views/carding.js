@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import { MdEditNote } from "react-icons/md";
 
+import ProcessParameterDataEntry from "./carding/processParameterDataEntry";
 import BetweenWithinCardEntry from "./carding/betweenWithinCardEntry";
 import CardingDfk from "./carding/cardingdfk";
 import CardThickPlaceEntry from "./carding/cardThickPlaceEntry";
@@ -14,6 +15,7 @@ import { filterOptionsByDepartmentAccess } from "@/utils/screenAccess";
 import styles from "./carding/cardThickPlaceEntry.module.css";
 
 const cardingDepartmentTypes = [
+    { id: 0, name: "Process Parameter", aliases: ["Process Parameter", "Process Parameter Data Entry"], component: ProcessParameterDataEntry },
     { id: 1, name: "Between & Within Card Data Entry", aliases: ["Between & Within Card Data Entry", "Between and Within Card Data Entry", "Between Within Card Entry"] },
     { id: 2, name: "Card Thick Place Entry", aliases: ["Card Thick Place Entry", "Card Thick Place Checking"] },
     { id: 3, name: "Trials Data Entry Form", aliases: ["Trials Data Entry Form", "Trials Data Entry", "Trials"] },
@@ -52,6 +54,9 @@ function Carding() {
 
     const selectedType =
         typeOptions.find((item) => item.id === checkingType)?.name || "";
+    const selectedOption = typeOptions.find((item) => item.id === checkingType) || null;
+    const SelectedComponent = selectedOption?.component ?? null;
+    const isProcessParameter = selectedType === "Process Parameter";
 
     return (
         <div className={styles["card-page"]}>
@@ -92,15 +97,26 @@ function Carding() {
                 </div>
 
                 <div className={styles["card-shell"]}>
-                    <div className={styles["card-form-title"]}>
-                        <MdEditNote />
-                        <h3>Inspection Data Entry</h3>
-                    </div>
+                    {!isProcessParameter ? (
+                        <div className={styles["card-form-title"]}>
+                            <MdEditNote />
+                            <h3>Inspection Data Entry</h3>
+                        </div>
+                    ) : null}
 
                     {!typeOptions.length ? (
                         <div className={styles["message-box"]}>
                             No accessible input screens are available for this department.
                         </div>
+                    ) : null}
+
+                    {isProcessParameter && SelectedComponent ? (
+                        <SelectedComponent
+                            types={typeOptions}
+                            selectedType={selectedType}
+                            onTypeChange={handleTypeChange}
+                            savedVersionsTargetId="carding-process-parameter-saved-versions"
+                        />
                     ) : null}
 
                     {selectedType === "Between & Within Card Data Entry" && (
@@ -155,6 +171,10 @@ function Carding() {
                         />
                     )}
                 </div>
+
+                {isProcessParameter && SelectedComponent ? (
+                    <div id="carding-process-parameter-saved-versions" className="mt-5 mx-auto max-w-[1120px]" />
+                ) : null}
 
                 
                 {/* ✅ TABLE BELOW CARD (ONLY FOR U%) */}

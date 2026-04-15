@@ -6,6 +6,7 @@ import { MdOutlineEditNote } from "react-icons/md";
 import Footer from "@/components/Footer";
 import PreviewModal from "@/components/PreviewModal";
 import SuccessModal from "@/components/SuccessModal";
+import DrawFrameHeaderEntry from "@/views/draw-frame/DrawFrameHeaderEntry";
 import {
   clearDrawFrameState,
   fetchDrawFrameCotsEntries,
@@ -25,6 +26,16 @@ const primaryTypeOptions = [
   { id: 1, name: "Yarn CV% Calculation Form", aliases: ["Yarn CV% Calculation Form", "Yarn CV Calculation Form"] },
   { id: 2, name: "Draw Frame Cots Data Entry", aliases: ["Draw Frame Cots Data Entry", "Drawframe Cots Data Entry"] },
   { id: 3, name: "U% Data Entry", aliases: ["U% Data Entry", "U Percent Data Entry", "U% Checking"] },
+  {
+    id: 4,
+    name: "PP - Breaker Drawing",
+    aliases: ["PP - Breaker Drawing", "Process Parameter", "Draw Frame QC Header Entry", "Drawframe Header Entry"],
+  },
+  {
+    id: 5,
+    name: "PP - Finisher Drawing",
+    aliases: ["PP - Finisher Drawing", "Finisher Drawing"],
+  },
 ];
 
 export const DRAW_FRAME_INPUT_SCREEN_COUNT = primaryTypeOptions.length;
@@ -117,6 +128,8 @@ function DrawFrame() {
     remarks: "",
   });
   const isUPercentEntry = form.type === "U% Data Entry";
+  const isHeaderEntry =
+    form.type === "PP - Breaker Drawing" || form.type === "PP - Finisher Drawing";
 
   useEffect(() => {
     if (!typeOptions.some((option) => option.name === form.type)) {
@@ -326,6 +339,10 @@ function DrawFrame() {
       return !hasErrors;
     }
 
+    if (isHeaderEntry) {
+      return false;
+    }
+
     if (isCots) {
       if (!form.date) headerErrors.date = true;
       if (!form.shift) headerErrors.shift = true;
@@ -421,7 +438,7 @@ function DrawFrame() {
       items.push({ label: "1m CVM", value: uPercentForm.oneMeterCvm });
       items.push({ label: "3m CVM", value: uPercentForm.threeMeterCvm });
       items.push({ label: "Remarks", value: uPercentForm.remarks });
-    } else {
+    } else if (!isHeaderEntry) {
       items.push({ label: "Type", value: form.type });
       items.push({ label: "S. No.", value: form.serialNumber });
       items.push({ label: "Date", value: form.date });
@@ -442,7 +459,7 @@ function DrawFrame() {
       });
     }
     return items;
-  }, [form, machineEntries, oneYardMetrics, halfYardMetrics, uPercentForm]);
+  }, [form, isHeaderEntry, machineEntries, oneYardMetrics, halfYardMetrics, uPercentForm]);
 
   const handleSubmit = () => {
     const isCots = form.type === "Draw Frame Cots Data Entry";
@@ -563,21 +580,28 @@ function DrawFrame() {
           <p className={styles.description}>Record and manage industrial machine quality inspections.</p>
         </div>
 
-        <div className={styles.card}>
-          <div className={styles.cardBody}>
-            <div className={styles.sectionHeader}>
-              <MdOutlineEditNote className={styles.sectionIcon} />
-              <h2 className={styles.sectionTitle}>Inspection Data Entry</h2>
-            </div>
-            <div className={styles.sectionDivider} />
-
-            {!typeOptions.length ? (
-              <div className={styles.messageInfo}>
-                No accessible input screens are available for this department.
+        {isHeaderEntry ? (
+          <DrawFrameHeaderEntry
+            typeOptions={typeOptions}
+            selectedType={form.type}
+            onTypeChange={(value) => handleFormChange("type", value)}
+          />
+        ) : (
+          <div className={`${styles.card} ${styles.inspectionCard}`}>
+            <div className={styles.cardBody}>
+              <div className={styles.sectionHeader}>
+                <MdOutlineEditNote className={styles.sectionIcon} />
+                <h2 className={styles.sectionTitle}>Inspection Data Entry</h2>
               </div>
-            ) : null}
+              <div className={styles.sectionDivider} />
 
-            {isUPercentEntry ? (
+              {!typeOptions.length ? (
+                <div className={styles.messageInfo}>
+                  No accessible input screens are available for this department.
+                </div>
+              ) : null}
+
+              {isUPercentEntry ? (
               <div className={uPercentStyles.formGrid}>
                 <div className={uPercentStyles.field}>
                   <label>Type</label>
@@ -710,7 +734,7 @@ function DrawFrame() {
                   />
                 </div>
               </div>
-            ) : (
+              ) : (
             <div className={styles.formGrid}>
               <div className={styles.field}>
                 <label className={styles.label}>Type</label>
@@ -840,7 +864,7 @@ function DrawFrame() {
             </div>
             )}
 
-            {form.type === "Draw Frame Cots Data Entry" ? (
+            {isHeaderEntry ? null : form.type === "Draw Frame Cots Data Entry" ? (
               <div className={styles.machineSection}>
                 <h3 className={styles.machineSectionTitle}>Machine-Specific Data</h3>
 
@@ -1075,19 +1099,20 @@ function DrawFrame() {
                   ))}
                 </div>
               </>
-            )}
+              )}
 
-            {error && <p className={styles.messageError}>{error}</p>}
+              {error ? <p className={styles.messageError}>{error}</p> : null}
+            </div>
+
+            <Footer
+              onBack={() => router.push("/dashboard")}
+              onClear={handleClear}
+              onSave={openPreview}
+              saveLabel={actionLoading ? "Submitting..." : "Save Record"}
+              disabled={actionLoading}
+            />
           </div>
-
-          <Footer
-            onBack={() => router.push("/dashboard")}
-            onClear={handleClear}
-            onSave={openPreview}
-            saveLabel={actionLoading ? "Submitting..." : "Save Record"}
-            disabled={actionLoading}
-          />
-        </div>
+        )}
         {form.type === "U% Data Entry" && (
   <div className={uPercentStyles.tableSection}>
     <h3>Last 10 Entries</h3>

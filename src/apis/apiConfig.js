@@ -7,6 +7,8 @@ const resolvedBaseUrl = (
     process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
 ).trim();
 
+export { resolvedBaseUrl };
+
 const buildNetworkErrorMessage = (error) => {
     const method = String(error.config?.method || "request").toUpperCase();
     const path = error.config?.url || "unknown endpoint";
