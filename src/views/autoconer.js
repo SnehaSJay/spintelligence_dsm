@@ -153,12 +153,10 @@ function Autoconer() {
 
         <div className={styles.shell}>
           <div className={styles.formBody}>
-            {!isFooterHistoryType ? (
-              <div className={styles.formTitle}>
-                <MdOutlineEditNote />
-                <h3>Inspection Data Entry</h3>
-              </div>
-            ) : null}
+            <div className={styles.formTitle}>
+              <MdOutlineEditNote />
+              <h3>Inspection Data Entry</h3>
+            </div>
 
             {SelectedComponent ? (
               <SelectedComponent
@@ -198,6 +196,7 @@ function Autoconer() {
                   registeredActions.onClear?.();
                 }}
                 onSave={openPreview}
+                variant="compact"
                 saveLabel={registeredActions.saveLabel || "Save Record"}
                 disabled={registeredActions.disabled}
               />

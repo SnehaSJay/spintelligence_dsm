@@ -13,6 +13,12 @@
   flex-wrap: wrap;
 }
 
+.footer-container-compact {
+  padding: 0;
+  border-top: none;
+  background: transparent;
+}
+
 .left-actions {
   margin-right: auto;
 }
@@ -45,6 +51,14 @@
   justify-content: center;
   gap: 6px;
   min-height: 40px;
+}
+
+.button-base-compact {
+  min-height: 32px;
+  padding: 7px 14px;
+  font-size: 11px;
+  border-radius: 6px;
+  gap: 5px;
 }
 
 .button-base:disabled {

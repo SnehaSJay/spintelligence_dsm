@@ -22,7 +22,7 @@
 .container {
   max-width: 1120px;
   margin: 0 auto;
-  padding: 12px 20px 32px;
+  padding: 10px 16px 28px;
 }
 
 .breadcrumbs {
@@ -48,27 +48,28 @@
 }
 
 .header {
-  margin-bottom: 18px;
+  margin-bottom: 12px;
 }
 
 .header h1 {
   margin: 0;
-  font-size: 24px;
+  font-size: 18px;
   font-weight: 800;
   color: #172033;
 }
 
 .header p {
-  margin: 6px 0 0;
-  font-size: 14px;
+  margin: 4px 0 0;
+  font-size: 11px;
   color: #7b869a;
 }
 
 .shell {
   background: #fff;
   border: 1px solid #e4eaf2;
-  border-radius: 12px;
+  border-radius: 8px;
   overflow: hidden;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
 }
 
 .validationMessage {
@@ -83,13 +84,14 @@
 }
 
 .formBody {
-  padding: 20px;
+  padding: 14px 16px 18px;
 }
 
 .processFooterWrap {
-  margin-top: 24px;
-  border-top: 1px solid #eef2f7;
-  padding-top: 16px;
+  margin-top: 0;
+  border-top: 1px solid #e8eef8;
+  background: #f7faff;
+  padding: 10px 16px;
 }
 
 .postFooterSlot {
@@ -100,19 +102,23 @@
   display: flex;
   gap: 8px;
   align-items: center;
-  margin-bottom: 18px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #edf2fa;
   color: #21314d;
 }
 
 .formTitle svg {
-  color: #5b73cb;
-  font-size: 20px;
+  color: #3b82f6;
+  font-size: 14px;
 }
 
 .formTitle h3 {
   margin: 0;
-  font-size: 18px;
+  font-size: 12px;
   font-weight: 700;
+  letter-spacing: 0.01em;
+  color: #22324a;
 }
 
 @media (max-width: 768px) {
@@ -138,6 +144,10 @@
   }
 
   .formBody {
-    padding: 16px;
+    padding: 18px 16px 22px;
+  }
+
+  .processFooterWrap {
+    padding: 12px 16px;
   }
 }
