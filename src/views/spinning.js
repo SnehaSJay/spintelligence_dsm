@@ -2,11 +2,11 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/router";
 import { useDispatch, useSelector } from "react-redux";
 import { AiOutlineAudio } from "react-icons/ai";
-import { MdEditNote } from "react-icons/md";
 import Image from "next/image";
 
 import Footer from "../components/Footer";
 import PreviewModal from "@/components/PreviewModal";
+import ProcessParameterDataEntry from "./spinning/processParameterDataEntry";
 import { submitSpinningRecord, resetSpinningState } from "../store/slices/spinSlice";
 import { sanitizeIntegerInput, sanitizeNumericInput } from "@/utils/inputValidation";
 import { filterOptionsByDepartmentAccess } from "@/utils/screenAccess";
@@ -38,6 +38,7 @@ const createCountChangeRows = (readingCount) => {
 const SHIFT_OPTIONS = ["Shift A", "Shift B", "Shift C", "General"];
 const RING_FRAME_CHECKERS = ["Ramesh", "Suresh", "Mahesh", "Karthik", "Anitha"];
 const SPINNING_CHECKING_OPTIONS = [
+    { id: 0, name: "Process Parameter", aliases: ["Process Parameter", "Process Parameter Data Entry"], component: ProcessParameterDataEntry },
     { id: 1, name: "COTS Checking", aliases: ["COTS Checking", "COTS - CHECKING"] },
     { id: 2, name: "Count Change", aliases: ["Count Change", "COUNT CHANGE"] },
     { id: 3, name: "Ring Frame Log Book", aliases: ["Ring Frame Log Book", "RING FRAME LOG BOOK"] },
@@ -69,9 +70,31 @@ const createRingFrameRows = () =>
         others: "",
     }));
 
+const InspectionEntryIcon = () => (
+    <svg
+        aria-hidden="true"
+        viewBox="0 0 20 20"
+        className={styles["title-icon"]}
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+    >
+        <path d="M3 5.5H10.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        <path d="M3 9.5H8.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        <path d="M3 13.5H6.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        <path d="M12.3 6.2L15.8 9.7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        <path
+            d="M11.4 13.9L10.9 16L13 15.5L17 11.5C17.6 10.9 17.6 9.95 17 9.35L16.15 8.5C15.55 7.9 14.6 7.9 14 8.5L11.4 11.1V13.9Z"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinejoin="round"
+        />
+    </svg>
+);
+
 function SpinningDepartment() {
     const router = useRouter();
     const dispatch = useDispatch();
+    const childRef = useRef(null);
     const { success, error } = useSelector((state) => state.spinning);
     const user = useSelector((state) => state.auth?.user);
     const accessByDepartment = useSelector((state) => state.auth?.accessByDepartment);
@@ -123,6 +146,9 @@ function SpinningDepartment() {
     const MAX_CHARS = 500;
     const machineOptions = ["MC-01", "MC-02", "MC-03", "MC-04"];
     const employees = ["Ramesh", "Suresh", "Mahesh", "Karthik", "Anitha"];
+    const selectedCheckingOption = checkingOptions.find((item) => item.name === checkingType) || null;
+    const SelectedComponent = selectedCheckingOption?.component ?? null;
+    const isProcessParameter = checkingType === "Process Parameter";
     const isCountChange = checkingType === "Count Change";
     const isRingFrame = checkingType === "Ring Frame Log Book";
 
@@ -221,6 +247,12 @@ function SpinningDepartment() {
     };
 
     const handleClearForm = () => {
+        if (isProcessParameter) {
+            childRef.current?.clear?.();
+            setErrors({});
+            setValidationMessage("");
+            return;
+        }
         setCheckingType("");
         setSelectedMachine("");
         setEmployeeSearch("");
@@ -382,6 +414,11 @@ function SpinningDepartment() {
     };
 
     const confirmSubmit = () => {
+        if (isProcessParameter) {
+            setShowPreview(false);
+            childRef.current?.submit?.();
+            return;
+        }
         const payload = buildPayload();
         setShowPreview(false);
         dispatch(submitSpinningRecord({ type: checkingType, payload }));
@@ -417,6 +454,19 @@ function SpinningDepartment() {
     };
 
     const handleSaveRecord = () => {
+        if (isProcessParameter) {
+            const childValid = childRef.current?.validate ? childRef.current.validate() : true;
+            if (childValid === false) {
+                setValidationMessage("Please fill all required fields before saving.");
+                return;
+            }
+
+            setValidationMessage("");
+            setPreviewItems(childRef.current?.getPreviewData?.() || []);
+            setShowPreview(true);
+            return;
+        }
+
         if (!validate()) {
             setValidationMessage("Please fill all required fields before saving.");
             return;
@@ -512,8 +562,19 @@ function SpinningDepartment() {
                 <p className={styles["sp-page-description"]}>Record and manage industrial machine quality inspections.</p>
 
                 <div className={styles["sp-card"]}>
+                    {isProcessParameter && SelectedComponent ? (
+                        <SelectedComponent
+                            ref={childRef}
+                            selectedTypeName={checkingType}
+                            typeOptions={checkingOptions}
+                            onTypeChange={(value) => handleTypeChange({ target: { value } })}
+                            standaloneSection
+                            savedVersionsTargetId="spinning-process-parameter-saved-versions"
+                        />
+                    ) : (
+                        <>
                     <div className={styles["title-row"]}>
-                        <MdEditNote className={styles["title-icon"]} />
+                        <InspectionEntryIcon />
                         <h3 className={styles.sectiontitle}>Inspection Data Entry</h3>
                     </div>
 
@@ -836,6 +897,8 @@ function SpinningDepartment() {
                             </>
                         )}
                     </div>
+                        </>
+                    )}
 
                     <div className={styles["card-footer-wrapper"]}>
                         {validationMessage ? (
@@ -844,6 +907,10 @@ function SpinningDepartment() {
                         <Footer isMobile={isMobile} onBack={() => router.push("/dashboard")} onClear={handleClearForm} onSave={handleSaveRecord} />
                     </div>
                 </div>
+
+                {isProcessParameter && SelectedComponent ? (
+                    <div id="spinning-process-parameter-saved-versions" className="mt-5" />
+                ) : null}
             </div>
 
             <PreviewModal

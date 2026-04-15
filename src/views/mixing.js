@@ -7,6 +7,7 @@ import CustomInput from "@/components/CustomInput";
 import AfisDataEntry from "./mixing/afisDataEntry";
 import MoistureDataEntry from "./mixing/moistureDataEntry";
 import OpennessDataEntry from "./mixing/opennessDataEntry";
+import ProcessParameterDataEntry from "./mixing/processParameterDataEntry";
 import Footer from "@/components/Footer";
 import PreviewModal from "@/components/PreviewModal";
 import SuccessModal from "@/components/SuccessModal";
@@ -14,6 +15,7 @@ import { clearMixingState } from "@/store/slices/mixing";
 import { filterOptionsByDepartmentAccess } from "@/utils/screenAccess";
 
 const mixingDepartmentTypes = [
+    { id: 0, name: "Process Parameter", aliases: ["Process Parameter", "Process Parameter Data Entry"], component: ProcessParameterDataEntry, needsLotNo: false },
     { id: 1, name: "Cotton HVI Data Entry", aliases: ["Cotton HVI Data Entry", "Cotton HVI"], component: CottonHVIDataEntry, needsLotNo: true },
     { id: 2, name: "Fibre Data Entry", aliases: ["Fibre Data Entry", "Fiber Data Entry"], component: FibreDataEntry, needsLotNo: true },
     { id: 3, name: "AFIS Data Entry", aliases: ["AFIS Data Entry", "Afis Data Entry"], component: AfisDataEntry, needsLotNo: true },
@@ -51,6 +53,7 @@ function Mixing() {
 
     const selectedType = typeOptions.find((item) => item.name === selectedTypeName) || null;
     const SelectedComponent = selectedType?.component ?? null;
+    const isProcessParameter = selectedTypeName === "Process Parameter";
 
     useEffect(() => {
         if (!typeOptions.some((item) => item.name === selectedTypeName)) {
@@ -100,8 +103,10 @@ function Mixing() {
     const buildHeaderPreview = () => {
         const list = [
             { label: "Type", value: selectedTypeName },
-            { label: "Date", value: date },
         ];
+        if (!isProcessParameter) {
+            list.push({ label: "Date", value: date });
+        }
         if (selectedType?.needsLotNo !== false) {
             list.push({ label: "Lot No", value: lotNo });
         }
@@ -113,7 +118,7 @@ function Mixing() {
 
     const openPreview = () => {
         const errors = {};
-        if (!date) errors.date = true;
+        if (!isProcessParameter && !date) errors.date = true;
         if (selectedType?.needsLotNo !== false && !lotNo) errors.lotNo = true;
         if (selectedTypeName === "Openness Data Entry" && !mixingValue) errors.mixing = true;
 
@@ -183,78 +188,101 @@ function Mixing() {
                 </div>
 
                 <div className="bg-white rounded-xl border border-slate-200">
-                    <div className="p-5">
-                        <div className="flex items-center gap-2 mb-4">
-                            <span className="text-[#3d539f] text-xl leading-none">&#8801;&#9998;</span>
-                            <span className="text-[18px] font-bold text-slate-900">Inspection Data Entry</span>
-                        </div>
-
-                        <div className="flex flex-col gap-4">
-                            <div className="grid grid-cols-3 gap-[18px]">
-                                <div className="flex flex-col gap-1.5 min-w-0">
-                                    <label className="text-[14px] font-semibold text-slate-700">Type</label>
-                                    <select
-                                        className="h-[38px] px-3 py-2 border border-slate-200 rounded-lg bg-slate-100 text-[14px] focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-colors"
-                                        style={{ backgroundColor: "#f1f5f9" }}
-                                        value={selectedTypeName}
-                                        onChange={(e) => handleTypeChange(e.target.value)}
-                                    >
-                                        <option value="">Select Type</option>
-                                        {typeOptions.map((item) => (
-                                            <option key={item.id} value={item.name}>
-                                                {item.displayName ?? item.name}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
-
-                {selectedTypeName === "Openness Data Entry" && (
-                    <CustomInput
-                        label="Mixing"
-                        placeholder="Enter Mixing"
-                        value={mixingValue}
-                        onChange={(value) => setMixingValue(value)}
-                        error={headerErrors.mixing}
-                    />
-                )}
-
-                <CustomInput
-                    label="Date"
-                    type="date"
-                    value={date}
-                    onChange={handleDateChange}
-                    error={headerErrors.date}
-                    min={currentDate}
-                    max={currentDate}
-                />
-                                
-
-                {selectedType?.needsLotNo !== false && (
-                    <CustomInput
-                        label="Lot No"
-                        placeholder="Enter Lot Number"
-                        value={lotNo}
-                        onChange={(value) => setLotNo(value)}
-                        error={headerErrors.lotNo}
-                    />
-                )}
+                    {!isProcessParameter ? (
+                        <div className="p-5">
+                            <div className="flex items-center gap-2 mb-4">
+                                <span className="text-[#3d539f] text-xl leading-none">&#8801;&#9998;</span>
+                                <span className="text-[18px] font-bold text-slate-900">Inspection Data Entry</span>
                             </div>
 
-                            {SelectedComponent ? (
-                                <SelectedComponent
-                                    ref={childRef}
-                                    date={date}
-                                    lotNo={lotNo}
-                                    mixing={mixingValue}
-                                    onSubmitSuccess={handleOpennessSubmitSuccess}
-                                />
-                            ) : (
-                                <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
-                                    No accessible input screens are available for this department.
+                            <div className="flex flex-col gap-4">
+                                <div className="grid grid-cols-3 gap-[18px]">
+                                    <div className="flex flex-col gap-1.5 min-w-0">
+                                        <label className="text-[14px] font-semibold text-slate-700">Type</label>
+                                        <select
+                                            className="h-[38px] px-3 py-2 border border-slate-200 rounded-lg bg-slate-100 text-[14px] focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-colors"
+                                            style={{ backgroundColor: "#f1f5f9" }}
+                                            value={selectedTypeName}
+                                            onChange={(e) => handleTypeChange(e.target.value)}
+                                        >
+                                            <option value="">Select Type</option>
+                                            {typeOptions.map((item) => (
+                                                <option key={item.id} value={item.name}>
+                                                    {item.displayName ?? item.name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    {selectedTypeName === "Openness Data Entry" && (
+                                        <CustomInput
+                                            label="Mixing"
+                                            placeholder="Enter Mixing"
+                                            value={mixingValue}
+                                            onChange={(value) => setMixingValue(value)}
+                                            error={headerErrors.mixing}
+                                        />
+                                    )}
+
+                                    <CustomInput
+                                        label="Date"
+                                        type="date"
+                                        value={date}
+                                        onChange={handleDateChange}
+                                        error={headerErrors.date}
+                                        min={currentDate}
+                                        max={currentDate}
+                                    />
+
+                                    {selectedType?.needsLotNo !== false && (
+                                        <CustomInput
+                                            label="Lot No"
+                                            placeholder="Enter Lot Number"
+                                            value={lotNo}
+                                            onChange={(value) => setLotNo(value)}
+                                            error={headerErrors.lotNo}
+                                        />
+                                    )}
                                 </div>
-                            )}
+
+                                {SelectedComponent ? (
+                                    <SelectedComponent
+                                        ref={childRef}
+                                        date={date}
+                                        lotNo={lotNo}
+                                        mixing={mixingValue}
+                                        selectedTypeName={selectedTypeName}
+                                        typeOptions={typeOptions}
+                                        onTypeChange={handleTypeChange}
+                                        onSubmitSuccess={handleOpennessSubmitSuccess}
+                                    />
+                                ) : (
+                                    <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+                                        No accessible input screens are available for this department.
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                    </div>
+                    ) : SelectedComponent ? (
+                        <SelectedComponent
+                            ref={childRef}
+                            date={date}
+                            lotNo={lotNo}
+                            mixing={mixingValue}
+                            selectedTypeName={selectedTypeName}
+                            typeOptions={typeOptions}
+                            onTypeChange={handleTypeChange}
+                            onSubmitSuccess={handleOpennessSubmitSuccess}
+                            standaloneSection
+                            savedVersionsTargetId="mixing-process-parameter-saved-versions"
+                        />
+                    ) : (
+                        <div className="p-5">
+                            <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+                                No accessible input screens are available for this department.
+                            </div>
+                        </div>
+                    )}
 
                     {validationMessage ? (
                         <div className="px-5 pb-4">
@@ -268,10 +296,14 @@ function Mixing() {
                         onBack={() => router.push("/dashboard")}
                         onClear={handleClear}
                         onSave={openPreview}
-                        saveLabel={actionLoading ? "Saving..." : "Save Record"}
+                        saveLabel={actionLoading ? "Submitting..." : "Submit"}
                         disabled={actionLoading}
                     />
                 </div>
+
+                {isProcessParameter && SelectedComponent ? (
+                    <div id="mixing-process-parameter-saved-versions" className="mt-5" />
+                ) : null}
             </div>
 
             <PreviewModal

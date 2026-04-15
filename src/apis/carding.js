@@ -1,5 +1,44 @@
 import apiConfig from "./apiConfig";
 
+export const submitCardingProcessParameterEntry = async (payload) => {
+    try {
+        const response = await apiConfig.post(
+            "/carding/qc-header",
+            Array.isArray(payload) ? payload : [payload]
+        );
+        return response.data;
+    } catch (error) {
+        if (error.response?.data) {
+            throw new Error(error.response.data.message || "Invalid payload data.");
+        }
+        throw new Error(error.message || "Server error occurred");
+    }
+};
+
+export const updateCardingProcessParameterEntry = async (id, payload) => {
+    try {
+        const response = await apiConfig.put(`/carding/qc-header/${id}`, payload);
+        return response.data;
+    } catch (error) {
+        if (error.response?.data) {
+            throw new Error(error.response.data.message || "Invalid payload data.");
+        }
+        throw new Error(error.message || "Server error occurred");
+    }
+};
+
+export const getCardingProcessParameterEntries = async (params = {}) => {
+    try {
+        const response = await apiConfig.get("/carding/qc-header", params);
+        return response.data;
+    } catch (error) {
+        if (error.response?.data) {
+            throw new Error(error.response.data.message || "Unable to fetch entries.");
+        }
+        throw new Error(error.message || "Server error occurred");
+    }
+};
+
 export const submitCardingDfkPressureEntry = async (payload) => {
     try {
         const response = await apiConfig.post("/carding/dfk-pressure", payload);

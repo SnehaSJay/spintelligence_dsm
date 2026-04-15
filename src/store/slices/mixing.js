@@ -1,5 +1,7 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import {
+    mixingProcessParameterDataEntry as processParameterApi,
+    updateMixingProcessParameterEntry as updateProcessParameterApi,
     mixingCottonHVIDataEntry  as cottonHVIApi,
     mixingFibreDataEntry      as fibreApi,
     mixingAfisDataEntry       as afisApi,
@@ -10,6 +12,22 @@ import {
 } from '../../apis/mixing';
 
 /* ================= THUNKS ================= */
+
+export const submitProcessParameter = createAsyncThunk(
+    'mixing/submitProcessParameter',
+    async (payload, { rejectWithValue }) => {
+        try { return await processParameterApi(payload); }
+        catch (e) { return rejectWithValue(e.message); }
+    }
+);
+
+export const updateProcessParameter = createAsyncThunk(
+    'mixing/updateProcessParameter',
+    async ({ qcId, payload }, { rejectWithValue }) => {
+        try { return await updateProcessParameterApi(qcId, payload); }
+        catch (e) { return rejectWithValue(e.message); }
+    }
+);
 
 export const submitCottonHVI = createAsyncThunk(
     'mixing/submitCottonHVI',
@@ -114,7 +132,7 @@ const mixingSlice = createSlice({
         },
     },
     extraReducers: (builder) => {
-        [submitCottonHVI, submitFibre, submitAfis, submitMoisture, submitBrWaste, submitDropTest, submitOpenness]
+        [submitProcessParameter, updateProcessParameter, submitCottonHVI, submitFibre, submitAfis, submitMoisture, submitBrWaste, submitDropTest, submitOpenness]
             .forEach(thunk => {
                 builder
                     .addCase(thunk.pending,   pending)

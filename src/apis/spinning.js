@@ -2,6 +2,7 @@ import api from "./apiConfig";
 
 // API endpoints map
 const endpoints = {
+  "Process Parameter": "/spinning/qc",
   "COTS Checking": "/spinning/cots-checking",
   "Count Change": "/spinning/count-change",
   "Ring Frame Log Book": "/spinning/ring-frame",
@@ -30,6 +31,44 @@ export const saveSpinningRecord = async (type, payload) => {
       );
     }
 
+    throw new Error(error.message || "Server error occurred");
+  }
+};
+
+export const spinningProcessParameterDataEntry = async (payload) => {
+  try {
+    const response = await api.post("/spinning/qc", payload);
+    return response.data;
+  } catch (error) {
+    if (error.response?.data) {
+      throw new Error(error.response.data.message || "Invalid payload.");
+    }
+    throw new Error(error.message || "Server error occurred");
+  }
+};
+
+export const updateSpinningProcessParameterEntry = async (qcId, payload) => {
+  try {
+    const response = await api.put(`/spinning/qc/${qcId}`, payload);
+    return response.data;
+  } catch (error) {
+    if (error.response?.data) {
+      throw new Error(error.response.data.message || "Invalid payload.");
+    }
+    throw new Error(error.message || "Server error occurred");
+  }
+};
+
+export const getSpinningProcessParameterEntries = async (params = {}) => {
+  try {
+    const response = await api.get("/spinning/qc", params);
+    return response.data;
+  } catch (error) {
+    if (error.response?.data) {
+      throw new Error(
+        error.response.data.message || "Failed to load Spinning QC entries."
+      );
+    }
     throw new Error(error.message || "Server error occurred");
   }
 };
