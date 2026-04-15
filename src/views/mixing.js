@@ -296,7 +296,7 @@ function Mixing() {
                         onBack={() => router.push("/dashboard")}
                         onClear={handleClear}
                         onSave={openPreview}
-                        saveLabel={actionLoading ? "Submitting..." : "Submit"}
+                        saveLabel={actionLoading ? "Submitting..." : "Save Record"}
                         disabled={actionLoading}
                     />
                 </div>

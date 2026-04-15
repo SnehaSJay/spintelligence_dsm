@@ -12,6 +12,8 @@ import {
   fetchDrawFrameHeaderEntries,
   submitDrawFrameFinisherEntry,
   submitDrawFrameHeaderEntry,
+  updateDrawFrameFinisherEntry,
+  updateDrawFrameHeaderEntry,
 } from "@/apis/draw-frame";
 import styles from "@/styles/draw-frame.module.css";
 import { sanitizeNumericInput } from "@/utils/inputValidation";
@@ -57,6 +59,8 @@ const TYPE_CONFIG = {
       { key: "pressureBar", label: "Pressure Bar", required: true },
     ],
     createForm: (selectedType) => ({
+      versionId: "",
+      paramId: "",
       type: selectedType || "PP - Breaker Drawing",
       countName: "",
       consigneeName: "",
@@ -72,6 +76,7 @@ const TYPE_CONFIG = {
       deliverySpeed: "",
       pressureBar: "",
     }),
+    updateEntry: updateDrawFrameHeaderEntry,
     buildPayload: (form) => ({
       type: form.type,
       count_name: form.countName,
@@ -131,6 +136,8 @@ const TYPE_CONFIG = {
       { key: "scanningRollsSize", label: "Scanning Rolls Size", required: true },
     ],
     createForm: (selectedType) => ({
+      versionId: "",
+      paramId: "",
       type: selectedType || "PP - Finisher Drawing",
       countName: "",
       consigneeName: "",
@@ -149,6 +156,7 @@ const TYPE_CONFIG = {
       pressureBar: "",
       scanningRollsSize: "",
     }),
+    updateEntry: updateDrawFrameFinisherEntry,
     buildPayload: (form) => ({
       count_name: form.countName,
       consignee_name: form.consigneeName,
@@ -202,11 +210,29 @@ function formatDisplayDate(value) {
 function normalizeBreakerEntries(payload) {
   const rows = Array.isArray(payload) ? payload : Array.isArray(payload?.data) ? payload.data : [];
   return rows.map((entry, index) => ({
-    id: entry?.ins_id || entry?.id || index,
-    paramId: entry?.param_id || entry?.parameter_id || entry?.ins_id || entry?.id || "-",
+    id: String(entry?.ins_id || entry?.id || index),
+    paramId: String(entry?.param_id || entry?.parameter_id || entry?.ins_id || entry?.id || "-"),
     countName: entry?.count_name || "",
     consigneeName: entry?.consignee_name || "",
     creationDate: entry?.creation_date || "",
+    data: {
+      versionId: String(entry?.ins_id || entry?.id || index),
+      paramId: String(entry?.param_id || entry?.parameter_id || entry?.ins_id || entry?.id || ""),
+      type: "PP - Breaker Drawing",
+      countName: entry?.count_name || "",
+      consigneeName: entry?.consignee_name || "",
+      creationDate: String(entry?.creation_date || "").split("T")[0] || today,
+      make: entry?.make || "",
+      noOfEnds: entry?.no_of_ends == null ? "" : String(entry.no_of_ends),
+      bottomRollSetting: entry?.bottom_roll_setting || "",
+      breakerDraft: entry?.breaker_draft == null ? "" : String(entry.breaker_draft),
+      totalDraft: entry?.total_draft == null ? "" : String(entry.total_draft),
+      hank: entry?.hank == null ? "" : String(entry.hank),
+      webTensionDraft: entry?.web_tension_draft == null ? "" : String(entry.web_tension_draft),
+      trumpetSize: entry?.trumpet_size == null ? "" : String(entry.trumpet_size),
+      deliverySpeed: entry?.delivery_speed == null ? "" : String(entry.delivery_speed),
+      pressureBar: entry?.pressure_bar || "",
+    },
     details: [
       { label: "Make", value: entry?.make },
       { label: "No. of Ends", value: entry?.no_of_ends },
@@ -225,11 +251,32 @@ function normalizeBreakerEntries(payload) {
 function normalizeFinisherEntries(payload) {
   const rows = Array.isArray(payload) ? payload : Array.isArray(payload?.data) ? payload.data : [];
   return rows.map((entry, index) => ({
-    id: entry?.id || index,
-    paramId: entry?.param_id || entry?.id || "-",
+    id: String(entry?.id || index),
+    paramId: String(entry?.param_id || entry?.id || "-"),
     countName: entry?.count_name || "",
     consigneeName: entry?.consignee_name || "",
     creationDate: entry?.creation_date || "",
+    data: {
+      versionId: String(entry?.id || index),
+      paramId: String(entry?.param_id || entry?.id || ""),
+      type: "PP - Finisher Drawing",
+      countName: entry?.count_name || "",
+      consigneeName: entry?.consignee_name || "",
+      creationDate: String(entry?.creation_date || "").split("T")[0] || today,
+      make: entry?.make || "",
+      noOfEnds: entry?.no_of_ends == null ? "" : String(entry.no_of_ends),
+      bottomRollSetting: entry?.bottom_roll_setting || "",
+      breakDraft: entry?.break_draft == null ? "" : String(entry.break_draft),
+      totalDraft: entry?.total_draft == null ? "" : String(entry.total_draft),
+      webTensionDraft: entry?.web_tension_draft == null ? "" : String(entry.web_tension_draft),
+      trumpetSize: entry?.trumpet_size == null ? "" : String(entry.trumpet_size),
+      insertSize: entry?.insert_size == null ? "" : String(entry.insert_size),
+      webFunnelSize: entry?.web_funnel_size == null ? "" : String(entry.web_funnel_size),
+      deliveryHank: entry?.delivery_hank == null ? "" : String(entry.delivery_hank),
+      deliverySpeed: entry?.delivery_speed == null ? "" : String(entry.delivery_speed),
+      pressureBar: entry?.pressure_bar || "",
+      scanningRollsSize: entry?.scanning_rolls_size || "",
+    },
     details: [
       { label: "Make", value: entry?.make },
       { label: "No. of Ends", value: entry?.no_of_ends },
@@ -302,8 +349,20 @@ function DrawFrameHeaderEntry({ typeOptions, selectedType, onTypeChange }) {
         .sort((left, right) => getEntrySortValue(right) - getEntrySortValue(left));
       setRecentEntries(normalizedEntries);
       setFormMessage("");
+
+      if (normalizedEntries.length > 0) {
+        setForm((current) => {
+          const activeEntry =
+            normalizedEntries.find((entry) => String(entry.id) === String(current.versionId)) ||
+            normalizedEntries[0];
+          return { ...activeEntry.data, versionId: activeEntry.id };
+        });
+      } else {
+        setForm(config.createForm(type));
+      }
     } catch (error) {
       setRecentEntries([]);
+      setForm(TYPE_CONFIG[type].createForm(type));
       setFormMessage(error.message || `Unable to load draw frame ${TYPE_CONFIG[type].entryLabel} entries.`);
     } finally {
       setIsLoadingEntries(false);
@@ -380,10 +439,22 @@ function DrawFrameHeaderEntry({ typeOptions, selectedType, onTypeChange }) {
       ? sanitizeNumericInput(value, { precision: 10, scale: 2 })
       : value;
 
-    setForm((current) => ({
-      ...current,
-      [field]: nextValue,
-    }));
+    setForm((current) => {
+      const nextForm = {
+        ...current,
+        [field]: nextValue,
+      };
+
+      if (
+        (field === "countName" || field === "consigneeName") &&
+        String(current[field] || "").trim() !== String(nextValue || "").trim()
+      ) {
+        nextForm.versionId = "";
+        nextForm.paramId = "";
+      }
+
+      return nextForm;
+    });
 
     setErrors((current) => {
       if (!current[field]) return current;
@@ -425,7 +496,17 @@ function DrawFrameHeaderEntry({ typeOptions, selectedType, onTypeChange }) {
   const handleSubmit = async () => {
     try {
       setIsSubmitting(true);
-      await activeConfig.submitEntry(activeConfig.buildPayload(form));
+      const payload = activeConfig.buildPayload(form);
+      const selectedExistingEntry = recentEntries.find(
+        (entry) => String(entry.id) === String(form.versionId)
+      );
+
+      if (selectedExistingEntry) {
+        await activeConfig.updateEntry(selectedExistingEntry.id, payload);
+      } else {
+        await activeConfig.submitEntry(payload);
+      }
+
       await loadEntries(activeType);
       setShowPreview(false);
       setShowSuccess(true);
@@ -440,6 +521,21 @@ function DrawFrameHeaderEntry({ typeOptions, selectedType, onTypeChange }) {
   const handleSuccessClose = () => {
     setShowSuccess(false);
     resetForm();
+  };
+
+  const handleEntrySelect = (entry) => {
+    setForm({ ...entry.data, versionId: entry.id });
+    setErrors({});
+    setFormMessage("");
+  };
+
+  const handleEntryToggle = (entry) => {
+    handleEntrySelect(entry);
+    if (!isEntryComplete(entry)) {
+      setExpandedEntryId(null);
+      return;
+    }
+    setExpandedEntryId((current) => (String(current) === String(entry.id) ? null : entry.id));
   };
 
   const renderSelectOptions = (options, placeholder) => (
@@ -579,7 +675,7 @@ function DrawFrameHeaderEntry({ typeOptions, selectedType, onTypeChange }) {
               onBack={() => router.push("/dashboard")}
               onClear={resetForm}
               onSave={handleSave}
-              saveLabel={isSubmitting ? "Submitting..." : "Submit"}
+              saveLabel={isSubmitting ? "Submitting..." : "Save Record"}
               disabled={isSubmitting}
             />
           </div>
@@ -611,29 +707,37 @@ function DrawFrameHeaderEntry({ typeOptions, selectedType, onTypeChange }) {
           recentEntries.map((entry, index) => (
             <div key={`${entry.id}-${index}`} className={styles.headerEntryCard}>
               <div className={styles.headerEntryCardHeader}>
-                <div className={styles.headerEntryMetaBlock}>
+                <button
+                  type="button"
+                  className={`${styles.headerEntryMetaBlock} ${styles.headerEntrySelect}`}
+                  onClick={() => handleEntrySelect(entry)}
+                >
                   <span className={styles.headerEntryMetaLabel}>Param ID</span>
                   <span className={styles.headerEntryMetaValue}>{displaySavedValue(entry.paramId)}</span>
-                </div>
-                <div className={styles.headerEntryMetaMain}>
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.headerEntryMetaMain} ${styles.headerEntrySelect}`}
+                  onClick={() => handleEntrySelect(entry)}
+                >
                   <span className={styles.headerEntryMetaLabel}>Consignee Name</span>
                   <span className={styles.headerEntryMetaValue}>{displaySavedValue(entry.consigneeName)}</span>
-                </div>
-                <div className={styles.headerEntryMetaMain}>
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.headerEntryMetaMain} ${styles.headerEntrySelect}`}
+                  onClick={() => handleEntrySelect(entry)}
+                >
                   <span className={styles.headerEntryMetaLabel}>Count Name</span>
                   <span className={styles.headerEntryMetaValue}>{displaySavedValue(entry.countName)}</span>
-                </div>
+                </button>
                 <div className={styles.headerEntryCardStatus}>
                   {isEntryComplete(entry) ? <FaCheckCircle className={styles.headerEntryStatusIcon} /> : null}
                 </div>
                 <button
                   type="button"
                   className={styles.headerEntryToggle}
-                  onClick={() =>
-                    setExpandedEntryId((current) =>
-                      String(current) === String(entry.id) ? null : entry.id
-                    )
-                  }
+                  onClick={() => handleEntryToggle(entry)}
                   aria-label={
                     String(expandedEntryId) === String(entry.id)
                       ? "Collapse saved entry details"

@@ -6,6 +6,7 @@ import { useDispatch, useSelector } from "react-redux";
 import Footer from "@/components/Footer";
 import PreviewModal from "@/components/PreviewModal";
 import SuccessModal from "@/components/SuccessModal";
+import ProcessParameterDataEntry from "@/views/simplex/processParameterDataEntry";
 import SMXCotsChangeDataEntry from "@/views/simplex/SMXCotsChangeDataEntry";
 import SMXBreaksStudyReport from "@/views/simplex/SMXBreaksStudyReport";
 import UPercentDataEntry from "@/views/simplex/u%dataentry";
@@ -16,6 +17,7 @@ import {
 } from "@/store/slices/simplex";
 import { filterOptionsByDepartmentAccess } from "@/utils/screenAccess";
 const simplexTypes = [
+  { id: 0, name: "Process Parameter", aliases: ["Process Parameter", "Process Parameter Data Entry"], component: ProcessParameterDataEntry },
   { id: 1, name: "SMXCots Change Data Entry", aliases: ["SMXCots Change Data Entry", "SMX Cots Change Data Entry"], component: SMXCotsChangeDataEntry },
   { id: 2, name: "SMX Breaks Study Report", aliases: ["SMX Breaks Study Report", "Breaks Study Report"], component: SMXBreaksStudyReport },
    { id: 3, name: "U% Data Entry", aliases: ["U% Data Entry", "U Percent Data Entry", "U% Checking"], component: UPercentDataEntry },
@@ -130,44 +132,19 @@ function Simplex() {
 
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
           <div className="p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <span className="text-[#3d539f] text-xl leading-none">
-                <MdOutlineEditNote />
-              </span>
-              <span className="text-[18px] font-bold text-slate-900">Inspection Data Entry</span>
-            </div>
-            <div className="mb-6 h-px bg-slate-100" />
+            {selectedTypeName !== "Process Parameter" ? (
+              <>
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="text-[#3d539f] text-xl leading-none">
+                    <MdOutlineEditNote />
+                  </span>
+                  <span className="text-[18px] font-bold text-slate-900">Inspection Data Entry</span>
+                </div>
+                <div className="mb-6 h-px bg-slate-100" />
+              </>
+            ) : null}
    
-            {selectedTypeName !== "SMX Breaks Study Report" &&
-              selectedTypeName !== "U% Data Entry" &&
-              selectedTypeName !== "SMXCots Change Data Entry" && (
-              <div className="mb-4">
-                <label className="mb-1 block text-sm font-medium text-slate-700">Type</label>
-
-                <select
-                  value={selectedTypeName}
-                  onChange={(e) => setSelectedTypeName(e.target.value)}
-                  className="h-[38px] w-full rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-[14px] transition-colors focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-400"
-                >
-                  {typeOptions.map((type) => (
-                    <option key={type.id} value={type.name}>
-                      {type.displayName ?? type.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-
-
-
-
-
-
-
-
-
-
+ 
 
 
 

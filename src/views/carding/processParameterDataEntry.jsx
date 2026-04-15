@@ -579,7 +579,7 @@ function CardingProcessParameterDataEntry({
             onBack={() => router.push("/dashboard")}
             onClear={handleClear}
             onSave={handleSave}
-            saveLabel={isSubmitting ? "Submitting..." : "Submit"}
+            saveLabel={isSubmitting ? "Submitting..." : "Save Record"}
             disabled={isSubmitting}
           />
         </div>
