@@ -50,6 +50,33 @@ export const submitSimplexCotsChangeEntry = async (payload) => {
   }
 };
 
+export const submitSimplexProcessParameterEntry = async (payload) => {
+  try {
+    const response = await apiConfig.post("/simplex/process_parameter", payload);
+    return response.data;
+  } catch (error) {
+    throw new Error(extractErrorMessage(error, "Invalid simplex process parameter payload."));
+  }
+};
+
+export const updateSimplexProcessParameterEntry = async (id, payload) => {
+  try {
+    const response = await apiConfig.put(`/simplex/process_parameter/${id}`, payload);
+    return response.data;
+  } catch (error) {
+    throw new Error(extractErrorMessage(error, "Unable to update simplex process parameter entry."));
+  }
+};
+
+export const fetchSimplexProcessParameterEntries = async ({ page = 1, limit = 100 } = {}) => {
+  try {
+    const response = await apiConfig.get("/simplex/process_parameter", { page, limit });
+    return response.data;
+  } catch (error) {
+    throw new Error(extractErrorMessage(error, "Unable to fetch simplex process parameter entries."));
+  }
+};
+
 export const fetchSimplexUqcEntries = async ({ page = 1, limit = 10 } = {}) => {
   try {
     const response = await apiConfig.get("/simplex/uqc", { page, limit });
