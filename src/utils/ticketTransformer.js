@@ -1,6 +1,57 @@
+export const getTicketParameterKey = (parameterName) =>
+  String(parameterName || "").toLowerCase().trim();
+
+export const getTicketValueForParameter = (source, parameterName) => {
+  if (!source || !parameterName) return "-";
+
+  const directMatch = source[parameterName];
+  if (directMatch !== undefined && directMatch !== null) {
+    return directMatch;
+  }
+
+  const normalizedParameter = getTicketParameterKey(parameterName);
+  const matchedKey = Object.keys(source).find(
+    (key) => getTicketParameterKey(key) === normalizedParameter
+  );
+
+  return matchedKey ? source[matchedKey] : "-";
+};
+
+export const formatThresholdValue = (value) => {
+  if (value === null || typeof value === "undefined") {
+    return "-";
+  }
+
+  if (typeof value !== "object" || Array.isArray(value)) {
+    return value;
+  }
+
+  const plusThreshold = value.plus_threshold ?? "-";
+  const minusThreshold = value.minus_threshold ?? "-";
+
+  return `+:${plusThreshold}/-:${minusThreshold}`;
+};
+
+export const formatStandardValue = (value) => {
+  if (value === null || typeof value === "undefined") {
+    return "-";
+  }
+
+  if (typeof value !== "object" || Array.isArray(value)) {
+    return value;
+  }
+
+  const actualValue = value.actual_value ?? "-";
+  return actualValue;
+};
+
 export const transformTicket = (ticket) => {
   const createdDate = new Date(ticket.created_at);
-  const key = ticket.parameter_name?.[0]?.toLowerCase()?.trim();
+  const parameter = ticket.parameter_name?.[0] || "-";
+  const actual = getTicketValueForParameter(ticket.actual_value, parameter);
+  const thresholdSource = getTicketValueForParameter(ticket.threshold_value, parameter);
+  const threshold = formatThresholdValue(thresholdSource);
+  const standard = formatStandardValue(thresholdSource);
 
   return {
     ...ticket,
@@ -11,11 +62,12 @@ export const transformTicket = (ticket) => {
     machine: ticket.machine_name,
     machine_name: ticket.machine_name,
 
-    parameter: ticket.parameter_name?.[0] || "-",
+    parameter,
     parameter_name: ticket.parameter_name,
 
-    actual: ticket.actual_value?.[key] ?? "-",
-    threshold: ticket.threshold_value?.[key] ?? "-",
+    actual,
+    standard,
+    threshold,
 
     actual_value: ticket.actual_value,
     threshold_value: ticket.threshold_value,

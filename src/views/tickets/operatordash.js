@@ -1,8 +1,13 @@
 import { useState, useEffect } from "react";
 import styles from "../../styles/operator.module.css";
-import { useRouter } from "next/navigation";
+import { useRouter } from "next/router";
 import Image from "next/image";
 import { getOperatorTickets } from "../../apis/operatorApi";
+import {
+    formatThresholdValue,
+    formatStandardValue,
+    getTicketValueForParameter,
+} from "../../utils/ticketTransformer";
 
 export default function operatorboard() {
     const [ticketData, setTicketData] = useState([]);
@@ -41,12 +46,22 @@ export default function operatorboard() {
                     id: ticket.ticket_id,
                     machine: ticket.machine_name,
                     parameter: ticket.parameter_name?.[0] || "-",
-                    actual: ticket.actual_value
-                        ? ticket.actual_value[ticket.parameter_name[0]?.toLowerCase()] || "-"
-                        : "-",
-                    threshold: ticket.threshold_value
-                        ? ticket.threshold_value[ticket.parameter_name[0]?.toLowerCase()] || "-"
-                        : "-",
+                    actual: getTicketValueForParameter(
+                        ticket.actual_value,
+                        ticket.parameter_name?.[0]
+                    ),
+                    standard: formatStandardValue(
+                        getTicketValueForParameter(
+                            ticket.threshold_value,
+                            ticket.parameter_name?.[0]
+                        )
+                    ),
+                    threshold: formatThresholdValue(
+                        getTicketValueForParameter(
+                            ticket.threshold_value,
+                            ticket.parameter_name?.[0]
+                        )
+                    ),
                     severity: ticket.severity,
                     status: ticket.status,
                     rawCreatedAt: createdDate,
@@ -178,6 +193,7 @@ export default function operatorboard() {
                             <th>MACHINE</th>
                             <th>PARAMETER</th>
                             <th>ACTUAL</th>
+                            <th>STANDARD</th>
                             <th>THRESHOLD</th>
                             <th>SEVERITY</th>
                             <th>STATUS</th>
@@ -196,6 +212,7 @@ export default function operatorboard() {
                                 <td>{t.machine}</td>
                                 <td>{t.parameter}</td>
                                 <td>{t.actual}</td>
+                                <td>{t.standard}</td>
                                 <td>{t.threshold}</td>
                                 <td>
                                     <span className={`${styles.badge} ${styles[t.severity?.toLowerCase()]}`}>
