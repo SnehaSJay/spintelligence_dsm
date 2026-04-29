@@ -39,8 +39,7 @@ function AppShell({ Component, pageProps }) {
     router.pathname.startsWith("/umedit") ||
     router.pathname.startsWith("/umchangepassword") ||
     router.pathname === "/rolespermission" ||
-    router.pathname === "/threshold-values" ||
-    router.pathname === "/submission-frequency" ||
+    router.pathname === "/reports" ||
     router.pathname.startsWith("/Createrole") ||
     router.pathname.startsWith("/editrole");
   const canAccessManagementFlow = isFullAccessUser(user);
@@ -48,8 +47,7 @@ function AppShell({ Component, pageProps }) {
     { href: "/departments", label: "Home" },
     { href: "/usermanagement", label: "User Management" },
     { href: "/rolespermission", label: "Roles & Permissions" },
-    { href: "/threshold-values", label: "Threshold Values" },
-    { href: "/submission-frequency", label: "Submission Frequency" },
+    { href: "/reports", label: "Reports" },
   ];
   const headerNavLinks = canAccessManagementFlow || isAdminFlow
     ? managementNavLinks
