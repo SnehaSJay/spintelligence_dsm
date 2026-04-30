@@ -24,8 +24,6 @@ function AppShell({ Component, pageProps }) {
   const [failureModal, setFailureModal] = useState({ open: false, message: "Error Occured" });
   const [successModal, setSuccessModal] = useState({ open: false, message: "Data Submitted" });
   const showHeader = router.pathname !== "/";
-  const isInputScreen = Boolean(routeDepartmentMap[router.pathname]);
-  const showChrome = showHeader && isHydrated;
   const isDepartmentFlow =
     router.pathname === "/departments/quality-control" ||
     router.pathname.startsWith("/departments") ||
@@ -50,7 +48,7 @@ function AppShell({ Component, pageProps }) {
     router.pathname.startsWith("/editrole");
   const canAccessManagementFlow = isFullAccessUser(user);
   const managementNavLinks = [
-    { href: "/departments", label: "Home" },
+    { href: "/", label: "Home" },
     { href: "/usermanagement", label: "User Management" },
     { href: "/rolespermission", label: "Roles & Permissions" },
     { href: "/threshold-values", label: "Threshold Values" },
@@ -61,7 +59,7 @@ function AppShell({ Component, pageProps }) {
     ? managementNavLinks
     : isDepartmentFlow || isTicketingFlow
     ? [
-        { href: "/departments", label: "Home" },
+        { href: "/", label: "Home" },
         { href: "/operator", label: "Ticketing System" },
       ]
       : undefined;
@@ -101,17 +99,12 @@ function AppShell({ Component, pageProps }) {
     }
 
     if (token && isAdminFlow && !canAccessManagementFlow) {
-      router.replace("/departments");
+      router.replace("/");
       return;
     }
 
     if (token && !isAdminFlow && !hasRouteAccess(router.pathname, accessByDepartment, user)) {
-      router.replace("/departments");
-      return;
-    }
-
-    if (token && router.pathname === "/") {
-      router.replace("/departments");
+      router.replace("/");
     }
   }, [accessByDepartment, canAccessManagementFlow, isAdminFlow, isHydrated, router, token, user]);
 
