@@ -20,7 +20,7 @@ const Login = () => {
 
     useEffect(() => {
         if (token) {
-            router.push("/departments");
+            router.push("/");
         }
     }, [token, router]);
 

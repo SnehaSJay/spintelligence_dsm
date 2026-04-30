@@ -98,8 +98,6 @@ export default function SupervisorDashboard() {
 
   return (
     <div className={styles["sup-page"]}>
-      
-
       <div className={styles["sup-content"]}>
         <h1 className={styles["sup-title"]}>Team Tickets Dashboard</h1>
 
@@ -278,7 +276,7 @@ export default function SupervisorDashboard() {
                 disabled={page === 1}
                 onClick={() => setPage(page - 1)}
               >
-                ‹
+                â€¹
               </button>
               {Array.from({ length: totalPages }, (_, i) => (
                 <button
@@ -293,7 +291,7 @@ export default function SupervisorDashboard() {
                 disabled={page === totalPages}
                 onClick={() => setPage(page + 1)}
               >
-                ›
+                â€º
               </button>
             </div>
           </div>
@@ -374,7 +372,7 @@ export default function SupervisorDashboard() {
             >
               <div className={styles["sup-filter-drawer-header"]}>
                 <span>Filter</span>
-                <button onClick={() => setShowFilter(false)}>×</button>
+                <button onClick={() => setShowFilter(false)}>Ã—</button>
               </div>
 
               <div className={styles["sup-filter-body"]}>
