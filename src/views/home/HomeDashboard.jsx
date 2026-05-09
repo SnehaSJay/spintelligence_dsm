@@ -50,6 +50,16 @@ const visualizationTypeToChartType = (visualizationType) => {
     return "line";
 };
 
+const parseWidgetEnabled = (value) => {
+    if (typeof value === "boolean") return value;
+    if (typeof value === "number") return value !== 0;
+    const normalized = String(value || "").trim().toLowerCase();
+    if (!normalized) return true;
+    if (["false", "0", "off", "disabled", "no"].includes(normalized)) return false;
+    if (["true", "1", "on", "enabled", "yes"].includes(normalized)) return true;
+    return true;
+};
+
 function HomeDashboard() {
     const user = useSelector((state) => state.auth?.user);
     const fullName = user?.full_name || user?.fullName || user?.name || "Hency Belix";
@@ -83,7 +93,7 @@ function HomeDashboard() {
         () =>
             (Array.isArray(widgets) ? widgets : []).map((widget, index) => ({
                 id: widget?.id || `widget-${index + 1}`,
-                enabled: widget?.enabled !== false,
+                enabled: parseWidgetEnabled(widget?.enabled),
                 order: Number.isInteger(widget?.order) ? widget.order : index + 1,
                 department: widget?.department || "Quality Control",
                 sub_department: widget?.sub_department || "Mixing",
@@ -110,15 +120,6 @@ function HomeDashboard() {
         () => visibleWidgets.filter((widget) => !(widget.visualization_type === "average_value_card" || widget.chart_type === "value")),
         [visibleWidgets]
     );
-    const performanceWidgetsWithData = useMemo(
-        () =>
-            performanceWidgets.filter((widget) => {
-                const trend = widgetData?.[widget.id]?.trend;
-                return Array.isArray(trend) && trend.length > 0;
-            }),
-        [performanceWidgets, widgetData]
-    );
-
     useEffect(() => {
         let isMounted = true;
 
@@ -329,7 +330,7 @@ function HomeDashboard() {
 
             <section className={styles.referenceSection}>
                 <h1>Performance Trends</h1>
-                {performanceWidgetsWithData.map((widget) => (
+                {performanceWidgets.map((widget) => (
                     <PerformanceLineCard
                         key={widget.id}
                         widget={widget}
@@ -342,7 +343,7 @@ function HomeDashboard() {
                 ))}
             </section>
             {loading ? <p>Loading dashboard...</p> : null}
-            {!loading && !averageWidgets.length && !performanceWidgetsWithData.length ? <p>No dashboard widgets configured.</p> : null}
+            {!loading && !averageWidgets.length && !performanceWidgets.length ? <p>No dashboard widgets configured.</p> : null}
             {errorMessage ? <p>{errorMessage}</p> : null}
         </div>
     );
