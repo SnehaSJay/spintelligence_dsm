@@ -33,7 +33,21 @@ export const fetchRoles = createAsyncThunk("roles/fetch", async () => {
 
 /* ================= FETCH DEPARTMENTS ================= */
 export const fetchDepartments = createAsyncThunk("dept/fetch", async () => {
-  return await fetchDepartmentsAPI();
+  const data = await fetchDepartmentsAPI();
+  const list = Array.isArray(data)
+    ? data
+    : Array.isArray(data?.departments)
+      ? data.departments
+      : Array.isArray(data?.data)
+        ? data.data
+        : [];
+
+  return list
+    .map((department) => ({
+      id: department?.id ?? department?.department_id ?? department?.value ?? String(department?.name ?? department),
+      name: String(department?.name ?? department?.department_name ?? department?.label ?? department ?? "").trim(),
+    }))
+    .filter((department) => department.name);
 });
 
 /* ================= ADD USER ================= */
