@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import { FiGrid, FiPlus, FiServer, FiTrash2 } from "react-icons/fi";
 
@@ -11,6 +11,8 @@ import { getThresholdFieldsForScreen } from "@/views/thresholds/fieldCatalog";
 import {
     DASHBOARD_CHART_TYPES,
     FIELD_WIDGET_TYPE,
+    readStoredDashboardWidgets,
+    writeStoredDashboardWidgets,
 } from "@/utils/dashboardWidgets";
 import styles from "@/styles/departmentDirectory.module.css";
 
@@ -19,64 +21,58 @@ const BUILDER_SECTIONS = {
     performance: "performance",
 };
 
+const initialWidgets = Array.from({ length: 7 }, (_, index) => ({
+    id: `widget-${index + 1}`,
+    name: "SCI",
+    enabled: true,
+    order: index + 1,
+    metric_key: "today_submissions",
+    department: "Quality Control",
+    sub_department: "Mixing",
+    screen_name: "Cotton HVI Data Entry",
+    field_name: "SCI",
+    chart_type: index < 3 ? "value" : "line",
+    builder_section: index < 3 ? BUILDER_SECTIONS.average : BUILDER_SECTIONS.performance,
+}));
+const builderRoles = ["Operator", "Supervisor", "Admin"];
+const builderUsers = ["John Doe", "Hency Belix", "Aravinth"];
 const builderVisualizationOptions = [
     { key: "value", label: "Average Value Card", section: BUILDER_SECTIONS.average },
     { key: "line", label: "Performance Trends", section: BUILDER_SECTIONS.performance },
 ];
 const TICKET_TREND_SELECT_KEY = "tickets_trend";
 const TICKET_TREND_ID_PREFIX = "ticket-trend-";
-const chartTypeToVisualizationType = (chartType) => {
-    if (chartType === "value" || chartType === "average") return "average_value_card";
-    if (chartType === "area" || chartType === "timeline") return "area_chart";
-    if (chartType === "bar") return "bar_chart";
-    return "line_chart";
-};
 
-const visualizationTypeToChartType = (visualizationType) => {
-    if (visualizationType === "average_value_card") return "value";
-    if (visualizationType === "area_chart") return "timeline";
-    if (visualizationType === "bar_chart") return "line";
-    return "line";
+const parseWidgetEnabled = (value) => {
+    if (typeof value === "boolean") return value;
+    if (typeof value === "number") return value !== 0;
+    const normalized = String(value || "").trim().toLowerCase();
+    if (!normalized) return true;
+    if (["false", "0", "off", "disabled", "no"].includes(normalized)) return false;
+    if (["true", "1", "on", "enabled", "yes"].includes(normalized)) return true;
+    return true;
 };
-const normalizeInputFieldKey = (value) =>
-    String(value || "")
-        .trim()
-        .toLowerCase()
-        .replace(/[%()]/g, "")
-        .replace(/[^a-z0-9]+/g, "_")
-        .replace(/^_+|_+$/g, "");
 
 function SettingsDashboardBuilder() {
-    const [widgets, setWidgets] = useState([]);
+    const [widgets, setWidgets] = useState(initialWidgets);
     const [metricOptions, setMetricOptions] = useState([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [saveMessage, setSaveMessage] = useState("");
-    const [selectedDepartmentSlug, setSelectedDepartmentSlug] = useState("quality-control");
-    const [selectedSubDepartmentSlug, setSelectedSubDepartmentSlug] = useState("mixing");
-    const [selectedScreenName, setSelectedScreenName] = useState("Cotton HVI Data Entry");
-    const [selectedFieldName, setSelectedFieldName] = useState("SCI");
+    const [selectedDepartmentSlug, setSelectedDepartmentSlug] = useState("");
+    const [selectedSubDepartmentSlug, setSelectedSubDepartmentSlug] = useState("");
+    const [selectedScreenName, setSelectedScreenName] = useState("");
+    const [selectedFieldName, setSelectedFieldName] = useState("");
     const [selectedChartType, setSelectedChartType] = useState("value");
-    const [selectedRole, setSelectedRole] = useState("");
-    const [selectedBuilderUserId, setSelectedBuilderUserId] = useState("");
-    const [builderRoles, setBuilderRoles] = useState([]);
-    const [builderUsers, setBuilderUsers] = useState([]);
+    const [selectedRole, setSelectedRole] = useState("Operator");
+    const [selectedBuilderUser, setSelectedBuilderUser] = useState("John Doe");
     const [isAddWidgetModalOpen, setIsAddWidgetModalOpen] = useState(false);
-    const hasLoadedWidgetsRef = useRef(false);
-    const autosaveTimerRef = useRef(null);
-    const lastSavedSnapshotRef = useRef("");
 
     const authUser = useSelector((state) => state.auth?.user);
     const dashboardOwnerUserId = useMemo(
         () => getDashboardOwnerUserId(authUser),
         [authUser]
     );
-    const canCustomizeDashboards = useMemo(() => isFullAccessUser(authUser), [authUser]);
-    const currentAuthUserId = useMemo(() => {
-        const id = Number(authUser?.id || authUser?.user_id || authUser?.userId);
-        return Number.isInteger(id) && id > 0 ? id : null;
-    }, [authUser]);
-    const currentAuthRole = String(authUser?.role_name || authUser?.role || authUser?.role_title || "").trim();
 
     const selectedDepartment = useMemo(
         () => departmentDirectory.find((item) => item.slug === selectedDepartmentSlug),
@@ -101,9 +97,37 @@ function SettingsDashboardBuilder() {
     );
 
     const modalFieldOptions = useMemo(() => {
-        const fields = availableFields.length ? availableFields : ["SCI"];
-        return fields.includes(selectedFieldName) ? fields : [selectedFieldName, ...fields];
+        const fields = availableFields.length ? availableFields : [];
+        return selectedFieldName && !fields.includes(selectedFieldName) ? [selectedFieldName, ...fields] : fields;
     }, [availableFields, selectedFieldName]);
+
+    useEffect(() => {
+        if (!departmentDirectory.length) return;
+        if (!selectedDepartmentSlug || !departmentDirectory.some((department) => department.slug === selectedDepartmentSlug)) {
+            setSelectedDepartmentSlug(departmentDirectory[0].slug);
+        }
+    }, [selectedDepartmentSlug]);
+
+    useEffect(() => {
+        const nextSubDepartmentSlug = subDepartments[0]?.slug || "";
+        if (!selectedSubDepartmentSlug || !subDepartments.some((subDepartment) => subDepartment.slug === selectedSubDepartmentSlug)) {
+            setSelectedSubDepartmentSlug(nextSubDepartmentSlug);
+        }
+    }, [subDepartments, selectedSubDepartmentSlug]);
+
+    useEffect(() => {
+        const nextScreenName = inputScreens[0] || "";
+        if (!selectedScreenName || !inputScreens.includes(selectedScreenName)) {
+            setSelectedScreenName(nextScreenName);
+        }
+    }, [inputScreens, selectedScreenName]);
+
+    useEffect(() => {
+        const nextFieldName = modalFieldOptions[0] || "";
+        if (!selectedFieldName || !modalFieldOptions.includes(selectedFieldName)) {
+            setSelectedFieldName(nextFieldName);
+        }
+    }, [modalFieldOptions, selectedFieldName]);
 
     const displayUserName =
         authUser?.full_name ||
@@ -116,20 +140,18 @@ function SettingsDashboardBuilder() {
         (Array.isArray(nextWidgets) ? nextWidgets : []).map((widget, index) => ({
             id: widget?.id || `widget-${index + 1}`,
             name: widget?.name || "Input Submitted Today",
-            enabled: widget?.enabled !== false,
+            enabled: parseWidgetEnabled(widget?.enabled),
             order: Number.isInteger(widget?.order) ? widget.order : index + 1,
             metric_key: widget?.metric_key || "today_submissions",
             widget_type: widget?.widget_type || "metric",
             chart_type: widget?.chart_type || visualizationTypeToChartType(widget?.visualization_type),
-            department: widget?.department || "Quality Control",
-            sub_department: widget?.sub_department || "Mixing",
-            screen_name: widget?.screen_name || widget?.input_screen || "Cotton HVI Data Entry",
-            field_name: widget?.field_name || widget?.input_field || "SCI",
+            department: widget?.department || "",
+            sub_department: widget?.sub_department || "",
+            screen_name: widget?.screen_name || widget?.input_screen || "",
+            field_name: widget?.field_name || widget?.input_field || "",
             builder_section:
                 widget?.builder_section ||
-                ((widget?.chart_type || visualizationTypeToChartType(widget?.visualization_type)) === "value"
-                    ? BUILDER_SECTIONS.average
-                    : BUILDER_SECTIONS.performance),
+                (index < 3 ? BUILDER_SECTIONS.average : BUILDER_SECTIONS.performance),
         }));
 
     const getMetricSelectValue = (widget) => {
@@ -137,52 +159,6 @@ function SettingsDashboardBuilder() {
             return TICKET_TREND_SELECT_KEY;
         }
         return widget?.metric_key || "today_submissions";
-    };
-
-    const toDashbuilderGetPath = (path) => {
-        if (String(path).startsWith("widgets/")) {
-            const userId = String(path).split("/")[1] || "";
-            return `${userId}/widgets`;
-        }
-        return path;
-    };
-
-    const toDashbuilderPostPath = (path) => {
-        if (String(path).startsWith("widgets/")) {
-            const userId = String(path).split("/")[1] || "";
-            return `${userId}/add-widget`;
-        }
-        return path;
-    };
-
-    const getWithBuilderFallback = async (path, params = {}) => {
-        try {
-            return await apiConfig.get(`/api/dashboard/builder/${path}`, params, { skipGlobalErrorModal: true });
-        } catch (error) {
-            if (error?.response?.status !== 404) throw error;
-            return apiConfig.get(`/api/dashboard/dashbuilder/${toDashbuilderGetPath(path)}`, params, { skipGlobalErrorModal: true });
-        }
-    };
-
-    const postWithBuilderFallback = async (path, payload = {}) => {
-        try {
-            return await apiConfig.post(`/api/dashboard/builder/${path}`, payload, { skipGlobalErrorModal: true });
-        } catch (error) {
-            if (error?.response?.status !== 404) throw error;
-            return apiConfig.post(`/api/dashboard/dashbuilder/${toDashbuilderPostPath(path)}`, payload, { skipGlobalErrorModal: true });
-        }
-    };
-
-    const saveWithPathCandidates = async (paths, payload) => {
-        let lastError = null;
-        for (const path of paths) {
-            try {
-                return await postWithBuilderFallback(path, payload);
-            } catch (error) {
-                lastError = error;
-            }
-        }
-        throw lastError || new Error("Failed to save dashboard widgets.");
     };
 
     useEffect(() => {
@@ -204,23 +180,20 @@ function SettingsDashboardBuilder() {
 
             try {
                 setLoading(true);
-                setWidgets([]);
-                const selectedUserId = Number(selectedBuilderUserId);
-                const effectiveUserId =
-                    Number.isInteger(selectedUserId) && selectedUserId > 0
-                        ? selectedUserId
-                        : dashboardOwnerUserId;
-                const response = await getWithBuilderFallback(`widgets/${effectiveUserId}`);
+                const response = await apiConfig.get("/api/dashboard/widgets", { userId: dashboardOwnerUserId });
                 if (!isMounted) return;
                 const apiWidgets = normalizeWidgets(response?.data?.widgets);
-                setWidgets(apiWidgets);
-                lastSavedSnapshotRef.current = JSON.stringify(apiWidgets);
-                hasLoadedWidgetsRef.current = true;
+                const storedWidgets = normalizeWidgets(readStoredDashboardWidgets(dashboardOwnerUserId));
+                const hasApiCustomWidgets = apiWidgets.some((widget) => widget.widget_type === FIELD_WIDGET_TYPE);
+                const hasStoredCustomWidgets = storedWidgets.some((widget) => widget.widget_type === FIELD_WIDGET_TYPE);
+                setWidgets(hasApiCustomWidgets || !hasStoredCustomWidgets
+                    ? (apiWidgets.length ? apiWidgets : initialWidgets)
+                    : storedWidgets);
                 setSaveMessage("");
             } catch (error) {
                 if (!isMounted) return;
-                setWidgets([]);
-                hasLoadedWidgetsRef.current = true;
+                const storedWidgets = normalizeWidgets(readStoredDashboardWidgets(dashboardOwnerUserId));
+                setWidgets(storedWidgets.length ? storedWidgets : initialWidgets);
                 setSaveMessage(error?.response?.data?.message || "Unable to load dashboard widgets.");
             } finally {
                 if (isMounted) {
@@ -234,122 +207,28 @@ function SettingsDashboardBuilder() {
         return () => {
             isMounted = false;
         };
-    }, [canCustomizeDashboards, dashboardOwnerUserId, selectedBuilderUserId]);
-
-    useEffect(() => {
-        setMetricOptions([]);
-    }, []);
+    }, [dashboardOwnerUserId]);
 
     useEffect(() => {
         let isMounted = true;
 
-        const toArray = (value) => {
-            if (Array.isArray(value)) return value;
-            if (Array.isArray(value?.roles)) return value.roles;
-            if (Array.isArray(value?.data)) return value.data;
-            if (Array.isArray(value?.rows)) return value.rows;
-            if (Array.isArray(value?.items)) return value.items;
-            return [];
-        };
-
-        const normalizeRoleName = (role) =>
-            String(
-                role?.role_name ||
-                role?.name ||
-                role?.role ||
-                ""
-            ).trim();
-
-        const normalizeUserName = (user) =>
-            String(
-                user?.full_name ||
-                user?.name ||
-                user?.username ||
-                user?.user_name ||
-                ""
-            ).trim();
-
-        const normalizeUserId = (user) => {
-            const id = Number(user?.id || user?.user_id || user?.userId);
-            return Number.isInteger(id) && id > 0 ? id : null;
-        };
-
-        const normalizeUserRole = (user) =>
-            String(
-                user?.role_name ||
-                user?.role ||
-                user?.role_title ||
-                ""
-            ).trim();
-
-        const loadRoleAndOperatorOptions = async () => {
+        const loadMetricOptions = async () => {
             try {
-                const [rolesResponse, usersResponse] = await Promise.all([
-                    apiConfig.get("/roles", { page: 1, limit: 200 }, { skipGlobalErrorModal: true }),
-                    apiConfig.get("/users", {}, { skipGlobalErrorModal: true }),
-                ]);
-
+                const response = await apiConfig.get("/api/dashboard/widget-metrics");
                 if (!isMounted) return;
-
-                const roleRecords = toArray(rolesResponse?.data);
-                const roles = roleRecords
-                    .map(normalizeRoleName)
-                    .filter(Boolean);
-                const allowedRoles = new Set(roles);
-
-                const users = toArray(usersResponse?.data)
-                    .map((user) => ({
-                        id: normalizeUserId(user),
-                        name: normalizeUserName(user),
-                        role: normalizeUserRole(user),
-                    }))
-                    .filter((user) => user.id && user.name && user.role && allowedRoles.has(user.role));
-
-                const dedupedRoles = Array.from(new Set(roles));
-                const dedupedUsers = users.filter(
-                    (user, index, arr) =>
-                        index === arr.findIndex((entry) => entry.id === user.id)
-                );
-                const ownListRole = dedupedUsers.find((user) => user.id === currentAuthUserId)?.role || "";
-                const defaultRole = ownListRole || currentAuthRole;
-
-                setBuilderRoles(dedupedRoles);
-                setBuilderUsers(dedupedUsers);
-                setSelectedRole((current) =>
-                    current || (defaultRole && dedupedRoles.includes(defaultRole) ? defaultRole : dedupedRoles[0] || "")
-                );
+                setMetricOptions(Array.isArray(response?.data?.metrics) ? response.data.metrics : []);
             } catch {
                 if (!isMounted) return;
-                setBuilderRoles([]);
-                setBuilderUsers([]);
+                setMetricOptions([]);
             }
         };
 
-        if (canCustomizeDashboards) {
-            loadRoleAndOperatorOptions();
-        }
+        loadMetricOptions();
 
         return () => {
             isMounted = false;
         };
     }, [canCustomizeDashboards, currentAuthRole, currentAuthUserId]);
-
-    const usersForSelectedRole = useMemo(() => {
-        const list = selectedRole
-            ? builderUsers.filter((user) => !user.role || user.role === selectedRole)
-            : builderUsers;
-        return list;
-    }, [builderUsers, selectedRole]);
-
-    useEffect(() => {
-        setSelectedBuilderUserId((current) => {
-            if (current && usersForSelectedRole.some((user) => String(user.id) === String(current))) return current;
-            if (currentAuthUserId && usersForSelectedRole.some((user) => user.id === currentAuthUserId)) {
-                return String(currentAuthUserId);
-            }
-            return usersForSelectedRole[0]?.id ? String(usersForSelectedRole[0].id) : "";
-        });
-    }, [currentAuthUserId, usersForSelectedRole]);
 
     const handleToggle = (widgetIndex) => {
         setWidgets((current) =>
@@ -380,15 +259,15 @@ function SettingsDashboardBuilder() {
             ...current,
             {
                 id: `field-widget-${Date.now()}`,
-                name: selectedFieldName || "SCI",
+                name: selectedFieldName || "Widget",
                 enabled: true,
                 order: current.length + 1,
                 metric_key: "custom_field",
                 widget_type: FIELD_WIDGET_TYPE,
-                department: selectedDepartment?.name || "Quality Control",
-                sub_department: selectedSubDepartment?.name || "Mixing",
-                screen_name: selectedScreenName || "Cotton HVI Data Entry",
-                field_name: selectedFieldName || "SCI",
+                department: selectedDepartment?.name || "",
+                sub_department: selectedSubDepartment?.name || "",
+                screen_name: selectedScreenName || "",
+                field_name: selectedFieldName || "",
                 chart_type: selectedVisualization.key,
                 builder_section: selectedVisualization.section,
             },
@@ -562,10 +441,10 @@ function SettingsDashboardBuilder() {
             setSaving(true);
             const payloadWidgets = orderedWidgets.map((widget) => ({
                 id: widget.id,
-                department: widget.department || "Quality Control",
-                sub_department: widget.sub_department || "Mixing",
-                input_screen: widget.screen_name || "Cotton HVI Data Entry",
-                input_field: normalizeInputFieldKey(widget.field_name || "SCI"),
+                department: widget.department || "",
+                sub_department: widget.sub_department || "",
+                input_screen: widget.screen_name || "",
+                input_field: normalizeInputFieldKey(widget.field_name || ""),
                 visualization_type: chartTypeToVisualizationType(widget.chart_type),
                 enabled: widget.enabled !== false,
                 order: widget.order,
@@ -616,32 +495,12 @@ function SettingsDashboardBuilder() {
         await saveWidgets(widgets);
     };
 
-    useEffect(() => {
-        if (!hasLoadedWidgetsRef.current || !dashboardOwnerUserId) return;
-        const currentSnapshot = JSON.stringify(widgets);
-        if (currentSnapshot === lastSavedSnapshotRef.current) return;
-
-        if (autosaveTimerRef.current) {
-            clearTimeout(autosaveTimerRef.current);
-        }
-
-        autosaveTimerRef.current = setTimeout(() => {
-            saveWidgets(widgets, { successMessage: "" });
-        }, 500);
-
-        return () => {
-            if (autosaveTimerRef.current) {
-                clearTimeout(autosaveTimerRef.current);
-            }
-        };
-    }, [widgets, dashboardOwnerUserId, selectedBuilderUserId]);
-
     const getBuilderRowText = (widget) =>
         [
-            widget.department || "Quality Control",
-            widget.sub_department || "Mixing",
-            widget.screen_name || "Cotton HVI Data Entry",
-            widget.field_name || widget.name || "SCI",
+            widget.department || "-",
+            widget.sub_department || "-",
+            widget.screen_name || "-",
+            widget.field_name || widget.name || "-",
         ].join(" | ");
 
     const builderRows = widgets.map((widget, index) => ({
@@ -694,19 +553,19 @@ function SettingsDashboardBuilder() {
                     <label>
                         <span>Name</span>
                         <select
-                            value={selectedBuilderUserId}
-                            onChange={(event) => setSelectedBuilderUserId(event.target.value)}
+                            value={selectedBuilderUser}
+                            onChange={(event) => setSelectedBuilderUser(event.target.value)}
                         >
-                            {usersForSelectedRole.map((builderUser) => (
-                                <option key={builderUser.id} value={builderUser.id}>
-                                    {builderUser.name}
+                            {builderUsers.map((builderUser) => (
+                                <option key={builderUser} value={builderUser}>
+                                    {builderUser}
                                 </option>
                             ))}
                         </select>
                     </label>
                 </div>
                 <div className={styles.builderSelectedUser}>
-                    <strong>{usersForSelectedRole.find((user) => String(user.id) === String(selectedBuilderUserId))?.name || displayUserName}</strong>
+                    <strong>{selectedBuilderUser}</strong>
                     <span>{selectedRole}</span>
                 </div>
             </section>
@@ -749,16 +608,7 @@ function SettingsDashboardBuilder() {
                                     value={selectedDepartmentSlug}
                                     onChange={(event) => {
                                         const nextDepartmentSlug = event.target.value;
-                                        const nextDepartment = departmentDirectory.find((item) => item.slug === nextDepartmentSlug);
-                                        const nextSubDepartmentSlug = nextDepartment?.subDepartments?.[0]?.slug || "";
-                                        const nextScreens = getThresholdScreensForSubDepartment(nextDepartmentSlug, nextSubDepartmentSlug);
-                                        const nextScreenName = nextScreens[0] || "";
-                                        const nextFields = getThresholdFieldsForScreen(nextScreenName);
-
                                         setSelectedDepartmentSlug(nextDepartmentSlug);
-                                        setSelectedSubDepartmentSlug(nextSubDepartmentSlug);
-                                        setSelectedScreenName(nextScreenName);
-                                        setSelectedFieldName(nextFields.includes("SCI") ? "SCI" : (nextFields[0] || "SCI"));
                                     }}
                                 >
                                     {departmentDirectory.map((department) => (
@@ -775,13 +625,7 @@ function SettingsDashboardBuilder() {
                                     value={selectedSubDepartmentSlug}
                                     onChange={(event) => {
                                         const nextSubDepartmentSlug = event.target.value;
-                                        const nextScreens = getThresholdScreensForSubDepartment(selectedDepartmentSlug, nextSubDepartmentSlug);
-                                        const nextScreenName = nextScreens[0] || "";
-                                        const nextFields = getThresholdFieldsForScreen(nextScreenName);
-
                                         setSelectedSubDepartmentSlug(nextSubDepartmentSlug);
-                                        setSelectedScreenName(nextScreenName);
-                                        setSelectedFieldName(nextFields.includes("SCI") ? "SCI" : (nextFields[0] || "SCI"));
                                     }}
                                 >
                                     {subDepartments.map((subDepartment) => (
@@ -798,10 +642,7 @@ function SettingsDashboardBuilder() {
                                     value={selectedScreenName}
                                     onChange={(event) => {
                                         const nextScreenName = event.target.value;
-                                        const nextFields = getThresholdFieldsForScreen(nextScreenName);
-
                                         setSelectedScreenName(nextScreenName);
-                                        setSelectedFieldName(nextFields.includes("SCI") ? "SCI" : (nextFields[0] || "SCI"));
                                     }}
                                 >
                                     {inputScreens.map((screen) => (

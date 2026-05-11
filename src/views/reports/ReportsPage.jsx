@@ -85,15 +85,6 @@ const fetchEndpointRows = async (endpoint, params = {}) => {
   return response.data;
 };
 
-const getDashboardWithFallback = async (path, params = {}) => {
-  try {
-    return await apiConfig.get(`/api/dashboard/builder/${path}`, params, { skipGlobalErrorModal: true });
-  } catch (error) {
-    if (error?.response?.status !== 404) throw error;
-    return apiConfig.get(`/api/dashboard/dashbuilder/${path}`, params, { skipGlobalErrorModal: true });
-  }
-};
-
 const reportSources = {
   "Quality Control": {
     Mixing: {
@@ -960,15 +951,6 @@ function ReportsPage() {
   const [scheduleMonthDay, setScheduleMonthDay] = useState("1");
   const [scheduleSingleDate, setScheduleSingleDate] = useState(toInputDate(today));
   const [sendToMe, setSendToMe] = useState(true);
-  const [period, setPeriod] = useState("1W");
-  const [builderOptions, setBuilderOptions] = useState({
-    departments: [],
-    sub_departments: [],
-    input_screens: [],
-    input_fields: [],
-    periods: ["1D", "1W", "1M", "1Y"],
-  });
-  const [inputField, setInputField] = useState("");
   const [sendToOthers, setSendToOthers] = useState(false);
   const [scheduleUsers, setScheduleUsers] = useState([]);
   const [selectedScheduleUserIds, setSelectedScheduleUserIds] = useState([]);
@@ -979,9 +961,10 @@ function ReportsPage() {
   const autoSendingScheduleKeysRef = useRef(new Set());
   const schedulesLoadedRef = useRef(false);
 
-  const departments = builderOptions.departments;
-  const subDepartments = builderOptions.sub_departments;
-  const reportTypes = builderOptions.input_screens;
+  const departments = Object.keys(reportSources);
+  const subDepartments = Object.keys(reportSources[department] || {});
+  const reportTypes = Object.keys(reportSources[department]?.[subDepartment] || {});
+  const selectedReportSource = reportSources[department]?.[subDepartment]?.[reportType];
 
   const getUserId = (user) =>
     String(user?.id || user?.user_id || user?.userId || user?.employeeId || user?.employee_id || user?.email || "");
@@ -1200,6 +1183,8 @@ function ReportsPage() {
   }, []);
 
   useEffect(() => {
+    const fetcher = selectedReportSource?.fetcher;
+    const endpoint = selectedReportSource?.endpoint;
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
     setRows([]);
@@ -1209,6 +1194,7 @@ function ReportsPage() {
     if (!department || !subDepartment || !reportType) {
       setRows([]);
       setSelectedFields([]);
+      setError("No report list API is configured for this selection.");
       return;
     }
 
@@ -1836,7 +1822,14 @@ function ReportsPage() {
                 <select
                   value={department}
                   onChange={(event) => {
-                    setDepartment(event.target.value);
+                    const nextDepartment = event.target.value;
+                    const nextSubDepartment = Object.keys(reportSources[nextDepartment] || {})[0] || "";
+                    const nextReportType =
+                      Object.keys(reportSources[nextDepartment]?.[nextSubDepartment] || {})[0] || "";
+
+                    setDepartment(nextDepartment);
+                    setSubDepartment(nextSubDepartment);
+                    setReportType(nextReportType);
                   }}
                 >
                   {departments.map((option) => (
@@ -1850,7 +1843,9 @@ function ReportsPage() {
                 <select
                   value={subDepartment}
                   onChange={(event) => {
-                    setSubDepartment(event.target.value);
+                    const nextSubDepartment = event.target.value;
+                    setSubDepartment(nextSubDepartment);
+                    setReportType(Object.keys(reportSources[department]?.[nextSubDepartment] || {})[0] || "");
                   }}
                 >
                   {subDepartments.map((option) => (
