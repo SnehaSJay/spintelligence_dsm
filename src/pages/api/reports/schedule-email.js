@@ -81,40 +81,72 @@ const getRecipientProfiles = (body, recipients) => {
   });
 };
 
+const TABLE_CELL_PADDING_X = 4;
+const TABLE_CELL_PADDING_Y = 2;
+const TABLE_LINE_GAP = 0;
+const TABLE_FONT_SIZE = 8;
+const TABLE_MIN_FONT_SIZE = 1.2;
+const TABLE_HEADER_HEIGHT_RATIO = 1.25;
+
+const normalizePdfText = (value) => {
+  if (value === null || typeof value === "undefined" || value === "") return "-";
+  const text = typeof value === "object" ? JSON.stringify(value) : String(value);
+  return text.replace(/\s+/g, " ").trim() || "-";
+};
+
 const drawCellText = (doc, value, x, y, width, options = {}) => {
-  doc.text(String(value ?? "-"), x, y, {
+  doc.text(normalizePdfText(value), x, y, {
     width,
+    lineBreak: true,
     ellipsis: true,
-    lineBreak: false,
+    lineGap: TABLE_LINE_GAP,
     ...options,
   });
 };
 
-const addReportTablePage = (doc, { title, columns, columnWidth, tableTop, showTitle = true }) => {
-  if (showTitle) {
-    doc.fontSize(14).fillColor("#111827").text(title, doc.page.margins.left, 28, {
-      align: "center",
-    });
-  }
+const getSinglePageTableLayout = ({ availableHeight, rowCount, columnCount }) => {
+  const totalUnits = TABLE_HEADER_HEIGHT_RATIO + Math.max(rowCount, 1);
+  const rowHeight = availableHeight / totalUnits;
+  const headerHeight = rowHeight * TABLE_HEADER_HEIGHT_RATIO;
+  const columnPressure = Math.max(0, columnCount - 8) * 0.16;
+  const rowPressure = Math.max(0, rowCount - 30) * 0.035;
+  const cellPaddingY = Math.min(TABLE_CELL_PADDING_Y, Math.max(0, rowHeight * 0.18));
+  const fontSize = Math.max(
+    TABLE_MIN_FONT_SIZE,
+    Math.min(TABLE_FONT_SIZE, rowHeight * 0.72, TABLE_FONT_SIZE - columnPressure - rowPressure)
+  );
 
+  return {
+    fontSize,
+    headerFontSize: Math.max(TABLE_MIN_FONT_SIZE, Math.min(TABLE_FONT_SIZE, fontSize + 0.4)),
+    headerHeight,
+    rowHeight,
+    cellPaddingY,
+  };
+};
+
+const addReportTableHeader = (doc, { columns, columnWidth, tableTop, headerHeight, headerFontSize }) => {
   doc
     .moveTo(doc.page.margins.left, tableTop - 8)
     .lineTo(doc.page.width - doc.page.margins.right, tableTop - 8)
     .strokeColor("#d1d5db")
     .stroke();
 
-  doc.fontSize(8).fillColor("#111827");
+  doc.font("Helvetica-Bold").fontSize(headerFontSize).fillColor("#111827");
   columns.forEach((column, index) => {
-    drawCellText(doc, column, doc.page.margins.left + index * columnWidth, tableTop, columnWidth - 6, {
+    drawCellText(doc, column, doc.page.margins.left + index * columnWidth + TABLE_CELL_PADDING_X, tableTop, columnWidth - TABLE_CELL_PADDING_X * 2, {
+      height: Math.max(0.5, headerHeight - TABLE_CELL_PADDING_Y),
       continued: false,
     });
   });
 
   doc
-    .moveTo(doc.page.margins.left, tableTop + 14)
-    .lineTo(doc.page.width - doc.page.margins.right, tableTop + 14)
+    .moveTo(doc.page.margins.left, tableTop + headerHeight)
+    .lineTo(doc.page.width - doc.page.margins.right, tableTop + headerHeight)
     .strokeColor("#9ca3af")
     .stroke();
+
+  return tableTop + headerHeight;
 };
 
 const buildReportPdfBuffer = ({ schedule = {}, report = {} }) =>
@@ -152,39 +184,69 @@ const buildReportPdfBuffer = ({ schedule = {}, report = {} }) =>
       return;
     }
 
-    const tableTop = doc.y + 8;
     const usableWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-    const columnWidth = Math.max(54, usableWidth / columns.length);
-    const rowHeight = 18;
-    const title = `${report.subDepartment || "-"} - ${report.reportType || "Report"}`;
-    let y = tableTop + 24;
-
-    addReportTablePage(doc, { title, columns, columnWidth, tableTop, showTitle: false });
+    const tableTop = doc.y + 8;
+    const bottom = doc.page.height - doc.page.margins.bottom;
+    const availableTableHeight = Math.max(80, bottom - tableTop);
+    const pdfRows = rows;
+    const columnWidth = usableWidth / columns.length;
+    const { fontSize, headerFontSize, headerHeight, rowHeight, cellPaddingY } = getSinglePageTableLayout({
+      availableHeight: availableTableHeight,
+      rowCount: pdfRows.length || 1,
+      columnCount: columns.length,
+    });
+    const rowTextHeight = Math.max(0.5, rowHeight - cellPaddingY * 2);
 
     if (!rows.length) {
-      doc.fontSize(10).fillColor("#6b7280").text("No report rows found for the selected filters.", doc.page.margins.left, y);
+      const y = addReportTableHeader(doc, {
+          columns,
+          columnWidth,
+          tableTop,
+          headerHeight,
+          headerFontSize,
+      });
+      doc
+        .font("Helvetica")
+        .fontSize(10)
+        .fillColor("#6b7280")
+        .text("No report rows found for the selected filters.", doc.page.margins.left, y + 12);
       doc.end();
       return;
     }
 
-    rows.slice(0, 500).forEach((row) => {
-      if (y + rowHeight > doc.page.height - doc.page.margins.bottom) {
-        doc.addPage();
-        addReportTablePage(doc, { title, columns, columnWidth, tableTop: doc.page.margins.top + 24 });
-        y = doc.page.margins.top + 48;
-      }
-
-      doc.fontSize(8).fillColor("#111827");
-      columns.forEach((column, index) => {
-        drawCellText(doc, row?.[column] ?? "-", doc.page.margins.left + index * columnWidth, y, columnWidth - 6);
-      });
-      y += rowHeight;
+    let y = addReportTableHeader(doc, {
+      columns,
+      columnWidth,
+      tableTop,
+      headerHeight,
+      headerFontSize,
     });
 
-    if (rows.length > 500) {
-      if (y + rowHeight > doc.page.height - doc.page.margins.bottom) doc.addPage();
-      doc.moveDown().fontSize(9).fillColor("#6b7280").text(`Showing first 500 rows of ${rows.length}.`);
-    }
+    pdfRows.forEach((row) => {
+      doc.font("Helvetica").fontSize(fontSize).fillColor("#111827");
+      columns.forEach((column, index) => {
+        drawCellText(
+          doc,
+          row?.[column] ?? "-",
+          doc.page.margins.left + index * columnWidth + TABLE_CELL_PADDING_X,
+          y + cellPaddingY,
+          columnWidth - TABLE_CELL_PADDING_X * 2,
+          {
+            height: rowTextHeight,
+          }
+        );
+      });
+
+      if (rowHeight >= 5) {
+        doc
+          .moveTo(doc.page.margins.left, y + rowHeight)
+          .lineTo(doc.page.width - doc.page.margins.right, y + rowHeight)
+          .strokeColor("#e5e7eb")
+          .stroke();
+      }
+
+      y += rowHeight;
+    });
 
     doc.end();
   });
