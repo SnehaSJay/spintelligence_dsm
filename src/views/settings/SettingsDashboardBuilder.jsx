@@ -3,6 +3,7 @@ import { useSelector } from "react-redux";
 import { FiGrid, FiPlus, FiServer, FiTrash2 } from "react-icons/fi";
 
 import apiConfig from "@/apis/apiConfig";
+import { isFullAccessUser } from "@/utils/accessControl";
 import { getDashboardOwnerUserId } from "@/utils/dashboardOwner";
 import { departmentDirectory } from "@/views/departments/data";
 import { getThresholdScreensForSubDepartment } from "@/views/thresholds/screenCatalog";
@@ -70,10 +71,12 @@ function SettingsDashboardBuilder() {
         () => getDashboardOwnerUserId(authUser),
         [authUser]
     );
-    const isAdmin = useMemo(() => {
-        const role = String(authUser?.role || authUser?.role_name || "").trim().toLowerCase();
-        return role === "admin" || role === "super admin" || role === "superadmin";
+    const canCustomizeDashboards = useMemo(() => isFullAccessUser(authUser), [authUser]);
+    const currentAuthUserId = useMemo(() => {
+        const id = Number(authUser?.id || authUser?.user_id || authUser?.userId);
+        return Number.isInteger(id) && id > 0 ? id : null;
     }, [authUser]);
+    const currentAuthRole = String(authUser?.role_name || authUser?.role || authUser?.role_title || "").trim();
 
     const selectedDepartment = useMemo(
         () => departmentDirectory.find((item) => item.slug === selectedDepartmentSlug),
@@ -186,6 +189,11 @@ function SettingsDashboardBuilder() {
         let isMounted = true;
 
         const loadWidgets = async () => {
+            if (!canCustomizeDashboards) {
+                if (isMounted) setLoading(false);
+                return;
+            }
+
             if (!dashboardOwnerUserId) {
                 if (isMounted) {
                     setLoading(false);
@@ -226,7 +234,7 @@ function SettingsDashboardBuilder() {
         return () => {
             isMounted = false;
         };
-    }, [dashboardOwnerUserId, selectedBuilderUserId, isAdmin]);
+    }, [canCustomizeDashboards, dashboardOwnerUserId, selectedBuilderUserId]);
 
     useEffect(() => {
         setMetricOptions([]);
@@ -302,10 +310,14 @@ function SettingsDashboardBuilder() {
                     (user, index, arr) =>
                         index === arr.findIndex((entry) => entry.id === user.id)
                 );
+                const ownListRole = dedupedUsers.find((user) => user.id === currentAuthUserId)?.role || "";
+                const defaultRole = ownListRole || currentAuthRole;
 
                 setBuilderRoles(dedupedRoles);
                 setBuilderUsers(dedupedUsers);
-                setSelectedRole((current) => current || dedupedRoles[0] || "");
+                setSelectedRole((current) =>
+                    current || (defaultRole && dedupedRoles.includes(defaultRole) ? defaultRole : dedupedRoles[0] || "")
+                );
             } catch {
                 if (!isMounted) return;
                 setBuilderRoles([]);
@@ -313,12 +325,14 @@ function SettingsDashboardBuilder() {
             }
         };
 
-        loadRoleAndOperatorOptions();
+        if (canCustomizeDashboards) {
+            loadRoleAndOperatorOptions();
+        }
 
         return () => {
             isMounted = false;
         };
-    }, []);
+    }, [canCustomizeDashboards, currentAuthRole, currentAuthUserId]);
 
     const usersForSelectedRole = useMemo(() => {
         const list = selectedRole
@@ -330,9 +344,12 @@ function SettingsDashboardBuilder() {
     useEffect(() => {
         setSelectedBuilderUserId((current) => {
             if (current && usersForSelectedRole.some((user) => String(user.id) === String(current))) return current;
+            if (currentAuthUserId && usersForSelectedRole.some((user) => user.id === currentAuthUserId)) {
+                return String(currentAuthUserId);
+            }
             return usersForSelectedRole[0]?.id ? String(usersForSelectedRole[0].id) : "";
         });
-    }, [usersForSelectedRole]);
+    }, [currentAuthUserId, usersForSelectedRole]);
 
     const handleToggle = (widgetIndex) => {
         setWidgets((current) =>
@@ -634,6 +651,17 @@ function SettingsDashboardBuilder() {
     }));
     const averageRows = builderRows.filter(({ section }) => section === BUILDER_SECTIONS.average);
     const performanceRows = builderRows.filter(({ section }) => section === BUILDER_SECTIONS.performance);
+
+    if (authUser && !canCustomizeDashboards) {
+        return (
+            <div className={styles.dashboardMain}>
+                <section className={styles.builderHeader}>
+                    <h1 className={styles.kicker}>Dashboard Builder</h1>
+                </section>
+                <p className={styles.builderUserMeta}>Only EMP001 can customize user dashboards.</p>
+            </div>
+        );
+    }
 
     return (
         <div className={styles.dashboardMain}>
