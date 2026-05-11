@@ -1,8 +1,13 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSelector } from "react-redux";
 import { FiPieChart } from "react-icons/fi";
 
+import apiConfig from "@/apis/apiConfig";
+import { isFullAccessUser } from "@/utils/accessControl";
+import { getDashboardOwnerUserId } from "@/utils/dashboardOwner";
 import styles from "@/styles/departmentDirectory.module.css";
+
+const DASHBOARD_FETCH_DEBOUNCE_MS = 250;
 
 const metricCards = Array.from({ length: 8 }, (_, index) => ({
     id: `sci-average-${index + 1}`,
@@ -29,6 +34,29 @@ const linePoints = [
     { label: "Day 6", value: 88 },
     { label: "Day 7", value: 71 },
 ];
+
+const normalizeInputFieldKey = (value) =>
+    String(value || "")
+        .trim()
+        .toLowerCase()
+        .replace(/%/g, "percent")
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_+|_+$/g, "");
+
+const visualizationTypeToChartType = (type) => {
+    const normalizedType = String(type || "").trim().toLowerCase();
+    if (normalizedType === "average_value_card") return "value";
+    if (normalizedType === "bar_chart") return "bar";
+    if (normalizedType === "area_chart") return "area";
+    if (normalizedType === "timeline_chart") return "timeline";
+    if (normalizedType === "average_chart") return "average";
+    return "line";
+};
+
+const getModeValue = (baseValue, mode = "1M") => {
+    const nextValue = baseValue * (modeMultipliers[mode] || 1);
+    return Number(nextValue.toFixed(1));
+};
 
 const parseWidgetEnabled = (value) => {
     if (typeof value === "boolean") return value;

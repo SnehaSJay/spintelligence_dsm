@@ -85,6 +85,21 @@ const fetchEndpointRows = async (endpoint, params = {}) => {
   return response.data;
 };
 
+const getDashboardWithFallback = async (path, params = {}, options = {}) => {
+  try {
+    return await apiConfig.get(`/api/dashboard/builder/${path}`, params, {
+      skipGlobalErrorModal: true,
+      ...options,
+    });
+  } catch (error) {
+    if (error?.response?.status !== 404) throw error;
+    return apiConfig.get(`/api/dashboard/dashbuilder/${path}`, params, {
+      skipGlobalErrorModal: true,
+      ...options,
+    });
+  }
+};
+
 const reportSources = {
   "Quality Control": {
     Mixing: {
@@ -733,6 +748,13 @@ const escapePdfText = (value) =>
     .replace(/\(/g, "\\(")
     .replace(/\)/g, "\\)");
 
+const escapeHtmlText = (value) =>
+  String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+
 const compactPdfText = (value, maxLength = 110) => {
   const text = String(value ?? "").replace(/\s+/g, " ").trim();
   return text.length > maxLength ? `${text.slice(0, maxLength - 3)}...` : text;
@@ -802,7 +824,7 @@ const buildReportPdfBase64 = ({ schedule = {}, report = {} }) => {
     lines.push(columns.map((column) => padPdfCell(column, columnWidth)).join(" | "));
     lines.push(columns.map(() => "-".repeat(columnWidth)).join("-+-"));
     if (rows.length) {
-      rows.slice(0, 500).forEach((row) => {
+      rows.forEach((row) => {
         lines.push(columns.map((column) => padPdfCell(row?.[column] ?? "-", columnWidth)).join(" | "));
       });
     } else {
@@ -812,43 +834,32 @@ const buildReportPdfBase64 = ({ schedule = {}, report = {} }) => {
     lines.push("No report fields selected.");
   }
 
-  if (rows.length > 500) {
-    lines.push("");
-    lines.push(`Showing first 500 rows of ${rows.length}.`);
-  }
-
-  const pageSize = Math.max(1, Math.floor((page.height - margin * 2) / page.lineHeight));
-  const pages = [];
-  for (let index = 0; index < lines.length; index += pageSize) {
-    pages.push(lines.slice(index, index + pageSize));
-  }
-  if (!pages.length) pages.push([]);
+  const dynamicLineHeight = Math.min(page.lineHeight, (page.height - margin * 2) / Math.max(lines.length, 1));
+  const dynamicFontSize = Math.max(0.9, Math.min(page.fontSize, dynamicLineHeight * 0.78));
 
   const objects = [
     "<< /Type /Catalog /Pages 2 0 R >>",
     "",
-    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>",
   ];
   const pageRefs = [];
 
-  pages.forEach((pageLines) => {
-    const content = [
-      "BT",
-      `/F1 ${page.fontSize} Tf`,
-      `${margin} ${page.height - margin} Td`,
-      `${page.lineHeight} TL`,
-      ...pageLines.map((line) => `(${escapePdfText(line)}) Tj T*`),
-      "ET",
-    ].join("\n");
-    const contentObjectNumber = objects.length + 1;
-    objects.push(`<< /Length ${content.length} >>\nstream\n${content}\nendstream`);
+  const content = [
+    "BT",
+    `/F1 ${dynamicFontSize.toFixed(2)} Tf`,
+    `${margin} ${page.height - margin} Td`,
+    `${dynamicLineHeight.toFixed(2)} TL`,
+    ...lines.map((line) => `(${escapePdfText(line)}) Tj T*`),
+    "ET",
+  ].join("\n");
+  const contentObjectNumber = objects.length + 1;
+  objects.push(`<< /Length ${content.length} >>\nstream\n${content}\nendstream`);
 
-    const pageObjectNumber = objects.length + 1;
-    pageRefs.push(`${pageObjectNumber} 0 R`);
-    objects.push(
-      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${page.width} ${page.height}] /Resources << /Font << /F1 3 0 R >> >> /Contents ${contentObjectNumber} 0 R >>`
-    );
-  });
+  const pageObjectNumber = objects.length + 1;
+  pageRefs.push(`${pageObjectNumber} 0 R`);
+  objects.push(
+    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${page.width} ${page.height}] /Resources << /Font << /F1 3 0 R >> >> /Contents ${contentObjectNumber} 0 R >>`
+  );
 
   objects[1] = `<< /Type /Pages /Kids [${pageRefs.join(" ")}] /Count ${pageRefs.length} >>`;
 
@@ -930,6 +941,14 @@ function ReportsPage() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [builderOptions, setBuilderOptions] = useState({
+    departments: [],
+    sub_departments: [],
+    input_screens: [],
+    input_fields: [],
+    periods: ["1D", "1W", "1M", "1Y"],
+  });
+  const [, setInputField] = useState("");
   const [selectedFields, setSelectedFields] = useState(defaultSelectedFields);
   const [draggingField, setDraggingField] = useState(null);
   const [activeDatePicker, setActiveDatePicker] = useState("");
@@ -1121,9 +1140,8 @@ function ReportsPage() {
       });
       if (!isMounted) return;
       const nextFields = getInputFieldOptions(response?.data || {});
-      const nextField = nextFields.includes(inputField) ? inputField : (nextFields[0] || "");
       setBuilderOptions((current) => ({ ...current, input_fields: nextFields }));
-      setInputField(nextField);
+      setInputField((current) => (nextFields.includes(current) ? current : (nextFields[0] || "")));
     };
     loadFields().catch(() => {});
     return () => {
@@ -1455,7 +1473,7 @@ function ReportsPage() {
         to: schedule.endDate || endDate,
       },
       fields: reportFields,
-      rows: reportRows.slice(0, 500).map((row) =>
+      rows: reportRows.map((row) =>
         reportFields.reduce((record, field) => {
           record[field.label] = getCellValue(row, field);
           return record;
@@ -1760,21 +1778,31 @@ function ReportsPage() {
         <head>
           <title>Report</title>
           <style>
+            @page { size: landscape; margin: 12mm; }
             body { font-family: Arial, sans-serif; padding: 24px; color: #14213d; }
             h1 { font-size: 20px; margin: 0 0 16px; }
-            table { width: 100%; border-collapse: collapse; font-size: 12px; }
-            th, td { border: 1px solid #d7dee9; padding: 8px; text-align: left; }
+            table { width: 100%; border-collapse: collapse; font-size: 11px; table-layout: fixed; }
+            th, td {
+              border: 1px solid #d7dee9;
+              padding: 7px;
+              text-align: left;
+              vertical-align: top;
+              overflow-wrap: anywhere;
+              word-break: break-word;
+              white-space: normal;
+            }
             th { background: #f6f8fb; }
+            tr { break-inside: avoid; page-break-inside: avoid; }
           </style>
         </head>
         <body>
-          <h1>${department} - ${subDepartment} - ${reportType}</h1>
+          <h1>${escapeHtmlText(department)} - ${escapeHtmlText(subDepartment)} - ${escapeHtmlText(reportType)}</h1>
           <table>
-            <thead><tr>${selectedFields.map((field) => `<th>${field.label}</th>`).join("")}</tr></thead>
+            <thead><tr>${selectedFields.map((field) => `<th>${escapeHtmlText(field.label)}</th>`).join("")}</tr></thead>
             <tbody>${exportRows
               .map(
                 (row) =>
-                  `<tr>${selectedFields.map((field) => `<td>${getCellValue(row, field)}</td>`).join("")}</tr>`
+                  `<tr>${selectedFields.map((field) => `<td>${escapeHtmlText(getCellValue(row, field))}</td>`).join("")}</tr>`
               )
               .join("")}</tbody>
           </table>
