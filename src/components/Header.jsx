@@ -20,7 +20,8 @@ import {
     FiSliders,
     FiUsers,
 } from "react-icons/fi";
-import { logout } from "../store/slices/authSlice";
+import { fetchUsersAPI } from "@/apis/userApi";
+import { logout, setAuthUser } from "../store/slices/authSlice";
 import { hasAnyQualityControlAccess, hasSubDepartmentAccess, isFullAccessUser, routeDepartmentMap } from "@/utils/accessControl";
 import styles from "../styles/header.module.css";
 
@@ -95,6 +96,9 @@ const Header = ({ navLinks = defaultNavLinks }) => {
     const user = useSelector((state) => state.auth?.user);
     const accessByDepartment = useSelector((state) => state.auth?.accessByDepartment);
     const hasFullAccess = isFullAccessUser(user);
+    const hasSupervisorNavAccess = isSupervisorNavUser(user);
+    const hasTicketingHubAccess = hasFullAccess || hasSupervisorNavAccess;
+    const hasAnalyticsHubAccess = hasFullAccess || hasSupervisorNavAccess;
     const fullName = user?.full_name || user?.name || "User";
     const employeeId = user?.employee_id || user?.employeeId || "No ID";
     const initials = fullName
@@ -122,10 +126,10 @@ const Header = ({ navLinks = defaultNavLinks }) => {
         }
 
         if (link.section === "tickets") {
-            return hasFullAccess || visibleHrefSet.has("/operator");
+            return hasTicketingHubAccess || visibleHrefSet.has("/operator");
         }
         if (link.section === "calendars") {
-            return hasFullAccess || visibleHrefSet.has("/ticket-calendar") || visibleHrefSet.has("/ticket-calendar-l2");
+            return hasAnalyticsHubAccess || visibleHrefSet.has("/ticket-calendar") || visibleHrefSet.has("/ticket-calendar-l2");
         }
 
         if (link.section === "settings") {
@@ -411,7 +415,7 @@ const Header = ({ navLinks = defaultNavLinks }) => {
                             );
                         }
 
-                        if (link.section === "tickets" && hasFullAccess) {
+                        if (link.section === "tickets" && hasTicketingHubAccess) {
                             return (
                                 <div key={link.href} className={styles["side-nav-group"]}>
                                     <button
@@ -439,19 +443,6 @@ const Header = ({ navLinks = defaultNavLinks }) => {
                             );
                         }
                         if (link.section === "calendars" && hasFullAccess) {
-                            // Two-level dropdown state
-                            const [openAnalyticsHub, setOpenAnalyticsHub] = useState(false);
-                            const [openCalendar, setOpenCalendar] = useState(false);
-                            const [openAnalysis, setOpenAnalysis] = useState(false);
-                            // Keep open state in sync with route
-                            useEffect(() => {
-                                const currentPath = router.asPath?.split("?")[0] || router.pathname;
-                                setOpenAnalyticsHub(
-                                    ["/ticket-calendar", "/ticket-calendar-l2", "/l1-analysis", "/l2-analysis"].includes(currentPath)
-                                );
-                                setOpenCalendar(["/ticket-calendar", "/ticket-calendar-l2"].includes(currentPath));
-                                setOpenAnalysis(["/l1-analysis", "/l2-analysis"].includes(currentPath));
-                            }, [router.asPath, router.pathname]);
                             return (
                                 <div key={link.href} className={styles["side-nav-group"]}>
                                     <button
