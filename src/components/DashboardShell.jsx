@@ -5,7 +5,6 @@ import { useSelector } from "react-redux";
 import {
     FiBarChart2,
     FiBell,
-    FiClock,
     FiFileText,
     FiHome,
     FiLayers,
@@ -27,7 +26,6 @@ const dashboardLinks = [
     { label: "L1 Ticketing System", href: "/operator", icon: FiFileText },
     { label: "Reports", href: "/reports", icon: FiBarChart2, adminOnly: true },
     { label: "Threshold", href: "/threshold-values", icon: FiSliders, adminOnly: true },
-    { label: "Submission Frequency", href: "/submission-frequency", icon: FiClock, adminOnly: true },
     { label: "Settings", href: "/settings", icon: FiSettings },
 ];
 

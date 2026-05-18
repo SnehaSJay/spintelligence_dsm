@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSelector } from "react-redux";
 import { FiPieChart } from "react-icons/fi";
+import { MdOutlineConfirmationNumber, MdOutlinePendingActions, MdOutlineReplay } from "react-icons/md";
+import { IoCheckmarkDoneCircleOutline } from "react-icons/io5";
+import { AiOutlineFolderOpen } from "react-icons/ai";
 
 import apiConfig from "@/apis/apiConfig";
 import styles from "@/styles/departmentDirectory.module.css";
@@ -55,6 +58,35 @@ const formatValue = (value, mode) => {
   const n = Number(value);
   if (!Number.isFinite(n)) return "--";
   return (n * (modeMultipliers[mode] || 1)).toFixed(2);
+};
+const formatIntegerValue = (value, mode) => {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "--";
+  return String(Math.round(n * (modeMultipliers[mode] || 1)));
+};
+const formatDayLabel = (date) => {
+  const d = String(date.getDate()).padStart(2, "0");
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  return `${d}/${m}`;
+};
+const formatMonthLabel = (date) =>
+  date.toLocaleString("en-US", { month: "short" });
+const getTicketCardLabel = (value) => {
+  const key = String(value || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
+  if (key === "totaltickets") return "Total Tickets";
+  if (key === "open" || key === "opentickets") return "Open";
+  if (key === "reopened" || key === "reopenedtickets") return "Reopened";
+  if (key === "closed" || key === "closedtickets") return "Closed";
+  if (key === "pending" || key === "pendingtickets") return "Pending";
+  return "Ticket Dashboard";
+};
+const getTicketCardIcon = (label) => {
+  if (label === "Total Tickets") return MdOutlineConfirmationNumber;
+  if (label === "Open") return AiOutlineFolderOpen;
+  if (label === "Reopened") return MdOutlineReplay;
+  if (label === "Closed") return IoCheckmarkDoneCircleOutline;
+  if (label === "Pending") return MdOutlinePendingActions;
+  return FiPieChart;
 };
 
 const padDatePart = (value) => String(value).padStart(2, "0");
@@ -237,7 +269,7 @@ function HomeDashboard() {
         const normalizedRaw = rawInputField.toLowerCase();
         const isTicketValuesWidget =
           String(widget?.department || "").trim().toLowerCase() === "ticketing" &&
-          String(widget?.screen_name || widget?.input_screen || "").trim().toLowerCase() === "ticket values";
+          ["ticket values", "ticket dashboard"].includes(String(widget?.screen_name || widget?.input_screen || "").trim().toLowerCase());
 
         if (isTicketValuesWidget && (normalizedRaw.includes("_|_") || normalizedRaw.includes("|"))) {
           const parts = rawInputField
@@ -287,8 +319,8 @@ function HomeDashboard() {
 
   const isTicketWidget = (widget) =>
     String(widget?.input_field || "").trim().toLowerCase() === "ticket_values" ||
-    String(widget?.input_screen || "").trim().toLowerCase() === "ticket values" ||
-    String(widget?.raw_input_field || "").trim().toLowerCase() === "ticket values";
+    ["ticket values", "ticket dashboard"].includes(String(widget?.input_screen || "").trim().toLowerCase()) ||
+    ["ticket values", "ticket dashboard"].includes(String(widget?.raw_input_field || "").trim().toLowerCase());
 
   const ticketWidgets = useMemo(
     () => visibleWidgets.filter((widget) => isTicketWidget(widget)),
@@ -431,9 +463,9 @@ function HomeDashboard() {
   }, [activeDashboardUserId, isDashboardAdmin, isViewingOwnDashboard]);
 
   useEffect(() => {
-    setCardModes((current) => averageWidgets.reduce((next, w) => ({ ...next, [w.id]: current[w.id] || "1M" }), {}));
+    setCardModes((current) => [...averageWidgets, ...ticketWidgets].reduce((next, w) => ({ ...next, [w.id]: current[w.id] || "1M" }), {}));
     setTrendModesById((current) => performanceWidgets.reduce((next, w) => ({ ...next, [w.id]: current[w.id] || "1M" }), {}));
-  }, [averageWidgets, performanceWidgets]);
+  }, [averageWidgets, ticketWidgets, performanceWidgets]);
 
   useEffect(() => {
     let isMounted = true;
@@ -457,11 +489,9 @@ function HomeDashboard() {
 
       const pendingRequests = visibleWidgets.map((widget) => {
         const isTicket = isTicketWidget(widget);
-        const period = isTicket
-          ? (timelineToPeriod[String(widget.sub_department || "").trim().toLowerCase()] || "1M")
-          : widget.visualization_type === "average_value_card" || widget.chart_type === "value"
-            ? cardModes[widget.id] || "1M"
-            : trendModesById[widget.id] || "1M";
+        const period = isTicket || widget.visualization_type === "average_value_card" || widget.chart_type === "value"
+          ? cardModes[widget.id] || "1M"
+          : trendModesById[widget.id] || "1M";
 
         const key = [widget.department, widget.sub_department, widget.input_screen, widget.input_field, period].join("::");
         const cached = widgetDataCacheRef.current.get(key);
@@ -563,19 +593,37 @@ function HomeDashboard() {
 
       {ticketWidgets.length ? (
         <section className={styles.referenceSection}>
-          <h1>Ticket Values</h1>
+          <h1>Ticket Dashboard</h1>
           <div className={styles.referenceStatsGrid}>
             {ticketWidgets.map((card) => (
               <article key={card.id} className={styles.referenceStatCard}>
-                <div className={styles.referenceStatHeader}>
-                  <div>
-                    <h2>{card.raw_input_field || card.input_field || "Ticket Values"}</h2>
+                {(() => {
+                  const ticketLabel = getTicketCardLabel(card.raw_input_field || card.input_field);
+                  const TicketIcon = getTicketCardIcon(ticketLabel);
+                  return (
+                    <div className={styles.referenceStatHeader}>
+                      <div>
+                        <h2>{ticketLabel}</h2>
                     <span>{`${card.department} | ${card.sub_department} | ${card.input_screen}`}</span>
-                  </div>
-                  <span className={styles.referenceStatIcon}><FiPieChart /></span>
-                </div>
+                      </div>
+                      <span className={styles.referenceStatIcon}><TicketIcon /></span>
+                    </div>
+                  );
+                })()}
               <div className={styles.referenceStatBottom}>
-                  <strong>{formatValue(widgetData?.[card.id]?.average_value, "1M")}</strong>
+                  <strong>{formatIntegerValue(widgetData?.[card.id]?.average_value, cardModes[card.id])}</strong>
+                  <div className={styles.referenceMiniToggle}>
+                    {trendModes.map((mode) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        className={cardModes[card.id] === mode ? styles.referenceMiniToggleActive : ""}
+                        onClick={() => setCardModes((current) => ({ ...current, [card.id]: mode }))}
+                      >
+                        {mode}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </article>
             ))}
@@ -638,13 +686,44 @@ function HomeDashboard() {
 function PerformanceLineCard({ widget, data, activeMode, setActiveMode }) {
   const xAxisTicks = useMemo(() => getXAxisTicks(activeMode), [activeMode]);
   const currentLinePoints = useMemo(() => {
-    const points = Array.isArray(data?.trend) && data.trend.length ? data.trend : [{ label: "No Data", value: 0 }];
-    return points.map((point) => {
-      const raw = Number(point?.value);
-      const scaled = Number.isFinite(raw) ? raw * (modeMultipliers[activeMode] || 1) : 0;
-      return { label: point?.label || "", value: Math.max(0, scaled) };
-    });
-  }, [activeMode, data]);
+    const multiplier = modeMultipliers[activeMode] || 1;
+    const fallbackValue = Number.isFinite(Number(data?.average_value)) ? Number(data.average_value) : 0;
+
+    if (activeMode === "1M") {
+      const today = new Date();
+      const source = baseTrendPoints.slice(-30);
+      return Array.from({ length: 30 }, (_, index) => {
+        const date = new Date(today);
+        date.setDate(today.getDate() - (29 - index));
+        const sourcePoint = source[index];
+        const raw = Number.isFinite(Number(sourcePoint?.value)) ? Number(sourcePoint.value) : fallbackValue;
+        return {
+          label: formatDayLabel(date),
+          value: Math.max(0, raw * multiplier),
+        };
+      });
+    }
+
+    if (activeMode === "1Y") {
+      const now = new Date();
+      const source = baseTrendPoints.slice(-12);
+      return Array.from({ length: 12 }, (_, index) => {
+        const date = new Date(now.getFullYear(), now.getMonth() - (11 - index), 1);
+        const sourcePoint = source[index];
+        const raw = Number.isFinite(Number(sourcePoint?.value)) ? Number(sourcePoint.value) : fallbackValue;
+        return {
+          label: formatMonthLabel(date),
+          value: Math.max(0, raw * multiplier),
+        };
+      });
+    }
+
+    const points = baseTrendPoints.length ? baseTrendPoints : [{ label: "No Data", value: fallbackValue }];
+    return points.map((point) => ({
+      label: point.label,
+      value: Math.max(0, Number(point.value || 0) * multiplier),
+    }));
+  }, [activeMode, baseTrendPoints, data]);
 
   const lineChartPoints = useMemo(() => {
     const yPadding = 8;

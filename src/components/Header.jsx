@@ -14,7 +14,6 @@ import {
     FiHome,
     FiLogOut,
     FiMoon,
-    FiRepeat,
     FiSettings,
     FiShield,
     FiSliders,
@@ -37,7 +36,6 @@ const sidebarLinks = [
     { href: "/ticket-calendar", label: "Insights & Analytics", icon: FiCalendar, section: "calendars" },
     { href: "/reports", label: "Reports", icon: FiFileText, admin: true },
     { href: "/threshold-values", label: "Threshold", icon: FiSliders, admin: true, section: "thresholds" },
-    { href: "/submission-frequency", label: "Submission Frequency", icon: FiRepeat, admin: true },
     { href: "/settings", label: "Settings", icon: FiSettings, admin: true, section: "settings" },
 ];
 

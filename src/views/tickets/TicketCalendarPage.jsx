@@ -42,9 +42,9 @@ const parseEmployeeSelection = (value) => {
 
 const normalizeStatus = (status) => {
   const value = String(status || "").trim().toLowerCase();
-  if (value === "in progress") return "In Progress";
+  if (value === "in progress" || value === "scheduled" || value === "schedule") return "Scheduled";
   if (value === "submit" || value === "approved" || value === "closed") return "Completed";
-  return "Incomplete";
+  return "Not Submitted";
 };
 
 const ymd = (date) => {
@@ -80,6 +80,7 @@ export default function TicketCalendarPage({ mode = "L1" }) {
     dispatch(fetchSupervisorTickets());
     dispatch(fetchUsers());
   }, [dispatch]);
+
 
   const allTickets = useMemo(
     () => applyStoredTicketStatuses(Array.isArray(tickets) ? tickets : []),
@@ -182,6 +183,7 @@ export default function TicketCalendarPage({ mode = "L1" }) {
     return map;
   }, [filtered]);
 
+
   const monthLabel = useMemo(
     () => cursorDate.toLocaleDateString("en-US", { month: "long", year: "numeric" }),
     [cursorDate]
@@ -215,7 +217,8 @@ export default function TicketCalendarPage({ mode = "L1" }) {
     });
   }, [cursorDate]);
 
-  const currentDayEvents = ticketMap.get(ymd(cursorDate)) || [];
+  const activeMap = ticketMap;
+  const currentDayEvents = activeMap.get(ymd(cursorDate)) || [];
   const analytics = useMemo(() => {
     const now = Date.now();
     const rowsMap = new Map();
@@ -242,7 +245,7 @@ export default function TicketCalendarPage({ mode = "L1" }) {
       if (status === "Completed") {
         entry.completed += 1;
         completed += 1;
-      } else if (status === "In Progress") {
+      } else if (status === "Scheduled") {
         entry.inprogress += 1;
         inprogress += 1;
       }
@@ -316,6 +319,7 @@ export default function TicketCalendarPage({ mode = "L1" }) {
             {currentDayEvents.map((e) => (
               <article key={`${e.id}-${e.status}`} className={`${styles.dailyItem} ${styles[e.status.replace(/\s+/g, "")]}`}>
                 <strong>{e.id}</strong>
+                {e.title ? <span>{e.title}</span> : null}
                 <span>{e.employee}</span>
                 <span>{e.status}</span>
               </article>
@@ -330,15 +334,19 @@ export default function TicketCalendarPage({ mode = "L1" }) {
           <div className={view === "Weekly" ? styles.weekGrid : styles.monthGrid}>
             {(view === "Weekly" ? weekCells : monthCells).map((date) => {
               const key = ymd(date);
-              const events = ticketMap.get(key) || [];
+              const events = activeMap.get(key) || [];
               const outOfMonth = date.getMonth() !== cursorDate.getMonth();
               return (
                 <div key={key} className={`${styles.dayCell} ${outOfMonth && view === "Monthly" ? styles.muted : ""}`}>
                   <div className={styles.dayNumber}>{date.getDate()}</div>
                   <div className={styles.events}>
                     {events.slice(0, view === "Weekly" ? 6 : 3).map((e) => (
-                      <div key={`${e.id}-${e.status}`} className={`${styles.event} ${styles[e.status.replace(/\s+/g, "")]}`}>
-                        {e.id} - {e.employee}
+                      <div
+                        key={`${e.id}-${e.status}`}
+                        className={`${styles.event} ${styles[e.status.replace(/\s+/g, "")]}`}
+                        title={`${e.title ? `${e.title} - ` : ""}${e.id} - ${e.employee}`}
+                      >
+                        {e.title ? `${e.title} - ` : ""}{e.id} - {e.employee}
                       </div>
                     ))}
                   </div>
@@ -351,8 +359,8 @@ export default function TicketCalendarPage({ mode = "L1" }) {
 
       <div className={styles.legend}>
         <span><i className={`${styles.dot} ${styles.Completed}`}></i>Completed</span>
-        <span><i className={`${styles.dot} ${styles.InProgress}`}></i>In Progress</span>
-        <span><i className={`${styles.dot} ${styles.Incomplete}`}></i>Incomplete</span>
+        <span><i className={`${styles.dot} ${styles.Scheduled}`}></i>Scheduled</span>
+        <span><i className={`${styles.dot} ${styles.NotSubmitted}`}></i>Not Submitted</span>
       </div>
 
       {/* Analytics section removed: Only calendar UI is shown on L1/L2 Calendar pages */}

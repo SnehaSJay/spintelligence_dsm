@@ -92,7 +92,6 @@ function SettingsDashboardBuilder() {
   const [selectedChartType, setSelectedChartType] = useState("value");
   const [isAddWidgetModalOpen, setIsAddWidgetModalOpen] = useState(false);
   const [isAddTicketModalOpen, setIsAddTicketModalOpen] = useState(false);
-  const [selectedTicketTimeline, setSelectedTicketTimeline] = useState("Daily");
   const [ticketOptions, setTicketOptions] = useState({
     total: true,
     open: true,
@@ -317,15 +316,12 @@ function SettingsDashboardBuilder() {
       enabled: true,
       order: widgets.length + 1,
       department: "Ticketing",
-      sub_department: selectedTicketTimeline,
-      screen_name: "Ticket Values",
+      sub_department: "",
+      screen_name: "Ticket Dashboard",
       field_name: ticketValuesLabel,
       chart_type: "value",
       builder_section: BUILDER_SECTIONS.ticketing,
-      ticket_options: {
-        ...ticketOptions,
-        timeline: selectedTicketTimeline,
-      },
+      ticket_options: { ...ticketOptions },
     };
 
     setWidgets((current) => {
@@ -465,19 +461,9 @@ function SettingsDashboardBuilder() {
         <div className={styles.builderModalOverlay}>
           <div className={styles.builderAddModal} role="dialog" aria-modal="true" aria-labelledby="add-ticket-title">
             <header className={styles.builderAddModalHeader}>
-              <h2 id="add-ticket-title">Ticket Values</h2>
+              <h2 id="add-ticket-title">Ticket Dashboard</h2>
               <p>Select the ticket metrics you want to display in the Dashboard Builder</p>
             </header>
-            <div className={styles.ticketTimelineGroup}>
-              <label>
-                <span>Timeline</span>
-                <select value={selectedTicketTimeline} onChange={(e) => setSelectedTicketTimeline(e.target.value)}>
-                  <option value="Daily">Daily</option>
-                  <option value="Weekly">Weekly</option>
-                  <option value="Monthly">Monthly</option>
-                </select>
-              </label>
-            </div>
             <div className={styles.ticketOptionsGrid}>
               <div className={styles.ticketCardOptionRow}>
                 <span className={styles.ticketCardOptionName}>Total Tickets</span>
