@@ -50,7 +50,6 @@ function AppShell({ Component, pageProps }) {
     router.pathname === "/rolespermission" ||
     router.pathname === "/threshold-values" ||
     router.pathname === "/submission-threshold" ||
-    router.pathname === "/submission-frequency" ||
     router.pathname === "/reports" ||
     router.pathname === "/settings" ||
     router.pathname.startsWith("/Createrole") ||
@@ -63,7 +62,6 @@ function AppShell({ Component, pageProps }) {
     { href: "/rolespermission", label: "Roles & Permissions" },
     { href: "/threshold-values", label: "Threshold Values" },
     { href: "/submission-threshold", label: "Submission Threshold" },
-    { href: "/submission-frequency", label: "Submission Frequency" },
     { href: "/reports", label: "Reports" },
     { href: "/ticket-calendar", label: "Ticket Calendar" },
     { href: "/settings", label: "Settings" },
