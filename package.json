@@ -20,7 +20,9 @@
     "react-redux": "^9.2.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "@tailwindcss/postcss": "^4",
+    "@types/node": "^25.7.0",
     "tailwindcss": "^4"
   }
 }
