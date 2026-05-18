@@ -15,6 +15,12 @@ const DASHBOARD_SELECTION_STORAGE_KEY = "spintelligenceDashboardSelection";
 const trendModes = ["1D", "1W", "1M", "1Y"];
 const modeMultipliers = { "1D": 0.72, "1W": 0.9, "1M": 1, "1Y": 1.18 };
 const DASHBOARD_FETCH_DEBOUNCE_MS = 250;
+const LINE_CHART_X_PADDING = 6;
+const timelineToPeriod = {
+  daily: "1D",
+  weekly: "1W",
+  monthly: "1M",
+};
 const normalizeRoleKey = (value) =>
   String(value || "")
     .trim()
@@ -81,6 +87,101 @@ const getTicketCardIcon = (label) => {
   if (label === "Closed") return IoCheckmarkDoneCircleOutline;
   if (label === "Pending") return MdOutlinePendingActions;
   return FiPieChart;
+};
+
+const padDatePart = (value) => String(value).padStart(2, "0");
+
+const formatAxisDate = (date) =>
+  `${padDatePart(date.getDate())}-${padDatePart(date.getMonth() + 1)}-${date.getFullYear()}`;
+
+const formatAxisShortDate = (date) =>
+  `${padDatePart(date.getDate())}-${padDatePart(date.getMonth() + 1)}`;
+
+const getDateKey = (date) =>
+  `${date.getFullYear()}-${padDatePart(date.getMonth() + 1)}-${padDatePart(date.getDate())}`;
+
+const parseAxisDateKey = (value) => {
+  const text = String(value || "").trim();
+  if (!text) return "";
+
+  const numericMatch = text.match(/^(\d{1,2})[-/](\d{1,2})(?:[-/](\d{2,4}))?$/);
+  if (numericMatch) {
+    const year = Number(numericMatch[3]?.length === 2 ? `20${numericMatch[3]}` : numericMatch[3] || new Date().getFullYear());
+    const date = new Date(year, Number(numericMatch[2]) - 1, Number(numericMatch[1]));
+    return Number.isNaN(date.getTime()) ? "" : getDateKey(date);
+  }
+
+  const parsed = new Date(text);
+  return Number.isNaN(parsed.getTime()) ? "" : getDateKey(parsed);
+};
+
+const getXAxisTicks = (mode) => {
+  const today = new Date();
+  const getX = (index, count) =>
+    count === 1 ? 50 : LINE_CHART_X_PADDING + (index / Math.max(1, count - 1)) * (100 - LINE_CHART_X_PADDING * 2);
+
+  if (mode === "1D") {
+    return [{ label: formatAxisDate(today), dateKey: getDateKey(today), x: 50 }];
+  }
+
+  if (mode === "1W") {
+    return Array.from({ length: 7 }, (_, index) => {
+      const date = new Date(today);
+      date.setDate(today.getDate() - 6 + index);
+      const weekday = date.toLocaleDateString("en-US", { weekday: "short" });
+      const isToday = getDateKey(date) === getDateKey(today);
+      return {
+        label: `${isToday ? "Today" : weekday} (${formatAxisShortDate(date)})`,
+        dateKey: getDateKey(date),
+        weekday: weekday.toLowerCase(),
+        x: getX(index, 7),
+      };
+    });
+  }
+
+  if (mode === "1M") {
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    return [
+      { label: formatAxisDate(monthStart), dateKey: getDateKey(monthStart), x: LINE_CHART_X_PADDING },
+      { label: formatAxisDate(monthEnd), dateKey: getDateKey(monthEnd), x: 100 - LINE_CHART_X_PADDING },
+    ];
+  }
+
+  if (mode === "1Y") {
+    const yearStart = new Date(today.getFullYear(), 0, 1);
+    const yearEnd = new Date(today.getFullYear(), 11, 31);
+    return [
+      { label: formatAxisDate(yearStart), dateKey: getDateKey(yearStart), x: LINE_CHART_X_PADDING },
+      { label: formatAxisDate(yearEnd), dateKey: getDateKey(yearEnd), x: 100 - LINE_CHART_X_PADDING },
+    ];
+  }
+
+  return [];
+};
+
+const getPointXAxisPosition = ({ point, index, total, ticks, mode }) => {
+  if (mode === "1D") return 50;
+
+  if (mode === "1W") {
+    const dateKey = parseAxisDateKey(point.label);
+    const dateMatchedTick = ticks.find((tick) => tick.dateKey && tick.dateKey === dateKey);
+    if (dateMatchedTick) return dateMatchedTick.x;
+
+    const weekdayText = String(point.label || "").slice(0, 3).toLowerCase();
+    const weekdayMatchedTick = ticks.find((tick) => tick.weekday === weekdayText);
+    if (weekdayMatchedTick) return weekdayMatchedTick.x;
+
+    const todayTick = ticks[ticks.length - 1];
+    if (total === 1) return todayTick?.x ?? 50;
+
+    const alignedTickIndex = Math.max(0, ticks.length - total) + index;
+    return ticks[Math.min(ticks.length - 1, alignedTickIndex)]?.x ?? todayTick?.x ?? 50;
+  }
+
+  return total === 1
+    ? 50
+    : LINE_CHART_X_PADDING + (index / Math.max(1, total - 1)) * (100 - LINE_CHART_X_PADDING * 2);
 };
 
 function HomeDashboard() {
@@ -583,16 +684,7 @@ function HomeDashboard() {
 }
 
 function PerformanceLineCard({ widget, data, activeMode, setActiveMode }) {
-  const baseTrendPoints = useMemo(() => {
-    const points = Array.isArray(data?.trend) && data.trend.length ? data.trend : [];
-    return points
-      .map((point) => {
-        const raw = Number(point?.value);
-        return { label: String(point?.label || ""), value: Number.isFinite(raw) ? raw : null };
-      })
-      .filter((point) => point.value !== null);
-  }, [data]);
-
+  const xAxisTicks = useMemo(() => getXAxisTicks(activeMode), [activeMode]);
   const currentLinePoints = useMemo(() => {
     const multiplier = modeMultipliers[activeMode] || 1;
     const fallbackValue = Number.isFinite(Number(data?.average_value)) ? Number(data.average_value) : 0;
@@ -634,19 +726,22 @@ function PerformanceLineCard({ widget, data, activeMode, setActiveMode }) {
   }, [activeMode, baseTrendPoints, data]);
 
   const lineChartPoints = useMemo(() => {
-    const xPadding = 6;
     const yPadding = 8;
-    const width = 100 - xPadding * 2;
     const height = 100 - yPadding * 2;
     const max = Math.max(...currentLinePoints.map((point) => point.value), 100);
 
     return currentLinePoints.map((point, index) => {
-      const denominator = Math.max(1, currentLinePoints.length - 1);
-      const x = xPadding + (index / denominator) * width;
+      const x = getPointXAxisPosition({
+        point,
+        index,
+        total: currentLinePoints.length,
+        ticks: xAxisTicks,
+        mode: activeMode,
+      });
       const y = yPadding + height - (point.value / max) * height;
       return { ...point, x, y };
-    });
-  }, [currentLinePoints]);
+    }).sort((left, right) => left.x - right.x);
+  }, [activeMode, currentLinePoints, xAxisTicks]);
 
   const linePolyline = useMemo(() => lineChartPoints.map((point) => `${point.x},${point.y}`).join(" "), [lineChartPoints]);
   const lineArea = `${lineChartPoints[0]?.x || 0},100 ${linePolyline} ${lineChartPoints[lineChartPoints.length - 1]?.x || 100},100`;
@@ -686,8 +781,8 @@ function PerformanceLineCard({ widget, data, activeMode, setActiveMode }) {
           ))}
         </div>
         <div className={styles.referenceXAxis}>
-          {currentLinePoints.map((point, idx) => (
-            <span key={`${point.label}-${idx}`}>{point.label || "-"}</span>
+          {xAxisTicks.map((tick, idx) => (
+            <span key={`${tick.label}-${idx}`} style={{ left: `${tick.x}%` }}>{tick.label || "-"}</span>
           ))}
         </div>
       </div>

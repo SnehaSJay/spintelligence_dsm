@@ -11,7 +11,6 @@ import {
   FiFileText,
   FiFilter,
   FiPause,
-  FiPlus,
   FiSend,
   FiTrash2,
   FiUsers,
@@ -980,6 +979,7 @@ function ReportsPage() {
   const timePickerRef = useRef(null);
   const recipientDropdownRef = useRef(null);
   const autoSendingScheduleKeysRef = useRef(new Set());
+  const sendingScheduleKeysRef = useRef(new Set());
   const schedulesLoadedRef = useRef(false);
 
   const departments = Object.keys(reportSources);
@@ -1596,6 +1596,8 @@ function ReportsPage() {
     schedule,
     { automatic = false, occurrenceKey = "" } = {}
   ) => {
+    const sendKey = automatic ? occurrenceKey || schedule.id : schedule.id;
+    if (!sendKey || sendingScheduleKeysRef.current.has(sendKey)) return;
     if (!automatic && sendingScheduleId) return;
 
     if (!schedule.active) {
@@ -1615,6 +1617,8 @@ function ReportsPage() {
       }
       return;
     }
+
+    sendingScheduleKeysRef.current.add(sendKey);
 
     if (!automatic) {
       setSendingScheduleId(schedule.id);
@@ -1662,6 +1666,7 @@ function ReportsPage() {
         message: mailError.message || "Schedule email could not be sent.",
       });
     } finally {
+      sendingScheduleKeysRef.current.delete(sendKey);
       if (!automatic) {
         setSendingScheduleId("");
       }
@@ -2071,9 +2076,6 @@ function ReportsPage() {
               <h2>Scheduled Reports</h2>
               <p>Automatically send reports via email on a schedule</p>
             </div>
-            <button type="button" onClick={() => openScheduleModal()}>
-              <FiPlus /> New Schedule
-            </button>
           </div>
 
           <div className={styles.scheduledList}>
