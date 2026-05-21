@@ -21,7 +21,6 @@ import apiConfig from "@/apis/apiConfig";
 import {
   deleteReportScheduleAPI,
   fetchReportSchedulesAPI,
-  persistReportSchedulesAPI,
   saveReportScheduleAPI,
   sendStoredReportScheduleAPI,
   toggleReportScheduleAPI,
@@ -29,6 +28,7 @@ import {
 import { fetchUsersAPI } from "@/apis/userApi";
 import { emitGlobalFailureModal } from "@/utils/globalFailureModal";
 import { emitGlobalSuccessModal } from "@/utils/globalSuccessModal";
+import { isFullAccessUser } from "@/utils/accessControl";
 import { departmentDirectory } from "@/views/departments/data";
 import { getThresholdFieldsForScreen } from "@/views/thresholds/fieldCatalog";
 import { getThresholdScreensForSubDepartment } from "@/views/thresholds/screenCatalog";
@@ -274,6 +274,12 @@ const normalizeLookupKey = (value) =>
 const matchesLookup = (left, right) =>
   normalizeLookupKey(left) && normalizeLookupKey(left) === normalizeLookupKey(right);
 
+const matchesLooseLookup = (left, right) => {
+  const leftKey = normalizeLookupKey(left);
+  const rightKey = normalizeLookupKey(right);
+  return Boolean(leftKey && rightKey && (leftKey === rightKey || leftKey.includes(rightKey) || rightKey.includes(leftKey)));
+};
+
 const findCatalogDepartment = (departmentName) =>
   departmentDirectory.find((item) => matchesLookup(item.name, departmentName) || matchesLookup(item.slug, departmentName));
 
@@ -366,11 +372,49 @@ const getInputFieldOptions = (data) =>
     ])
   );
 
+const getAccessEntryForReportSubDepartment = (accessByDepartment, subDepartmentName) => {
+  const accessList = Array.isArray(accessByDepartment) ? accessByDepartment : [];
+  return (
+    accessList.find((entry) => matchesLookup(entry?.department_name, subDepartmentName)) ||
+    accessList.find((entry) => matchesLooseLookup(entry?.department_name, subDepartmentName)) ||
+    null
+  );
+};
+
+const getAccessibleReportSources = (accessByDepartment, user) => {
+  if (isFullAccessUser(user)) return reportSources;
+  if (!Array.isArray(accessByDepartment)) return {};
+
+  return Object.entries(reportSources).reduce((departmentMap, [departmentName, subDepartmentMap]) => {
+    const nextSubDepartments = Object.entries(subDepartmentMap).reduce(
+      (subDepartmentResult, [subDepartmentName, typeMap]) => {
+        const accessEntry = getAccessEntryForReportSubDepartment(accessByDepartment, subDepartmentName);
+        const screens = Array.isArray(accessEntry?.screens) ? accessEntry.screens : [];
+
+        if (!screens.length) return subDepartmentResult;
+
+        const nextTypes = Object.entries(typeMap).reduce((typeResult, [typeName, source]) => {
+          const hasScreenAccess = screens.some((screen) => matchesLooseLookup(screen?.name, typeName));
+          return hasScreenAccess ? { ...typeResult, [typeName]: source } : typeResult;
+        }, {});
+
+        return Object.keys(nextTypes).length
+          ? { ...subDepartmentResult, [subDepartmentName]: nextTypes }
+          : subDepartmentResult;
+      },
+      {}
+    );
+
+    return Object.keys(nextSubDepartments).length
+      ? { ...departmentMap, [departmentName]: nextSubDepartments }
+      : departmentMap;
+  }, {});
+};
+
 const defaultSelectedFields = [];
-const reportSenderEmail = "otpdemoin@gmail.com";
-const sendToMeEmail = "sivadharshini2807@gmail.com";
 const reportPageSize = 500;
 const maxReportPages = 100;
+const reportPageRequestTimeoutMs = 20000;
 const hourOptions = Array.from({ length: 12 }, (_, index) => String(index + 1).padStart(2, "0"));
 const minuteOptions = Array.from({ length: 60 }, (_, index) => String(index).padStart(2, "0"));
 const weekdayOptions = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
@@ -451,51 +495,6 @@ const formatDate = (value) => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
   return date.toLocaleDateString("en-GB").replace(/\//g, "-");
-};
-
-const weekdayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-
-const getScheduleTimeMinutes = (schedule = {}) => {
-  const timeMatch = String(schedule.time || "").match(/^(\d{1,2})(?::(\d{1,2}))?\s*(AM|PM)?$/i);
-  const rawHour = Number(schedule.hour || timeMatch?.[1]);
-  const minute = Number(schedule.minute || timeMatch?.[2] || 0);
-  const meridiem = String(schedule.meridiem || timeMatch?.[3] || "").toUpperCase();
-
-  if (!Number.isFinite(rawHour) || !Number.isFinite(minute)) return null;
-
-  let hour = rawHour % 12;
-  if (meridiem === "PM") hour += 12;
-  if (!meridiem && rawHour === 12) hour = 12;
-
-  return hour * 60 + minute;
-};
-
-const getScheduleOccurrenceKey = (schedule = {}, now = new Date()) => {
-  if (!schedule.active) return "";
-
-  const scheduleMinutes = getScheduleTimeMinutes(schedule);
-  if (scheduleMinutes === null) return "";
-
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
-  if (currentMinutes < scheduleMinutes) return "";
-
-  const todayKey = toInputDate(now);
-  const timeKey = schedule.time || `${schedule.hour || ""}:${schedule.minute || ""} ${schedule.meridiem || ""}`.trim();
-  const baseKey = `${schedule.id || schedule.name}:${todayKey}:${timeKey}`;
-
-  if (schedule.frequency === "Single Time") {
-    return schedule.singleDate === todayKey ? `${baseKey}:once` : "";
-  }
-
-  if (schedule.frequency === "Daily") {
-    return `${baseKey}:daily`;
-  }
-
-  if (schedule.frequency === "Monthly") {
-    return now.getDate() === Number(schedule.monthDay || 1) ? `${baseKey}:monthly` : "";
-  }
-
-  return schedule.weekday === weekdayNames[now.getDay()] ? `${baseKey}:weekly` : "";
 };
 
 const titleCase = (value) =>
@@ -657,7 +656,12 @@ const fetchAllReportRows = async (reportFetcher) => {
   let totalPages = 0;
 
   for (let page = 1; page <= maxReportPages; page += 1) {
-    const response = await reportFetcher({ page, limit: reportPageSize });
+    const response = await Promise.race([
+      reportFetcher({ page, limit: reportPageSize }),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Report data request timed out. Please check the backend connection.")), reportPageRequestTimeoutMs)
+      ),
+    ]);
     const pageRows = normalizeRows(response);
     const pageSignature = `${pageRows.length}:${getRowSignature(pageRows)}`;
 
@@ -934,6 +938,7 @@ function CalendarPanel({ month, onMonthChange, onDateClick, selectedValue, title
 
 function ReportsPage() {
   const authUser = useSelector((state) => state.auth?.user);
+  const accessByDepartment = useSelector((state) => state.auth?.accessByDepartment);
   const [department, setDepartment] = useState("Quality Control");
   const [subDepartment, setSubDepartment] = useState("Spinning");
   const [reportType, setReportType] = useState("Process Parameter");
@@ -978,14 +983,16 @@ function ReportsPage() {
   const requestIdRef = useRef(0);
   const timePickerRef = useRef(null);
   const recipientDropdownRef = useRef(null);
-  const autoSendingScheduleKeysRef = useRef(new Set());
   const sendingScheduleKeysRef = useRef(new Set());
-  const schedulesLoadedRef = useRef(false);
 
-  const departments = Object.keys(reportSources);
-  const subDepartments = Object.keys(reportSources[department] || {});
-  const reportTypes = Object.keys(reportSources[department]?.[subDepartment] || {});
-  const selectedReportSource = reportSources[department]?.[subDepartment]?.[reportType];
+  const accessibleReportSources = useMemo(
+    () => getAccessibleReportSources(accessByDepartment, authUser),
+    [accessByDepartment, authUser]
+  );
+  const departments = Object.keys(accessibleReportSources);
+  const subDepartments = Object.keys(accessibleReportSources[department] || {});
+  const reportTypes = Object.keys(accessibleReportSources[department]?.[subDepartment] || {});
+  const selectedReportSource = accessibleReportSources[department]?.[subDepartment]?.[reportType];
 
   const getUserId = (user) =>
     String(user?.id || user?.user_id || user?.userId || user?.employeeId || user?.employee_id || user?.email || "");
@@ -1000,6 +1007,17 @@ function ReportsPage() {
 
   const getUserEmail = (user) =>
     String(user?.email || user?.mail || user?.user_email || user?.official_email || "").trim();
+
+  const sendToMeEmail = getUserEmail(authUser);
+  const reportOwnerKey = String(
+    authUser?.id ||
+      authUser?.user_id ||
+      authUser?.userId ||
+      authUser?.employee_id ||
+      authUser?.employeeId ||
+      sendToMeEmail ||
+      ""
+  );
 
   const selfRecipientName =
     authUser?.full_name ||
@@ -1017,15 +1035,35 @@ function ReportsPage() {
     ? selectedScheduleUsers.map(getUserName).join(", ")
     : "Select users";
 
+  const getScheduleRecordId = (schedule) =>
+    String(schedule?.id || schedule?._id || schedule?.scheduleId || schedule?.schedule_id || "");
+
+  useEffect(() => {
+    const nextDepartment = departments.includes(department) ? department : (departments[0] || "");
+    const nextSubDepartments = Object.keys(accessibleReportSources[nextDepartment] || {});
+    const nextSubDepartment = nextSubDepartments.includes(subDepartment)
+      ? subDepartment
+      : (nextSubDepartments[0] || "");
+    const nextReportTypes = Object.keys(accessibleReportSources[nextDepartment]?.[nextSubDepartment] || {});
+    const nextReportType = nextReportTypes.includes(reportType) ? reportType : (nextReportTypes[0] || "");
+
+    if (nextDepartment !== department) setDepartment(nextDepartment);
+    if (nextSubDepartment !== subDepartment) setSubDepartment(nextSubDepartment);
+    if (nextReportType !== reportType) setReportType(nextReportType);
+  }, [accessibleReportSources, department, departments, reportType, subDepartment]);
+
   const availableFields = useMemo(() => {
-    const fields = inferFields(rows);
-    const fallbackFields = uniqueOptions([
+    const configuredFields = uniqueOptions([
       ...builderOptions.input_fields,
       ...getThresholdFieldsForScreen(reportType),
     ])
       .map(toReportField)
       .filter(Boolean);
-    const sourceFields = fields.length ? fields : fallbackFields;
+    const sourceFields = [...configuredFields, ...inferFields(rows)].filter(
+      (field, index, list) =>
+        field?.key &&
+        index === list.findIndex((item) => normalizeLookupKey(item?.key || item?.label) === normalizeLookupKey(field.key || field.label))
+    );
     const selectedKeys = new Set(selectedFields.map((field) => field.key));
     return sourceFields.filter((field) => !selectedKeys.has(field.key));
   }, [builderOptions.input_fields, reportType, rows, selectedFields]);
@@ -1157,15 +1195,13 @@ function ReportsPage() {
 
     const loadSchedules = async () => {
       try {
-        const schedules = await fetchReportSchedulesAPI();
+        const schedules = await fetchReportSchedulesAPI(reportOwnerKey);
         if (isActive) {
           setScheduledReports(schedules);
-          schedulesLoadedRef.current = true;
         }
       } catch {
         if (isActive) {
           setScheduledReports([]);
-          schedulesLoadedRef.current = true;
         }
       }
     };
@@ -1175,12 +1211,7 @@ function ReportsPage() {
     return () => {
       isActive = false;
     };
-  }, []);
-
-  useEffect(() => {
-    if (!schedulesLoadedRef.current) return;
-    persistReportSchedulesAPI(scheduledReports);
-  }, [scheduledReports]);
+  }, [reportOwnerKey]);
 
   useEffect(() => {
     let isActive = true;
@@ -1203,8 +1234,6 @@ function ReportsPage() {
   }, []);
 
   useEffect(() => {
-    const fetcher = selectedReportSource?.fetcher;
-    const endpoint = selectedReportSource?.endpoint;
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
     setRows([]);
@@ -1214,7 +1243,7 @@ function ReportsPage() {
     if (!department || !subDepartment || !reportType) {
       setRows([]);
       setSelectedFields([]);
-      setError("No report list API is configured for this selection.");
+      setError("No report screens are assigned to this user.");
       return;
     }
 
@@ -1223,7 +1252,7 @@ function ReportsPage() {
     const loadReport = async () => {
       try {
         setLoading(true);
-        const reportSource = getReportSource(department, subDepartment, reportType);
+        const reportSource = selectedReportSource;
         const reportFetcher =
           reportSource?.fetcher ||
           (reportSource?.endpoint ? fetchEndpointRows.bind(null, reportSource.endpoint) : null);
@@ -1252,7 +1281,7 @@ function ReportsPage() {
     return () => {
       isActive = false;
     };
-  }, [department, reportType, subDepartment]);
+  }, [department, reportType, selectedReportSource, subDepartment]);
 
   useEffect(() => {
     if (!timePickerOpen) return undefined;
@@ -1378,7 +1407,7 @@ function ReportsPage() {
 
   const openScheduleModal = (schedule = null) => {
     if (schedule) {
-      setEditingScheduleId(schedule.id);
+      setEditingScheduleId(getScheduleRecordId(schedule));
       setScheduleReportName(schedule.name);
       setScheduleFrequency(schedule.frequency);
       setScheduleWeekday(schedule.weekday);
@@ -1431,13 +1460,14 @@ function ReportsPage() {
   };
 
   const loadScheduleRows = async (schedule) => {
-    const scheduleSource = getReportSource(schedule.department, schedule.subDepartment, schedule.reportType);
+    const scheduleSource =
+      accessibleReportSources[schedule.department]?.[schedule.subDepartment]?.[schedule.reportType];
     const reportFetcher =
       scheduleSource?.fetcher ||
       (scheduleSource?.endpoint ? fetchEndpointRows.bind(null, scheduleSource.endpoint) : null);
 
     if (!reportFetcher) {
-      return filterRowsByScheduleDate(schedule, filteredRows);
+      throw new Error("This user does not have access to the scheduled report screen.");
     }
 
     const scheduleRows = await fetchAllReportRows(reportFetcher);
@@ -1455,13 +1485,13 @@ function ReportsPage() {
           .filter((user) => user.email)
       : [];
     const recipientProfiles = [
-      ...(schedule.sendToMe ? [{ name: selfRecipientName, email: sendToMeEmail, kind: "self" }] : []),
+      ...(schedule.sendToMe && sendToMeEmail ? [{ name: selfRecipientName, email: sendToMeEmail, kind: "self" }] : []),
       ...otherRecipientProfiles,
     ].filter((recipient, index, list) => recipient.email && index === list.findIndex((item) => item.email === recipient.email));
     const otherRecipientEmails = otherRecipientProfiles.map((user) => user.email);
     const recipients = Array.from(
       new Set([
-        ...(schedule.sendToMe ? [sendToMeEmail] : []),
+        ...(schedule.sendToMe && sendToMeEmail ? [sendToMeEmail] : []),
         ...otherRecipientEmails,
       ])
     );
@@ -1514,7 +1544,6 @@ function ReportsPage() {
         active: typeof schedule.active === "boolean" ? schedule.active : true,
       },
       mailPayload: {
-        from: reportSenderEmail,
         to: recipients,
         subject: `Scheduled Report: ${schedule.name}`,
         department: report.department,
@@ -1558,11 +1587,13 @@ function ReportsPage() {
         email: getUserEmail(user),
       })),
       selectedFields,
+      ownerKey: reportOwnerKey,
+      ownerEmail: sendToMeEmail,
       active: editingScheduleId
-        ? scheduledReports.find((scheduleItem) => scheduleItem.id === editingScheduleId)?.active ?? true
+        ? scheduledReports.find((scheduleItem) => getScheduleRecordId(scheduleItem) === editingScheduleId)?.active ?? true
         : true,
       createdAt: editingScheduleId
-        ? scheduledReports.find((scheduleItem) => scheduleItem.id === editingScheduleId)?.createdAt || new Date().toISOString()
+        ? scheduledReports.find((scheduleItem) => getScheduleRecordId(scheduleItem) === editingScheduleId)?.createdAt || new Date().toISOString()
         : new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -1570,21 +1601,23 @@ function ReportsPage() {
     try {
       const scheduleRows = await loadScheduleRows(schedule);
       const scheduleMailRequest = buildScheduleMailPayload(schedule, scheduleRows);
-      const savedSchedule = await saveReportScheduleAPI({
+      const saveResult = await saveReportScheduleAPI({
         schedule,
         mailPayload: scheduleMailRequest.mailPayload,
         editing: Boolean(editingScheduleId),
+        ownerKey: reportOwnerKey,
       });
+      const savedSchedule = saveResult?.schedule || saveResult?.data?.schedule || saveResult?.data || saveResult || schedule;
 
       setScheduledReports((currentSchedules) =>
         editingScheduleId
           ? currentSchedules.map((scheduleItem) =>
-              scheduleItem.id === editingScheduleId ? savedSchedule || schedule : scheduleItem
+              getScheduleRecordId(scheduleItem) === editingScheduleId ? savedSchedule || schedule : scheduleItem
             )
           : [savedSchedule || schedule, ...currentSchedules]
       );
       closeScheduleModal();
-      emitGlobalSuccessModal({ message: "Schedule saved", status: 200 });
+      emitGlobalSuccessModal({ message: saveResult?.message || "Schedule saved", status: 200 });
     } catch (saveError) {
       emitGlobalFailureModal({
         message: saveError?.response?.data?.message || saveError.message || "Schedule could not be saved.",
@@ -1592,73 +1625,57 @@ function ReportsPage() {
     }
   };
 
-  const handleSendScheduledReport = async (
-    schedule,
-    { automatic = false, occurrenceKey = "" } = {}
-  ) => {
-    const sendKey = automatic ? occurrenceKey || schedule.id : schedule.id;
+  const handleSendScheduledReport = async (schedule) => {
+    const sendKey = getScheduleRecordId(schedule);
     if (!sendKey || sendingScheduleKeysRef.current.has(sendKey)) return;
-    if (!automatic && sendingScheduleId) return;
+    if (sendingScheduleId) return;
 
     if (!schedule.active) {
-      if (!automatic) {
-        emitGlobalFailureModal({ message: "Activate the schedule before sending the report." });
-      }
+      emitGlobalFailureModal({ message: "Activate the schedule before sending the report." });
       return;
     }
 
     const shouldSendMail =
-      schedule.sendToMe ||
+      (schedule.sendToMe && sendToMeEmail) ||
       (schedule.sendToOthers && schedule.recipientUsers?.some((user) => user.email));
 
     if (!shouldSendMail) {
-      if (!automatic) {
-        emitGlobalFailureModal({ message: "Select at least one report recipient before sending." });
-      }
+      emitGlobalFailureModal({ message: "Select at least one report recipient with an email address before sending." });
       return;
     }
 
     sendingScheduleKeysRef.current.add(sendKey);
-
-    if (!automatic) {
-      setSendingScheduleId(schedule.id);
-    }
+    setSendingScheduleId(sendKey);
 
     try {
       const scheduleRows = await loadScheduleRows(schedule);
+      const scheduleMailRequest = buildScheduleMailPayload(schedule, scheduleRows);
       const sendResult = await sendStoredReportScheduleAPI(
-        schedule.id,
-        buildScheduleMailPayload(schedule, scheduleRows)
+        sendKey,
+        scheduleMailRequest
       );
 
       if (sendResult?.deleted || schedule.frequency === "Single Time") {
         setScheduledReports((currentSchedules) =>
-          currentSchedules.filter((scheduleItem) => scheduleItem.id !== schedule.id)
+          currentSchedules.filter((scheduleItem) => getScheduleRecordId(scheduleItem) !== sendKey)
         );
       } else if (sendResult?.schedule) {
         setScheduledReports((currentSchedules) =>
           currentSchedules.map((scheduleItem) =>
-            scheduleItem.id === schedule.id ? sendResult.schedule : scheduleItem
-          )
-        );
-      } else if (automatic && occurrenceKey) {
-        setScheduledReports((currentSchedules) =>
-          currentSchedules.map((scheduleItem) =>
-            scheduleItem.id === schedule.id
-              ? {
-                  ...scheduleItem,
-                  lastAutoSentKey: occurrenceKey,
-                  lastSentAt: new Date().toISOString(),
-                }
-              : scheduleItem
+            getScheduleRecordId(scheduleItem) === sendKey ? sendResult.schedule : scheduleItem
           )
         );
       }
 
+      const acceptedCount = Array.isArray(sendResult?.accepted)
+        ? sendResult.accepted.length
+        : Array.isArray(sendResult?.to)
+          ? sendResult.to.length
+          : scheduleMailRequest.mailPayload.to.length;
       emitGlobalSuccessModal({
-        message: automatic
-          ? `Automatic report email sent to ${sendToMeEmail}`
-          : `Scheduled report email sent to ${sendToMeEmail}`,
+        message:
+          sendResult?.message ||
+          `Mail sent successfully to ${acceptedCount} recipient${acceptedCount === 1 ? "" : "s"}.`,
         status: 200,
       });
     } catch (mailError) {
@@ -1667,48 +1684,23 @@ function ReportsPage() {
       });
     } finally {
       sendingScheduleKeysRef.current.delete(sendKey);
-      if (!automatic) {
-        setSendingScheduleId("");
-      }
+      setSendingScheduleId("");
     }
   };
 
-  useEffect(() => {
-    if (typeof window === "undefined") return undefined;
-
-    const sendDueSchedules = () => {
-      const now = new Date();
-
-      scheduledReports.forEach((schedule) => {
-        const occurrenceKey = getScheduleOccurrenceKey(schedule, now);
-        if (!occurrenceKey) return;
-        if (schedule.lastAutoSentKey === occurrenceKey) return;
-        if (autoSendingScheduleKeysRef.current.has(occurrenceKey)) return;
-
-        autoSendingScheduleKeysRef.current.add(occurrenceKey);
-        Promise.resolve(handleSendScheduledReport(schedule, { automatic: true, occurrenceKey })).finally(() => {
-          autoSendingScheduleKeysRef.current.delete(occurrenceKey);
-        });
-      });
-    };
-
-    sendDueSchedules();
-    const intervalId = window.setInterval(sendDueSchedules, 30000);
-
-    return () => window.clearInterval(intervalId);
-  }, [scheduledReports]);
-
   const toggleScheduleStatus = async (scheduleId) => {
-    const currentSchedule = scheduledReports.find((schedule) => schedule.id === scheduleId);
+    const currentSchedule = scheduledReports.find((schedule) => getScheduleRecordId(schedule) === scheduleId);
     if (!currentSchedule) return;
 
     try {
-      const updatedSchedule = await toggleReportScheduleAPI(scheduleId, !currentSchedule.active);
+      const toggleResult = await toggleReportScheduleAPI(scheduleId, !currentSchedule.active);
+      const updatedSchedule = toggleResult?.schedule || toggleResult?.data?.schedule || toggleResult?.data || toggleResult;
       setScheduledReports((currentSchedules) =>
         currentSchedules.map((schedule) =>
-          schedule.id === scheduleId ? updatedSchedule || { ...schedule, active: !schedule.active } : schedule
+          getScheduleRecordId(schedule) === scheduleId ? updatedSchedule || { ...schedule, active: !schedule.active } : schedule
         )
       );
+      emitGlobalSuccessModal({ message: toggleResult?.message || "Schedule status updated", status: 200 });
     } catch (toggleError) {
       emitGlobalFailureModal({
         message: toggleError?.response?.data?.message || toggleError.message || "Schedule status could not be updated.",
@@ -1720,7 +1712,7 @@ function ReportsPage() {
     try {
       await deleteReportScheduleAPI(scheduleId);
       setScheduledReports((currentSchedules) =>
-        currentSchedules.filter((schedule) => schedule.id !== scheduleId)
+        currentSchedules.filter((schedule) => getScheduleRecordId(schedule) !== scheduleId)
       );
     } catch (deleteError) {
       emitGlobalFailureModal({
@@ -1858,9 +1850,9 @@ function ReportsPage() {
                   value={department}
                   onChange={(event) => {
                     const nextDepartment = event.target.value;
-                    const nextSubDepartment = Object.keys(reportSources[nextDepartment] || {})[0] || "";
+                    const nextSubDepartment = Object.keys(accessibleReportSources[nextDepartment] || {})[0] || "";
                     const nextReportType =
-                      Object.keys(reportSources[nextDepartment]?.[nextSubDepartment] || {})[0] || "";
+                      Object.keys(accessibleReportSources[nextDepartment]?.[nextSubDepartment] || {})[0] || "";
 
                     setDepartment(nextDepartment);
                     setSubDepartment(nextSubDepartment);
@@ -1880,7 +1872,7 @@ function ReportsPage() {
                   onChange={(event) => {
                     const nextSubDepartment = event.target.value;
                     setSubDepartment(nextSubDepartment);
-                    setReportType(Object.keys(reportSources[department]?.[nextSubDepartment] || {})[0] || "");
+                    setReportType(Object.keys(accessibleReportSources[department]?.[nextSubDepartment] || {})[0] || "");
                   }}
                 >
                   {subDepartments.map((option) => (
@@ -2080,8 +2072,11 @@ function ReportsPage() {
 
           <div className={styles.scheduledList}>
             {scheduledReports.length ? (
-              scheduledReports.map((schedule) => (
-                <div className={styles.scheduledItem} key={schedule.id}>
+              scheduledReports.map((schedule) => {
+                const scheduleId = getScheduleRecordId(schedule);
+
+                return (
+                <div className={styles.scheduledItem} key={scheduleId}>
                   <div>
                     <div className={styles.scheduledTitleRow}>
                       <h3>{schedule.name}</h3>
@@ -2099,7 +2094,7 @@ function ReportsPage() {
                     <button
                       type="button"
                       aria-label="Send report"
-                      disabled={!schedule.active || sendingScheduleId === schedule.id}
+                      disabled={!schedule.active || sendingScheduleId === scheduleId}
                       onClick={() => handleSendScheduledReport(schedule)}
                     >
                       <FiSend />
@@ -2107,7 +2102,7 @@ function ReportsPage() {
                     <button
                       type="button"
                       aria-label={schedule.active ? "Pause report" : "Activate report"}
-                      onClick={() => toggleScheduleStatus(schedule.id)}
+                      onClick={() => toggleScheduleStatus(scheduleId)}
                     >
                       <FiPause />
                     </button>
@@ -2118,13 +2113,14 @@ function ReportsPage() {
                       type="button"
                       className={styles.deleteScheduledButton}
                       aria-label="Delete report"
-                      onClick={() => deleteSchedule(schedule.id)}
+                      onClick={() => deleteSchedule(scheduleId)}
                     >
                       <FiTrash2 />
                     </button>
                   </div>
                 </div>
-              ))
+                );
+              })
             ) : (
               <div className={styles.scheduledEmpty}>
                 <h3>No scheduled reports yet</h3>

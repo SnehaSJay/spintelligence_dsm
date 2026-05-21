@@ -95,3 +95,6 @@ export const hasAnyQualityControlAccess = (accessByDepartment, user) =>
   isAnonymousDirectAccess(accessByDepartment, user) ||
   isFullAccessUser(user) ||
   Array.from(buildAccessibleDepartmentSet(accessByDepartment)).length > 0;
+
+export const hasReportAccess = (accessByDepartment, user) =>
+  Boolean(user);

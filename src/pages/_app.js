@@ -10,7 +10,7 @@ import SuccessModal from "@/components/SuccessModal";
 import { subscribeToGlobalFailureModal } from "@/utils/globalFailureModal";
 import { subscribeToGlobalSuccessModal } from "@/utils/globalSuccessModal";
 import { hydrateAuthFromStorage } from "@/store/slices/authSlice";
-import { hasRouteAccess, isFullAccessUser, routeDepartmentMap } from "@/utils/accessControl";
+import { hasReportAccess, hasRouteAccess, isFullAccessUser, routeDepartmentMap } from "@/utils/accessControl";
 import { store } from '../store';
 import "../styles/globals.css";
 
@@ -50,10 +50,10 @@ function AppShell({ Component, pageProps }) {
     router.pathname === "/rolespermission" ||
     router.pathname === "/threshold-values" ||
     router.pathname === "/submission-threshold" ||
-    router.pathname === "/reports" ||
     router.pathname === "/settings" ||
     router.pathname.startsWith("/Createrole") ||
     router.pathname.startsWith("/editrole");
+  const isReportsFlow = router.pathname === "/reports";
   const canAccessManagementFlow = isFullAccessUser(user);
   const managementNavLinks = [
     { href: "/", label: "Home" },
@@ -66,7 +66,7 @@ function AppShell({ Component, pageProps }) {
     { href: "/ticket-calendar", label: "Ticket Calendar" },
     { href: "/settings", label: "Settings" },
   ];
-  const headerNavLinks = canAccessManagementFlow || isAdminFlow
+  const headerNavLinks = canAccessManagementFlow || isAdminFlow || isReportsFlow
     ? managementNavLinks
     : isHomeFlow || isDepartmentFlow || isTicketingFlow
     ? [
@@ -117,15 +117,20 @@ function AppShell({ Component, pageProps }) {
       return;
     }
 
+    if (token && isReportsFlow && !hasReportAccess(accessByDepartment, user)) {
+      router.replace("/");
+      return;
+    }
+
     if (token && isAdminFlow && !canAccessManagementFlow) {
       router.replace("/");
       return;
     }
 
-    if (token && !isAdminFlow && !hasRouteAccess(router.pathname, accessByDepartment, user)) {
+    if (token && !isAdminFlow && !isReportsFlow && !hasRouteAccess(router.pathname, accessByDepartment, user)) {
       router.replace("/");
     }
-  }, [accessByDepartment, canAccessManagementFlow, isAdminFlow, isHomeFlow, isHydrated, router, token, user]);
+  }, [accessByDepartment, canAccessManagementFlow, isAdminFlow, isHomeFlow, isHydrated, isReportsFlow, router, token, user]);
 
   return (
     <>

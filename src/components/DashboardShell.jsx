@@ -15,7 +15,7 @@ import {
     FiUsers,
 } from "react-icons/fi";
 
-import { isFullAccessUser } from "@/utils/accessControl";
+import { hasReportAccess, isFullAccessUser } from "@/utils/accessControl";
 import styles from "@/styles/departmentDirectory.module.css";
 
 const dashboardLinks = [
@@ -33,6 +33,7 @@ function DashboardShell({ children }) {
     const router = useRouter();
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const user = useSelector((state) => state.auth?.user);
+    const accessByDepartment = useSelector((state) => state.auth?.accessByDepartment);
     const fullName = user?.full_name || user?.name || "User";
     const canAccessManagement = isFullAccessUser(user);
     const initials =
@@ -43,7 +44,13 @@ function DashboardShell({ children }) {
             .map((part) => part[0]?.toUpperCase())
             .join("") || "HB";
 
-    const visibleLinks = dashboardLinks.filter((link) => !link.adminOnly || canAccessManagement);
+    const visibleLinks = dashboardLinks.filter((link) => {
+        if (link.href === "/reports") {
+            return hasReportAccess(accessByDepartment, user);
+        }
+
+        return !link.adminOnly || canAccessManagement;
+    });
 
     return (
         <div className={`${styles.dashboardPage} ${isSidebarOpen ? styles.sidebarExpanded : styles.sidebarCollapsed}`}>
