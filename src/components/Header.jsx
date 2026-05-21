@@ -329,6 +329,17 @@ const Header = ({ navLinks = defaultNavLinks }) => {
                 >
                     <FiChevronLeft />
                 </button>
+                {backTarget ? (
+                    <button
+                        type="button"
+                        className={styles["sidebar-back"]}
+                        aria-label="Back"
+                        onClick={() => router.push(backTarget)}
+                    >
+                        <FiChevronLeft />
+                        <span>Back</span>
+                    </button>
+                ) : null}
 
                 <nav className={styles["side-nav"]} aria-label="Primary navigation">
                     {visibleSidebarLinks.map((link) => {
