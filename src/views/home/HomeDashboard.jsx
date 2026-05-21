@@ -104,7 +104,7 @@ const parseAxisDateKey = (value) => {
   const text = String(value || "").trim();
   if (!text) return "";
 
-  const numericMatch = text.match(/^(\d{1,2})[-/](\d{1,2})(?:[-/](\d{2,4}))?$/);
+  const numericMatch = text.match(/(\d{1,2})[-/](\d{1,2})(?:[-/](\d{2,4}))?/);
   if (numericMatch) {
     const year = Number(numericMatch[3]?.length === 2 ? `20${numericMatch[3]}` : numericMatch[3] || new Date().getFullYear());
     const date = new Date(year, Number(numericMatch[2]) - 1, Number(numericMatch[1]));
@@ -158,6 +158,27 @@ const getXAxisTicks = (mode) => {
   }
 
   return [];
+};
+
+const monthNames = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+
+const getTrendPointValue = (point) => {
+  const value = Number(point?.value ?? point?.average ?? point?.avg ?? point?.count ?? 0);
+  return Number.isFinite(value) ? Math.max(0, value) : 0;
+};
+
+const getTrendPointDateKey = (point) =>
+  parseAxisDateKey(point?.date || point?.date_key || point?.day || point?.label);
+
+const getTrendPointMonthIndex = (point) => {
+  const numericMonth = Number(point?.month);
+  if (Number.isInteger(numericMonth) && numericMonth >= 1 && numericMonth <= 12) return numericMonth - 1;
+
+  const dateKey = getTrendPointDateKey(point);
+  if (dateKey) return Number(dateKey.slice(5, 7)) - 1;
+
+  const label = String(point?.label || "").trim().toLowerCase();
+  return monthNames.findIndex((month) => label.startsWith(month));
 };
 
 const getPointXAxisPosition = ({ point, index, total, ticks, mode }) => {
@@ -685,45 +706,67 @@ function HomeDashboard() {
 
 function PerformanceLineCard({ widget, data, activeMode, setActiveMode }) {
   const xAxisTicks = useMemo(() => getXAxisTicks(activeMode), [activeMode]);
+  const baseTrendPoints = useMemo(
+    () => (Array.isArray(data?.trend) && data.trend.length ? data.trend : []),
+    [data]
+  );
   const currentLinePoints = useMemo(() => {
-    const multiplier = modeMultipliers[activeMode] || 1;
-    const fallbackValue = Number.isFinite(Number(data?.average_value)) ? Number(data.average_value) : 0;
-
     if (activeMode === "1M") {
       const today = new Date();
-      const source = baseTrendPoints.slice(-30);
-      return Array.from({ length: 30 }, (_, index) => {
-        const date = new Date(today);
-        date.setDate(today.getDate() - (29 - index));
+      const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+      const valuesByDate = new Map(
+        baseTrendPoints
+          .map((point) => [getTrendPointDateKey(point), getTrendPointValue(point)])
+          .filter(([dateKey]) => dateKey)
+      );
+      const source = baseTrendPoints.slice(-daysInMonth);
+
+      return Array.from({ length: daysInMonth }, (_, index) => {
+        const date = new Date(today.getFullYear(), today.getMonth(), index + 1);
+        const dateKey = getDateKey(date);
         const sourcePoint = source[index];
-        const raw = Number.isFinite(Number(sourcePoint?.value)) ? Number(sourcePoint.value) : fallbackValue;
+        const value = valuesByDate.has(dateKey)
+          ? valuesByDate.get(dateKey)
+          : sourcePoint
+            ? getTrendPointValue(sourcePoint)
+            : 0;
         return {
           label: formatDayLabel(date),
-          value: Math.max(0, raw * multiplier),
+          value,
         };
       });
     }
 
     if (activeMode === "1Y") {
       const now = new Date();
+      const valuesByMonth = new Map(
+        baseTrendPoints
+          .map((point) => [getTrendPointMonthIndex(point), getTrendPointValue(point)])
+          .filter(([monthIndex]) => monthIndex >= 0)
+      );
       const source = baseTrendPoints.slice(-12);
+
       return Array.from({ length: 12 }, (_, index) => {
-        const date = new Date(now.getFullYear(), now.getMonth() - (11 - index), 1);
+        const date = new Date(now.getFullYear(), index, 1);
         const sourcePoint = source[index];
-        const raw = Number.isFinite(Number(sourcePoint?.value)) ? Number(sourcePoint.value) : fallbackValue;
+        const value = valuesByMonth.has(index)
+          ? valuesByMonth.get(index)
+          : sourcePoint
+            ? getTrendPointValue(sourcePoint)
+            : 0;
         return {
           label: formatMonthLabel(date),
-          value: Math.max(0, raw * multiplier),
+          value,
         };
       });
     }
 
-    const points = baseTrendPoints.length ? baseTrendPoints : [{ label: "No Data", value: fallbackValue }];
+    const points = baseTrendPoints.length ? baseTrendPoints : [{ label: "No Data", value: 0 }];
     return points.map((point) => ({
       label: point.label,
-      value: Math.max(0, Number(point.value || 0) * multiplier),
+      value: getTrendPointValue(point),
     }));
-  }, [activeMode, baseTrendPoints, data]);
+  }, [activeMode, baseTrendPoints]);
 
   const lineChartPoints = useMemo(() => {
     const yPadding = 8;

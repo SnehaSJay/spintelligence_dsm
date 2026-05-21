@@ -21,7 +21,7 @@ import {
 } from "react-icons/fi";
 import { fetchUsersAPI } from "@/apis/userApi";
 import { logout, setAuthUser } from "../store/slices/authSlice";
-import { hasAnyQualityControlAccess, hasSubDepartmentAccess, isFullAccessUser, isSupervisorNavUser, routeDepartmentMap } from "@/utils/accessControl";
+import { hasAnyQualityControlAccess, hasReportAccess, hasSubDepartmentAccess, isFullAccessUser, isSupervisorNavUser, routeDepartmentMap } from "@/utils/accessControl";
 import styles from "../styles/header.module.css";
 
 const defaultNavLinks = [];
@@ -34,7 +34,7 @@ const sidebarLinks = [
     { href: "/rolespermission", label: "Roles & Permissions", icon: FiShield, admin: true },
     { href: "/operator", label: "Ticketing System", icon: FiHeadphones, section: "tickets" },
     { href: "/ticket-calendar", label: "Insights & Analytics", icon: FiCalendar, section: "calendars" },
-    { href: "/reports", label: "Reports", icon: FiFileText, admin: true },
+    { href: "/reports", label: "Reports", icon: FiFileText, section: "reports" },
     { href: "/threshold-values", label: "Threshold", icon: FiSliders, admin: true, section: "thresholds" },
     { href: "/settings", label: "Settings", icon: FiSettings, admin: true, section: "settings" },
 ];
@@ -139,6 +139,10 @@ const Header = ({ navLinks = defaultNavLinks }) => {
 
         if (link.section === "thresholds") {
             return hasFullAccess || visibleHrefSet.has("/threshold-values");
+        }
+
+        if (link.section === "reports") {
+            return hasReportAccess(accessByDepartment, user) || visibleHrefSet.has("/reports");
         }
 
         return hasDashboardNav || hasDepartmentNav || visibleHrefSet.has(link.href) || hasFullAccess;

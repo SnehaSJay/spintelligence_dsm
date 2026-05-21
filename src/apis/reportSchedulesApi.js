@@ -1,69 +1,103 @@
-import { sendReportScheduleMail } from "./reportMailApi";
+import apiConfig from "./apiConfig";
 
-const reportSchedulesStorageKey = "spintelligence.reportSchedules";
+const scheduleRequestTimeoutMs = 20000;
 
-const canUseStorage = () => typeof window !== "undefined" && Boolean(window.localStorage);
+const getScheduleId = (schedule) =>
+  String(schedule?.id || schedule?._id || schedule?.scheduleId || schedule?.schedule_id || "");
 
-const readLocalSchedules = () => {
-  if (!canUseStorage()) return [];
+const normalizeScheduleList = (response) => {
+  const value = response?.data ?? response;
+  const schedules =
+    value?.schedules ||
+    value?.data?.schedules ||
+    value?.data ||
+    value?.items ||
+    value?.rows ||
+    value;
 
-  try {
-    const value = window.localStorage.getItem(reportSchedulesStorageKey);
-    const schedules = JSON.parse(value || "[]");
-    return Array.isArray(schedules) ? schedules : [];
-  } catch {
-    return [];
-  }
+  return Array.isArray(schedules) ? schedules : [];
 };
 
-const writeLocalSchedules = (schedules) => {
-  if (!canUseStorage()) return;
-  window.localStorage.setItem(reportSchedulesStorageKey, JSON.stringify(schedules));
+export const fetchReportSchedulesAPI = async (ownerKey = "") => {
+  const response = await apiConfig.get(
+    "/reports/schedules",
+    ownerKey ? { ownerKey } : {},
+    {
+      skipGlobalErrorModal: true,
+      timeout: scheduleRequestTimeoutMs,
+    }
+  );
+
+  return normalizeScheduleList(response);
 };
 
-export const persistReportSchedulesAPI = async (schedules) => {
-  writeLocalSchedules(Array.isArray(schedules) ? schedules : []);
-};
-
-export const fetchReportSchedulesAPI = async () => readLocalSchedules();
-
-export const saveReportScheduleAPI = async ({ schedule, editing = false }) => {
-  const schedules = readLocalSchedules();
-  const savedSchedule = {
-    ...schedule,
-    updatedAt: new Date().toISOString(),
+export const saveReportScheduleAPI = async ({ schedule, mailPayload, editing = false, ownerKey = "" }) => {
+  const payload = {
+    schedule: {
+      ...schedule,
+      ownerKey: schedule?.ownerKey || ownerKey || undefined,
+    },
+    mailPayload,
   };
-  const nextSchedules = editing
-    ? schedules.map((scheduleItem) => (scheduleItem.id === savedSchedule.id ? savedSchedule : scheduleItem))
-    : [savedSchedule, ...schedules.filter((scheduleItem) => scheduleItem.id !== savedSchedule.id)];
+  const scheduleId = getScheduleId(schedule);
+  const response =
+    editing && scheduleId
+      ? await apiConfig.put(`/reports/schedules/${scheduleId}`, payload, {
+          skipGlobalErrorModal: true,
+          skipGlobalSuccessModal: true,
+          timeout: scheduleRequestTimeoutMs,
+        })
+      : await apiConfig.post("/reports/schedules", payload, {
+          skipGlobalErrorModal: true,
+          skipGlobalSuccessModal: true,
+          timeout: scheduleRequestTimeoutMs,
+        });
 
-  writeLocalSchedules(nextSchedules);
-  return savedSchedule;
+  return response.data || { schedule };
 };
 
 export const toggleReportScheduleAPI = async (scheduleId, active) => {
-  const schedules = readLocalSchedules();
-  const updatedSchedule = schedules.find((schedule) => schedule.id === scheduleId);
-  const nextSchedule = updatedSchedule
-    ? { ...updatedSchedule, active, updatedAt: new Date().toISOString() }
-    : null;
-
-  writeLocalSchedules(
-    schedules.map((schedule) => (schedule.id === scheduleId ? nextSchedule : schedule))
+  const response = await apiConfig.patch(
+    `/reports/schedules/${scheduleId}/status`,
+    { active },
+    {
+      skipGlobalErrorModal: true,
+      skipGlobalSuccessModal: true,
+      timeout: scheduleRequestTimeoutMs,
+    }
   );
 
-  return nextSchedule;
+  return response.data;
 };
 
 export const deleteReportScheduleAPI = async (scheduleId) => {
-  writeLocalSchedules(readLocalSchedules().filter((schedule) => schedule.id !== scheduleId));
-  return { deleted: true };
+  const response = await apiConfig.delete(
+    `/reports/schedules/${scheduleId}`,
+    {},
+    {
+      skipGlobalErrorModal: true,
+      skipGlobalSuccessModal: true,
+      timeout: scheduleRequestTimeoutMs,
+    }
+  );
+
+  return response.data || { deleted: true };
 };
 
 export const sendStoredReportScheduleAPI = async (scheduleId, mailPayload) => {
+  if (!scheduleId) {
+    throw new Error("scheduleId is required to send a scheduled report.");
+  }
+
   if (!mailPayload) {
     throw new Error("mailPayload is required to send a scheduled report.");
   }
 
-  return sendReportScheduleMail(mailPayload);
+  const response = await apiConfig.post(`/reports/schedules/${scheduleId}/send`, mailPayload, {
+    skipGlobalErrorModal: true,
+    skipGlobalSuccessModal: true,
+    timeout: scheduleRequestTimeoutMs,
+  });
+
+  return response.data;
 };
