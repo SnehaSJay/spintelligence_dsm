@@ -74,6 +74,11 @@ const formatDayLabel = (date) => {
 const formatMonthLabel = (date) =>
   date.toLocaleString("en-US", { month: "short" });
 const getTicketCardLabel = (value) => {
+  const toSentenceCase = (text) => {
+    const normalized = String(text || "").trim();
+    if (!normalized) return "";
+    return normalized.charAt(0).toUpperCase() + normalized.slice(1).toLowerCase();
+  };
   const key = String(value || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
   if (key === "totaltickets") return "Total Tickets";
   if (key === "open" || key === "opentickets") return "Open";
