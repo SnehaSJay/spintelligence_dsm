@@ -17,6 +17,7 @@ import {
     FiSettings,
     FiShield,
     FiSliders,
+    FiSun,
     FiUsers,
 } from "react-icons/fi";
 import { fetchUsersAPI } from "@/apis/userApi";
@@ -30,6 +31,8 @@ import {
     isSupervisorNavUser,
     routeDepartmentMap,
 } from "@/utils/accessControl";
+import { hasAnyQualityControlAccess, hasReportAccess, hasSubDepartmentAccess, isFullAccessUser, isSupervisorNavUser, routeDepartmentMap } from "@/utils/accessControl";
+import { useThemeMode } from "@/utils/useThemeMode";
 import styles from "../styles/header.module.css";
 
 const defaultNavLinks = [];
@@ -102,15 +105,7 @@ const Header = ({ navLinks = defaultNavLinks }) => {
     const [openAnalyticsHub, setOpenAnalyticsHub] = useState(false);
     const [openCalendar, setOpenCalendar] = useState(true);
     const [openAnalysis, setOpenAnalysis] = useState(false);
-    const currentPath = router.asPath?.split("?")[0] || router.pathname;
-    const backTargetByPrefix = [
-        { prefix: "/Createrole", target: "/rolespermission" },
-        { prefix: "/editrole", target: "/rolespermission" },
-        { prefix: "/umadduser", target: "/usermanagement" },
-        { prefix: "/umedit", target: "/usermanagement" },
-        { prefix: "/umchangepassword", target: "/usermanagement" },
-    ];
-    const backTarget = backTargetByPrefix.find((item) => currentPath.startsWith(item.prefix))?.target || null;
+    const { isDarkMode, toggleTheme } = useThemeMode();
     const user = useSelector((state) => state.auth?.user);
     const accessByDepartment = useSelector((state) => state.auth?.accessByDepartment);
     const hasFullAccess = isFullAccessUser(user);
@@ -158,11 +153,11 @@ const Header = ({ navLinks = defaultNavLinks }) => {
         }
 
         if (link.section === "settings") {
-            return hasFullAccess || visibleHrefSet.has("/settings");
+            return hasFullAccess;
         }
 
         if (link.section === "thresholds") {
-            return hasFullAccess || visibleHrefSet.has("/threshold-values");
+            return hasFullAccess;
         }
 
         if (link.section === "reports") {
@@ -177,13 +172,13 @@ const Header = ({ navLinks = defaultNavLinks }) => {
     const visibleTicketingLinks = hasSupervisorNavAccess
         ? ticketingLinks.filter((link) => link.href === "/supervisordashboard")
         : ticketingLinks;
+    const currentPath = router.asPath?.split("?")[0] || router.pathname;
+    const backTarget = null;
 
     const isActiveLink = (href) => {
         if (!href) {
             return false;
         }
-
-        const currentPath = router.asPath?.split("?")[0] || router.pathname;
 
         if (href === "/departments") {
             return currentPath === "/departments";
@@ -223,13 +218,7 @@ const Header = ({ navLinks = defaultNavLinks }) => {
     };
 
     const handleDepartmentsClick = () => {
-        setIsDepartmentMenuOpen((isOpen) => {
-            const nextIsOpen = !isOpen;
-            if (nextIsOpen && router.asPath?.split("?")[0] !== "/departments/quality-control") {
-                router.push("/departments/quality-control");
-            }
-            return nextIsOpen;
-        });
+        setIsDepartmentMenuOpen((isOpen) => !isOpen);
     };
 
     const handleSettingsClick = () => {
@@ -571,8 +560,15 @@ const Header = ({ navLinks = defaultNavLinks }) => {
                     <span className={styles["notification-badge"]}>4</span>
                 </button>
 
-                <button type="button" className={styles["icon-button"]} aria-label="Dark mode">
-                    <FiMoon />
+                <button
+                    type="button"
+                    className={styles["icon-button"]}
+                    aria-label={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
+                    title={isDarkMode ? "Light mode" : "Dark mode"}
+                    aria-pressed={isDarkMode}
+                    onClick={toggleTheme}
+                >
+                    {isDarkMode ? <FiSun /> : <FiMoon />}
                 </button>
 
                 <div className={styles["profile-menu"]} ref={profileMenuRef}>
