@@ -26,6 +26,7 @@ import {
   sendStoredReportScheduleAPI,
   toggleReportScheduleAPI,
 } from "@/apis/reportSchedulesApi";
+import { fetchAnalysisRankingApi, fetchL1AnalysisApi, fetchL2AnalysisApi } from "@/apis/analysisApi";
 import { fetchUsersAPI } from "@/apis/userApi";
 import { emitGlobalFailureModal } from "@/utils/globalFailureModal";
 import { emitGlobalSuccessModal } from "@/utils/globalSuccessModal";
@@ -86,7 +87,55 @@ const fetchEndpointRows = async (endpoint, params = {}) => {
   return response.data;
 };
 
+const formatAnalysisPercent = (value) => `${Number(value || 0).toFixed(2).replace(/\.00$/, "")}%`;
+
+const getAnalysisDateParams = (params = {}) => {
+  const startDate = params.start_date || params.startDate;
+  const endDate = params.end_date || params.endDate;
+  return startDate || endDate
+    ? { period: "custom", start_date: startDate, end_date: endDate }
+    : { period: "month" };
+};
+
+const fetchTeamPerformanceAnalysisRows = async (params = {}) => {
+  const analysisParams = getAnalysisDateParams(params);
+  const [l1, l2, ranking] = await Promise.all([
+    fetchL1AnalysisApi(analysisParams),
+    fetchL2AnalysisApi(analysisParams),
+    fetchAnalysisRankingApi(analysisParams),
+  ]);
+  const l1Metrics = l1?.metrics || {};
+  const l2Metrics = l2?.metrics || {};
+  const topRanking = Array.isArray(ranking?.ranking) ? ranking.ranking[0] : null;
+
+  return [
+    {
+      "L1 Allocated Submission": Number(l1Metrics.allocated_submissions || 0),
+      "L1 On Time Submission": Number(l1Metrics.on_time_submissions || 0),
+      "L1 Delayed Submission": Number(l1Metrics.delayed_submissions || 0),
+      "L1 Reworked Submission": Number(l1Metrics.reworked_submissions || 0),
+      "L1 Submission Efficiency": formatAnalysisPercent(l1Metrics.submission_efficiency),
+      "L1 Allocated Tickets": Number(l1Metrics.allocated_tickets || 0),
+      "L1 On Time Resolution": Number(l1Metrics.on_time_resolutions || 0),
+      "L1 Delayed Resolution": Number(l1Metrics.delayed_resolutions || 0),
+      "L1 Reworked Resolution": Number(l1Metrics.reworked_resolutions || 0),
+      "L1 Resolution Efficiency": formatAnalysisPercent(l1Metrics.resolution_efficiency),
+      "L1 First Time Approval Rate": formatAnalysisPercent(l1Metrics.first_time_approval_rate),
+      "L1 Ranking": formatAnalysisPercent(topRanking?.average_efficiency ?? l1Metrics.average_efficiency),
+      "L2 Allocated Tickets": Number(l2Metrics.allocated_tickets || 0),
+      "L2 On Time Approvals": Number(l2Metrics.on_time_approvals || 0),
+      "L2 Delayed Approvals": Number(l2Metrics.delayed_approvals || 0),
+      "L2 Approvals Efficiency": formatAnalysisPercent(l2Metrics.approval_efficiency),
+    },
+  ];
+};
+
 const reportSources = {
+  Analysis: {
+    "Team Performance": {
+      "Team Performance Analysis": { fetcher: fetchTeamPerformanceAnalysisRows },
+    },
+  },
   "Quality Control": {
     Mixing: {
       "Process Parameter": { fetcher: getMixingProcessParameterEntries },
@@ -636,14 +685,14 @@ const getRowSignature = (rows) =>
     .map((row) => stringifyForSignature(row))
     .join("|");
 
-const fetchAllReportRows = async (reportFetcher) => {
+const fetchAllReportRows = async (reportFetcher, baseParams = {}) => {
   const allRows = [];
   const seenPageSignatures = new Set();
   let totalPages = 0;
 
   for (let page = 1; page <= maxReportPages; page += 1) {
     const response = await Promise.race([
-      reportFetcher({ page, limit: reportPageSize }),
+      reportFetcher({ ...baseParams, page, limit: reportPageSize }),
       new Promise((_, reject) =>
         setTimeout(() => reject(new Error("Report data request timed out. Please check the backend connection.")), reportPageRequestTimeoutMs)
       ),
@@ -682,7 +731,8 @@ const getRowDate = (row) =>
   row?.invoice_date ||
   row?.entry_date ||
   row?.date ||
-  row?.created_at;
+  row?.created_at ||
+  row?.generated_at;
 
 const inferFields = (rows) => {
   const keys = Array.from(
@@ -1247,7 +1297,10 @@ function ReportsPage() {
           throw new Error("No report API configured for the selected type.");
         }
 
-        const nextRows = await fetchAllReportRows(reportFetcher);
+        const nextRows = await fetchAllReportRows(reportFetcher, {
+          start_date: startDate,
+          end_date: endDate,
+        });
         if (isActive && requestIdRef.current === requestId) {
           setRows(nextRows);
           setSelectedFields([]);
@@ -1267,7 +1320,7 @@ function ReportsPage() {
     return () => {
       isActive = false;
     };
-  }, [department, reportType, selectedReportSource, subDepartment]);
+  }, [department, endDate, reportType, selectedReportSource, startDate, subDepartment]);
 
   useEffect(() => {
     if (!timePickerOpen) return undefined;
@@ -1456,7 +1509,10 @@ function ReportsPage() {
       throw new Error("This user does not have access to the scheduled report screen.");
     }
 
-    const scheduleRows = await fetchAllReportRows(reportFetcher);
+    const scheduleRows = await fetchAllReportRows(reportFetcher, {
+      start_date: schedule.startDate,
+      end_date: schedule.endDate,
+    });
     return filterRowsByScheduleDate(schedule, scheduleRows);
   };
 

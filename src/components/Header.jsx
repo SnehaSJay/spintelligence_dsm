@@ -43,7 +43,7 @@ const sidebarLinks = [
     { href: "/usermanagement", label: "User Management", icon: FiUsers, admin: true },
     { href: "/rolespermission", label: "Roles & Permissions", icon: FiShield, admin: true },
     { href: "/operator", label: "Ticketing System", icon: FiHeadphones, section: "tickets" },
-    { href: "/ticket-calendar", label: "Insights & Analytics", icon: FiCalendar, section: "calendars" },
+    { href: "/l1-analysis", label: "Insights & Analytics", icon: FiCalendar, section: "calendars" },
     { href: "/reports", label: "Reports", icon: FiFileText, section: "reports" },
     { href: "/threshold-values", label: "Threshold", icon: FiSliders, admin: true, section: "thresholds" },
     { href: "/settings", label: "Settings", icon: FiSettings, admin: true, section: "settings" },
@@ -66,24 +66,12 @@ const settingsLinks = [
 const ticketingLinks = [
     { href: "/operator", label: "L1 Ticketing System" },
     { href: "/supervisordashboard", label: "L2 Ticketing System" },
+    { href: "/ticket-calendar", label: "L1 Calendar" },
+    { href: "/ticket-calendar-l2", label: "L2 Calendar" },
 ];
 const analyticsHubLinks = [
-    {
-        subheading: "Calendar",
-        key: "calendar",
-        children: [
-            { href: "/ticket-calendar", label: "L1 Calendar" },
-            { href: "/ticket-calendar-l2", label: "L2 Calendar" },
-        ],
-    },
-    {
-        subheading: "Analysis",
-        key: "analysis",
-        children: [
-            { href: "/l1-analysis", label: "L1 Analysis" },
-            { href: "/l2-analysis", label: "L2 Analysis" },
-        ],
-    },
+    { href: "/l1-analysis", label: "Statistics Analytics" },
+    { href: "/l2-analysis", label: "Team Performance" },
 ];
 const thresholdLinks = [
     { href: "/threshold-values", label: "Values Threshold" },
@@ -102,8 +90,6 @@ const Header = ({ navLinks = defaultNavLinks }) => {
     const [isThresholdMenuOpen, setIsThresholdMenuOpen] = useState(false);
     const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false);
     const [openAnalyticsHub, setOpenAnalyticsHub] = useState(false);
-    const [openCalendar, setOpenCalendar] = useState(true);
-    const [openAnalysis, setOpenAnalysis] = useState(false);
     const { isDarkMode, toggleTheme } = useThemeMode();
     const user = useSelector((state) => state.auth?.user);
     const accessByDepartment = useSelector((state) => state.auth?.accessByDepartment);
@@ -169,7 +155,9 @@ const Header = ({ navLinks = defaultNavLinks }) => {
         hasSubDepartmentAccess(accessByDepartment, link.department, user)
     );
     const visibleTicketingLinks = hasSupervisorNavAccess
-        ? ticketingLinks.filter((link) => link.href === "/supervisordashboard")
+        ? ticketingLinks.filter((link) =>
+            link.href === "/supervisordashboard" || link.href === "/ticket-calendar-l2"
+        )
         : ticketingLinks;
     const currentPath = router.asPath?.split("?")[0] || router.pathname;
     const backTarget = null;
@@ -201,6 +189,14 @@ const Header = ({ navLinks = defaultNavLinks }) => {
 
         if (href === "/supervisordashboard") {
             return currentPath === "/supervisordashboard" || currentPath === "/supervisordetails";
+        }
+
+        if (href === "/ticket-calendar") {
+            return currentPath === "/ticket-calendar";
+        }
+
+        if (href === "/ticket-calendar-l2") {
+            return currentPath === "/ticket-calendar-l2";
         }
 
         if (href === "/settings") {
@@ -288,25 +284,15 @@ const Header = ({ navLinks = defaultNavLinks }) => {
             currentPath === "/operatordash" ||
             currentPath.startsWith("/operatordetail") ||
             currentPath === "/supervisordashboard" ||
-            currentPath === "/supervisordetails"
+            currentPath === "/supervisordetails" ||
+            currentPath === "/ticket-calendar" ||
+            currentPath === "/ticket-calendar-l2"
         );
         setIsCalendarMenuOpen(
-            currentPath === "/ticket-calendar" ||
-            currentPath === "/ticket-calendar-l2" ||
             currentPath === "/l1-analysis" ||
             currentPath === "/l2-analysis"
         );
         setOpenAnalyticsHub(
-            currentPath === "/ticket-calendar" ||
-            currentPath === "/ticket-calendar-l2" ||
-            currentPath === "/l1-analysis" ||
-            currentPath === "/l2-analysis"
-        );
-        setOpenCalendar(
-            currentPath === "/ticket-calendar" ||
-            currentPath === "/ticket-calendar-l2"
-        );
-        setOpenAnalysis(
             currentPath === "/l1-analysis" ||
             currentPath === "/l2-analysis"
         );
@@ -364,14 +350,29 @@ const Header = ({ navLinks = defaultNavLinks }) => {
                         );
                         const currentPath = router.asPath?.split("?")[0] || router.pathname;
                         const isThresholdGroup = link.section === "thresholds";
+                        const isTicketingGroup = link.section === "tickets";
                         const isThresholdGroupActive = isThresholdGroup && (
                             currentPath === "/threshold-values" ||
                             currentPath.startsWith("/threshold-values/") ||
                             currentPath === "/submission-threshold" ||
                             currentPath.startsWith("/submission-threshold/")
                         );
+                        const isTicketingGroupActive = isTicketingGroup && (
+                            currentPath === "/operator" ||
+                            currentPath.startsWith("/operator/") ||
+                            currentPath === "/operatordash" ||
+                            currentPath.startsWith("/operatordetail") ||
+                            currentPath === "/supervisordashboard" ||
+                            currentPath === "/supervisordetails" ||
+                            currentPath === "/ticket-calendar" ||
+                            currentPath === "/ticket-calendar-l2"
+                        );
                         const linkClassName = `${styles["side-nav-link"]} ${
-                            (isThresholdGroup ? isThresholdGroupActive : isActiveLink(link.href))
+                            (isThresholdGroup
+                                ? isThresholdGroupActive
+                                : isTicketingGroup
+                                    ? isTicketingGroupActive
+                                    : isActiveLink(link.href))
                                 ? styles["side-nav-active"]
                                 : ""
                         }`;
@@ -502,32 +503,14 @@ const Header = ({ navLinks = defaultNavLinks }) => {
                                         <FiChevronDown className={`${styles["department-chevron"]} ${openAnalyticsHub ? styles["department-chevron-open"] : ""}`} />
                                     </button>
                                     <div className={`${styles["side-subnav"]} ${openAnalyticsHub ? styles["side-subnav-open"] : ""}`}>
-                                        {analyticsHubLinks.map((group) => (
-                                            <div key={group.subheading} className={styles["side-subnav-group"]}>
-                                                <button
-                                                    type="button"
-                                                    className={styles["side-subnav-heading"]}
-                                                    aria-expanded={group.key === "calendar" ? openCalendar : openAnalysis}
-                                                    onClick={() => {
-                                                        if (group.key === "calendar") setOpenCalendar((v) => !v);
-                                                        if (group.key === "analysis") setOpenAnalysis((v) => !v);
-                                                    }}
-                                                >
-                                                    {group.subheading}
-                                                    <FiChevronDown className={`${styles["department-chevron"]} ${(group.key === "calendar" ? openCalendar : openAnalysis) ? styles["department-chevron-open"] : ""}`} style={{marginLeft: 6}} />
-                                                </button>
-                                                <div style={{ display: (group.key === "calendar" ? openCalendar : openAnalysis) ? 'block' : 'none', marginLeft: 8 }}>
-                                                    {group.children.map((item) => (
-                                                        <Link
-                                                            key={item.href}
-                                                            href={item.href}
-                                                            className={`${styles["side-subnav-link"]} ${isActiveLink(item.href) ? styles["side-subnav-active"] : ""}`}
-                                                        >
-                                                            {item.label}
-                                                        </Link>
-                                                    ))}
-                                                </div>
-                                            </div>
+                                        {analyticsHubLinks.map((item) => (
+                                            <Link
+                                                key={item.href}
+                                                href={item.href}
+                                                className={`${styles["side-subnav-link"]} ${isActiveLink(item.href) ? styles["side-subnav-active"] : ""}`}
+                                            >
+                                                {item.label}
+                                            </Link>
                                         ))}
                                     </div>
                                 </div>
