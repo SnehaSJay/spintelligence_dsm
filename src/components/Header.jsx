@@ -21,7 +21,15 @@ import {
 } from "react-icons/fi";
 import { fetchUsersAPI } from "@/apis/userApi";
 import { logout, setAuthUser } from "../store/slices/authSlice";
-import { hasAnyQualityControlAccess, hasReportAccess, hasSubDepartmentAccess, isFullAccessUser, isSupervisorNavUser, routeDepartmentMap } from "@/utils/accessControl";
+import {
+    getDefaultTicketingRoute,
+    hasAnyQualityControlAccess,
+    hasReportAccess,
+    hasSubDepartmentAccess,
+    isFullAccessUser,
+    isSupervisorNavUser,
+    routeDepartmentMap,
+} from "@/utils/accessControl";
 import styles from "../styles/header.module.css";
 
 const defaultNavLinks = [];
@@ -109,6 +117,7 @@ const Header = ({ navLinks = defaultNavLinks }) => {
     const hasSupervisorNavAccess = isSupervisorNavUser(user);
     const hasTicketingHubAccess = hasFullAccess || hasSupervisorNavAccess;
     const hasAnalyticsHubAccess = hasFullAccess || hasSupervisorNavAccess;
+    const defaultTicketingRoute = getDefaultTicketingRoute(user);
     const fullName = user?.full_name || user?.name || "User";
     const employeeId = user?.employee_id || user?.employeeId || "No ID";
     const initials = fullName
@@ -126,7 +135,13 @@ const Header = ({ navLinks = defaultNavLinks }) => {
     const hasDashboardNav = visibleHrefSet.has("/");
     const hasDepartmentNav = visibleHrefSet.has("/departments");
     const canSeeDepartmentDropdown = hasAnyQualityControlAccess(accessByDepartment, user);
-    const visibleSidebarLinks = sidebarLinks.filter((link) => {
+    const visibleSidebarLinks = sidebarLinks
+        .map((link) => (
+            link.section === "tickets"
+                ? { ...link, href: defaultTicketingRoute }
+                : link
+        ))
+        .filter((link) => {
         if (link.admin) {
             return hasFullAccess || Boolean(link.href && visibleHrefSet.has(link.href));
         }
@@ -159,6 +174,9 @@ const Header = ({ navLinks = defaultNavLinks }) => {
     const visibleDepartmentLinks = departmentLinks.filter((link) =>
         hasSubDepartmentAccess(accessByDepartment, link.department, user)
     );
+    const visibleTicketingLinks = hasSupervisorNavAccess
+        ? ticketingLinks.filter((link) => link.href === "/supervisordashboard")
+        : ticketingLinks;
 
     const isActiveLink = (href) => {
         if (!href) {
@@ -235,8 +253,8 @@ const Header = ({ navLinks = defaultNavLinks }) => {
     const handleTicketsClick = () => {
         setIsTicketsMenuOpen((isOpen) => {
             const nextIsOpen = !isOpen;
-            if (nextIsOpen && router.asPath?.split("?")[0] !== "/operator") {
-                router.push("/operator");
+            if (nextIsOpen && router.asPath?.split("?")[0] !== defaultTicketingRoute) {
+                router.push(defaultTicketingRoute);
             }
             return nextIsOpen;
         });
@@ -468,7 +486,7 @@ const Header = ({ navLinks = defaultNavLinks }) => {
                                         <FiChevronDown className={`${styles["department-chevron"]} ${isTicketsMenuOpen ? styles["department-chevron-open"] : ""}`} />
                                     </button>
                                     <div className={`${styles["side-subnav"]} ${isTicketsMenuOpen ? styles["side-subnav-open"] : ""}`}>
-                                        {ticketingLinks.map((ticketingLink) => (
+                                        {visibleTicketingLinks.map((ticketingLink) => (
                                             <Link
                                                 key={ticketingLink.href}
                                                 href={ticketingLink.href}
