@@ -110,7 +110,11 @@ export default function UserManagement() {
 
     try {
       const response = await bulkUploadUsersAPI(file);
-      setUploadMessage(response?.message || "Bulk upload completed successfully.");
+      const summary =
+        typeof response?.processed === "number"
+          ? ` Processed: ${response.processed}, Inserted: ${response.inserted || 0}, Skipped: ${response.skipped || 0}.`
+          : "";
+      setUploadMessage(`${response?.message || "Bulk upload completed successfully."}${summary}`);
       setUploadError(false);
       dispatch(fetchUsers());
     } catch (error) {
@@ -132,23 +136,23 @@ export default function UserManagement() {
 
   const downloadBulkUploadTemplate = () => {
     const headers = [
-      "employeeId",
-      "name",
+      "employee_id",
+      "full_name",
       "email",
       "phone",
       "role",
+      "department",
       "level",
-      "dept",
-      "status",
+      "designation",
+      "dob",
+      "account_status",
     ];
-    const excelTable = `<!DOCTYPE html><html><head><meta charset="UTF-8" /></head><body><table><tr>${headers
-      .map((header) => `<th>${header}</th>`)
-      .join("")}</tr></table></body></html>`;
-    const blob = new Blob([excelTable], { type: "application/vnd.ms-excel;charset=utf-8;" });
+    const csvTemplate = `${headers.join(",")}\n`;
+    const blob = new Blob([csvTemplate], { type: "text/csv;charset=utf-8;" });
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.setAttribute("download", "usermanagement_template.xls");
+    link.setAttribute("download", "users_bulk_upload_template.csv");
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -310,7 +314,9 @@ export default function UserManagement() {
             >
               <option value="">Role: All</option>
               {roles.map((r) => (
-                <option key={r.id}>{r.role_name}</option>
+                <option key={r.id} value={r.role_name || r.name || ""}>
+                  {r.role_name || r.name || "-"}
+                </option>
               ))}
             </select>
             <HiMiniChevronDown className={styles.selectChevron} />
@@ -615,7 +621,7 @@ export default function UserManagement() {
                 <h2>Bulk Upload Users</h2>
               </div>
               <p className={styles.modalText}>
-                Download the template with only title row, fill user data, then upload.
+                Download the template, keep the column names unchanged, fill user data, then upload the CSV or XLSX file.
               </p>
 
               <div className={styles.modalActions}>
