@@ -131,6 +131,12 @@ function SpliceStrength({
     };
   }, [rowsWithPercent]);
 
+  const cspAverage = useMemo(() => {
+    if (!cspValue) return "";
+    const csp = parseFloat(cspValue) || 0;
+    return (csp * 0.264).toFixed(2);
+  }, [cspValue]);
+
   const handleGenerate = () => {
     const count = Math.max(1, Number(readingCount) || 1);
     setGeneratedRows(
@@ -418,7 +424,7 @@ function SpliceStrength({
 
           <div className={styles.field}>
             <label>Average</label>
-            <input value={average.splice} readOnly />
+            <input value={cspAverage} readOnly />
           </div>
         </div>
 
