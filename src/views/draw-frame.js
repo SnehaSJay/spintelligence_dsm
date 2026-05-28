@@ -10,6 +10,7 @@ import SearchableSelect from "@/components/SearchableSelect";
 import SuccessModal from "@/components/SuccessModal";
 import { runOcrForDocument } from "@/apis/ocrApi";
 import DrawFrameHeaderEntry from "@/views/draw-frame/DrawFrameHeaderEntry";
+import Wrapping from "@/views/wrapping";
 import { fetchDrawFrameCotsMachineMaster, fetchDrawFrameMachineMaster } from "@/apis/draw-frame";
 import {
   clearDrawFrameState,
@@ -23,6 +24,7 @@ import styles from "@/styles/draw-frame.module.css";
 import uPercentStyles from "@/styles/u%dataentry.module.css";
 import { sanitizeNumericInput } from "@/utils/inputValidation";
 import { filterOptionsByDepartmentAccess } from "@/utils/screenAccess";
+import useDatabaseEntryId from "@/hooks/useDatabaseEntryId";
 import { useThemeMode } from "@/utils/useThemeMode";
 
 const today = new Date().toISOString().split("T")[0];
@@ -54,11 +56,13 @@ const DRAW_FRAME_ENTRY_PREFIX = {
   "PP - Finisher Drawing": "DRF",
   "A%": "DAP",
 };
+
+const getDrawFrameEntryConfig = (type = "") =>
+  DRAW_FRAME_ENTRY_ID_CONFIG[type] || {
+    prefix: "DRAW",
+  };
+
 const STATIC_FR_MACHINE_NAMES = ["FR (HSR 1000-2)", "FR (HSR 1000-1)"];
-const getDrawFrameUniqueId = (seq, type = "") => {
-  const prefix = DRAW_FRAME_ENTRY_PREFIX[type] || "DRAW";
-  return `${prefix}-${String(Math.max(1, Number(seq) || 1)).padStart(3, "0")}`;
-};
 
 const processTypeOptions = ["Breaker", "Finisher"];
 const shiftOptions = ["General", "A Shift", "B Shift", "C Shift"];
@@ -287,7 +291,6 @@ function DrawFrame() {
   const [errors, setErrors] = useState({});
   const [showPreview, setShowPreview] = useState(false);
   const [previewItems, setPreviewItems] = useState([]);
-  const [entrySeq, setEntrySeq] = useState(1);
   const [showSuccess, setShowSuccess] = useState(false);
   const cvMachineDropdownRef = useRef(null);
   const aPercentFileInputRef = useRef(null);
@@ -314,12 +317,12 @@ function DrawFrame() {
   const isAPercentEntry = form.type === "A%";
   const isHeaderEntry =
     form.type === "PP - Breaker Drawing" || form.type === "PP - Finisher Drawing";
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const stored = Number(window.localStorage.getItem(DRAW_FRAME_ENTRY_SEQ_KEY) || "1");
-    setEntrySeq(Number.isFinite(stored) && stored > 0 ? stored : 1);
-  }, []);
+  const { entryId, reserveEntryId } = useDatabaseEntryId({
+    department: "Draw Frame",
+    typeName: form.type,
+    config: getDrawFrameEntryConfig(form.type),
+    leadingHash: true,
+  });
 
   useEffect(() => {
     if (!typeOptions.some((option) => option.name === form.type)) {
@@ -848,8 +851,7 @@ function DrawFrame() {
 
   const handleSubmit = () => {
     const isCots = form.type === "Draw Frame Cots Data Entry";
-    const entryId = getDrawFrameUniqueId(entrySeq, form.type);
-
+    
     if (!validate()) return;
 
     if (form.type === "U% Data Entry") {
@@ -938,13 +940,7 @@ function DrawFrame() {
 
   useEffect(() => {
     if (actionSuccess) {
-      setEntrySeq((current) => {
-        const next = Math.max(1, Number(current) || 1) + 1;
-        if (typeof window !== "undefined") {
-          window.localStorage.setItem(DRAW_FRAME_ENTRY_SEQ_KEY, String(next));
-        }
-        return next;
-      });
+      reserveEntryId();
       if (form.type === "Draw Frame Cots Data Entry") {
         dispatch(fetchDrawFrameCotsEntries({ page: 1, limit: 10 }));
       }
@@ -953,7 +949,7 @@ function DrawFrame() {
       }
       setShowSuccess(true);
     }
-  }, [actionSuccess, dispatch, form.type]);
+  }, [actionSuccess, dispatch, form.type, reserveEntryId]);
 
   const formatListDate = (value) => {
     if (!value) return "-";
@@ -969,9 +965,15 @@ function DrawFrame() {
           <div className="mt-2 text-right text-base font-semibold text-slate-600">Current Date: {currentDateLabel}</div>
         </div>
 
-        {isHeaderEntry ? (
+        {isWrappingDrawframeNotebook ? (
+          <Wrapping
+            fixedType="Drawing"
+            backPath="/draw-frame"
+            title="Quality Control - Wrapping Drawframe Notebook"
+          />
+        ) : isHeaderEntry ? (
           <DrawFrameHeaderEntry
-            entryId={getDrawFrameUniqueId(entrySeq, form.type)}
+            entryId={entryId}
             typeOptions={typeOptions}
             selectedType={form.type}
             onTypeChange={(value) => handleFormChange("type", value)}
@@ -1140,7 +1142,7 @@ function DrawFrame() {
 
                 <div className={uPercentStyles.field}>
                   <label>Entry ID</label>
-                  <input type="text" value={getDrawFrameUniqueId(entrySeq, form.type)} readOnly disabled className={errors.header?.date ? uPercentStyles.errorField : ""} />
+                  <input type="text" value={entryId} readOnly disabled className={errors.header?.date ? uPercentStyles.errorField : ""} />
                 </div>
 
                 <div className={uPercentStyles.field}>
@@ -1266,7 +1268,7 @@ function DrawFrame() {
                 <>
                   <div className={styles.field}>
                     <label className={styles.label}>Unique</label>
-                    <input type="text" value={getDrawFrameUniqueId(entrySeq, form.type)} readOnly disabled className={`${styles.input} ${errors.header?.date ? styles.inputError : ""}`} />
+                    <input type="text" value={entryId} readOnly disabled className={`${styles.input} ${errors.header?.date ? styles.inputError : ""}`} />
                   </div>
 
                   <div className={styles.field}>
@@ -1312,10 +1314,10 @@ function DrawFrame() {
 
                   <div className={styles.field}>
                     <label className={styles.label}>Unique</label>
-                    <input type="text" value={getDrawFrameUniqueId(entrySeq, form.type)} readOnly disabled className={`${styles.input} ${errors.header?.date ? styles.inputError : ""}`} />
+                    <input type="text" value={entryId} readOnly disabled className={`${styles.input} ${errors.header?.date ? styles.inputError : ""}`} />
                   </div>
 
-                  <div className={styles.field} ref={cvMachineDropdownRef}>
+                  <div className={styles.field}>
                     <label className={styles.label}>Machine Number</label>
                     <SearchableSelect
                       value={form.machineNumber}

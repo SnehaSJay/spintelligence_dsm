@@ -11,43 +11,33 @@ import ProcessParameterDataEntry from "@/views/simplex/processParameterDataEntry
 import SMXCotsChangeDataEntry from "@/views/simplex/SMXCotsChangeDataEntry";
 import SMXBreaksStudyReport from "@/views/simplex/SMXBreaksStudyReport";
 import UPercentDataEntry from "@/views/simplex/u%dataentry";
+import Wrapping from "@/views/wrapping";
 import {
   clearSimplexState,
   getSimplexCotsChangeEntries,
   getSimplexUqcEntries,
 } from "@/store/slices/simplex";
 import { filterOptionsByDepartmentAccess } from "@/utils/screenAccess";
+import useDatabaseEntryId from "@/hooks/useDatabaseEntryId";
 import { useThemeMode } from "@/utils/useThemeMode";
 const simplexTypes = [
   { id: 0, name: "Process Parameter", aliases: ["Process Parameter", "Process Parameter Data Entry"], component: ProcessParameterDataEntry },
   { id: 1, name: "SMXCots Change Data Entry", aliases: ["SMXCots Change Data Entry", "SMX Cots Change Data Entry"], component: SMXCotsChangeDataEntry },
   { id: 2, name: "SMX Breaks Study Report", aliases: ["SMX Breaks Study Report", "Breaks Study Report"], component: SMXBreaksStudyReport },
   { id: 3, name: "U% Data Entry", aliases: ["U% Data Entry", "U Percent Data Entry", "U% Checking"], component: UPercentDataEntry },
+  { id: 4, name: "Wrapping Simplex Notebook", aliases: ["Wrapping Simplex Notebook", "Simplex Wrapping Notebook"] },
 ];
 
 export const SIMPLEX_INPUT_SCREEN_COUNT = simplexTypes.length;
-const SIMPLEX_ENTRY_SEQ_KEY = "simplex_entry_sequence";
 const SIMPLEX_ENTRY_ID_CONFIG = {
-  "Process Parameter": { prefix: "SPP", storageKey: "simplex_entry_sequence_process_parameter" },
-  "SMXCots Change Data Entry": { prefix: "SCC", storageKey: "simplex_entry_sequence_smx_cots_change" },
-  "SMX Breaks Study Report": { prefix: "SBS", storageKey: "simplex_entry_sequence_breaks_study" },
-  "U% Data Entry": { prefix: "SUP", storageKey: "simplex_entry_sequence_u_percent" },
+  "Process Parameter": { prefix: "SPP",  },
+  "SMXCots Change Data Entry": { prefix: "SCC",  },
+  "SMX Breaks Study Report": { prefix: "SBS",  },
+  "U% Data Entry": { prefix: "SUP",  },
 };
 
 const getSimplexEntryConfig = (typeName) =>
-  SIMPLEX_ENTRY_ID_CONFIG[typeName] || { prefix: "SIM", storageKey: SIMPLEX_ENTRY_SEQ_KEY };
-
-const getSimplexEntryId = (seq, typeName) => {
-  const { prefix } = getSimplexEntryConfig(typeName);
-  return `${prefix}-${String(Math.max(1, Number(seq) || 1)).padStart(3, "0")}`;
-};
-
-const readSimplexEntrySequence = (typeName) => {
-  if (typeof window === "undefined") return 1;
-  const { storageKey } = getSimplexEntryConfig(typeName);
-  const stored = Number(window.localStorage.getItem(storageKey) || "1");
-  return Number.isFinite(stored) && stored > 0 ? stored : 1;
-};
+  SIMPLEX_ENTRY_ID_CONFIG[typeName] || { prefix: "SIM" };
 
 function Simplex() {
   const currentDateLabel = new Date().toLocaleDateString("en-IN");
@@ -72,15 +62,6 @@ function Simplex() {
   const [previewItems, setPreviewItems] = useState([]);
   const [showSuccess, setShowSuccess] = useState(false);
   const [validationMessage, setValidationMessage] = useState("");
-  const [entrySeq, setEntrySeq] = useState(1);
-  const incrementEntrySequence = () => {
-    const nextSeq = entrySeq + 1;
-    setEntrySeq(nextSeq);
-    if (typeof window !== "undefined") {
-      const { storageKey } = getSimplexEntryConfig(selectedTypeName);
-      window.localStorage.setItem(storageKey, String(nextSeq));
-    }
-  };
   const { uqcEntries = [], cotsChangeEntries = [], listLoading } = useSelector(
     (state) => state.simplex ?? {}
   );
@@ -90,6 +71,7 @@ function Simplex() {
     [selectedTypeName, typeOptions]
   );
   const SelectedComponent = selectedType?.component ?? null;
+  const isWrappingSimplexNotebook = selectedTypeName === "Wrapping Simplex Notebook";
   const entryTableTheme = {
     surface: isDarkMode ? "#050505" : "#fff",
     header: isDarkMode ? "#3b3b3b" : "#f4f6f8",
@@ -103,12 +85,6 @@ function Simplex() {
     muted: isDarkMode ? "#ffffff" : "#64748b",
     accent: isDarkMode ? "#93c5fd" : "#1976d2",
   };
-
-  useEffect(() => {
-    if (!selectedTypeName) return;
-    setEntrySeq(readSimplexEntrySequence(selectedTypeName));
-  }, [selectedTypeName]);
-
   useEffect(() => {
     if (!typeOptions.some((item) => item.name === selectedTypeName)) {
       setSelectedTypeName(typeOptions[0]?.name || "");
@@ -140,7 +116,7 @@ function Simplex() {
     setShowPreview(false);
     const ok = await childRef.current?.submit?.();
     if (ok) {
-      incrementEntrySequence();
+      await reserveEntryId();
       setShowSuccess(true);
     }
   };
@@ -164,7 +140,7 @@ function Simplex() {
 
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
           <div className="p-5">
-            {selectedTypeName !== "Process Parameter" ? (
+            {selectedTypeName !== "Process Parameter" && !isWrappingSimplexNotebook ? (
               <>
                 <div className="flex items-center justify-between gap-3 mb-4">
                   <div className="flex items-center gap-2 min-w-0">
@@ -187,14 +163,20 @@ function Simplex() {
 
 
   
-            {SelectedComponent ? (
+            {isWrappingSimplexNotebook ? (
+              <Wrapping
+                fixedType="Simplex"
+                backPath="/simplex"
+                title="Quality Control - Wrapping Simplex Notebook"
+              />
+            ) : SelectedComponent ? (
               <SelectedComponent
                 key={selectedTypeName}
                 ref={childRef}
                 selectedTypeName={selectedTypeName}
                 onTypeChange={setSelectedTypeName}
                 typeOptions={typeOptions.map((type) => type.name)}
-                entryId={getSimplexEntryId(entrySeq, selectedTypeName)}
+                entryId={entryId}
                 tablePortalTargetId="simplex-report-table-slot"
               />
             ) : (
@@ -212,7 +194,7 @@ function Simplex() {
             </div>
           ) : null}
 
-          <Footer
+          {!isWrappingSimplexNotebook ? <Footer
             onBack={() => router.push("/departments/quality-control")}
             onClear={() => {
               setValidationMessage("");
@@ -220,7 +202,7 @@ function Simplex() {
             }}
             onSave={openPreview}
             saveLabel="Save Record"
-          />
+          /> : null}
         </div>
 
         <div id="simplex-report-table-slot" className="mt-8" />
