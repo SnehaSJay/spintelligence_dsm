@@ -8,7 +8,7 @@ import { sanitizeNumericInput } from "@/utils/inputValidation";
 import { fetchCardingUqcMasterDropdown, fetchCardingUqcMasterVarieties } from "@/apis/carding";
 import { clearCardingState, getCardingUqcEntries, submitCardingUqc } from "@/store/slices/carding";
 
-const STATIC_SHIFT_OPTIONS = [
+export const STATIC_SHIFT_OPTIONS = [
   { value: "General", label: "General" },
   { value: "Day", label: "Day" },
   { value: "Halfnight", label: "Halfnight" },
@@ -23,7 +23,7 @@ const STATIC_DEPARTMENT_OPTIONS = [
   { dept_code: "CB", dept_name: "Comber" },
 ];
 
-const STATIC_MC_NO_OPTIONS = [
+export const STATIC_MC_NO_OPTIONS = [
   "CDG-01","CDG-02","CDG-03","CDG-04","CDG-05","CDG-06","CDG-07","CDG-08","CDG-09","CDG-10",
   "CDG-11","CDG-12","CDG-13","CDG-14","CDG-15","CDG-16","CDG-17","CDG-18","CDG-19","CDG-20",
   "CDG-21","CDG-22","CDG-23","CDG-24","CDG-25","CDG-26",

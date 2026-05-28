@@ -3,6 +3,12 @@ import styles from "@/styles/u%dataentry.module.css";
 import { useDispatch, useSelector } from "react-redux";
 import SearchableSelect from "@/components/SearchableSelect";
 import { sanitizeNumericInput } from "@/utils/inputValidation";
+import {
+  STATIC_DEPARTMENT_OPTIONS,
+  STATIC_MC_NO_OPTIONS,
+  STATIC_SHIFT_OPTIONS,
+  STATIC_VARIETY_OPTIONS,
+} from "@/views/carding/u%dataentry";
 import { getSimplexUqcEntries, submitSimplexUqc } from "@/store/slices/simplex";
 
 const initialForm = () => ({

@@ -147,7 +147,7 @@ const mapApiEntryToVersion = (entry) => ({
   label: formatDisplayDate(entry?.creation_date),
   data: {
     versionId: getEntryId(entry),
-    paramId: entry?.ins_code || "",
+    paramId: entry?.entry_id || entry?.ins_code || "",
     type: "PP - Autoconer Q3",
     countName: entry?.count_name || "",
     consigneeName: entry?.consignee_name || "",
@@ -432,7 +432,8 @@ const AutoconerQ3 = forwardRef(function AutoconerQ3(
       const selectedExistingVersion = versions.find((item) => item.id === form.versionId);
 
       if (selectedExistingVersion) {
-        await updateAutoconerQ3Entry(selectedExistingVersion.id, payload);
+        const { entry_id, ...updatePayload } = payload;
+        await updateAutoconerQ3Entry(selectedExistingVersion.id, updatePayload);
       } else {
         await submitAutoconerQ3Entry(payload);
       }

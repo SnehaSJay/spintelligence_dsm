@@ -118,7 +118,7 @@ const mapApiEntryToVersion = (entry) => ({
   label: formatDisplayDate(entry?.creation_date),
   data: {
     versionId: getEntryId(entry),
-    paramId: entry?.ins_code || "",
+    paramId: entry?.entry_id || entry?.ins_code || "",
     type: "Process Parameter",
     countName: entry?.count_name || "",
     consigneeName: entry?.consignee_name || "",
@@ -360,7 +360,8 @@ const ProcessParameter = forwardRef(function ProcessParameter(
       const selectedExistingVersion = versions.find((item) => item.id === form.versionId);
 
       if (selectedExistingVersion) {
-        await updateAutoconerProcessParameter(selectedExistingVersion.id, payload);
+        const { entry_id, ...updatePayload } = payload;
+        await updateAutoconerProcessParameter(selectedExistingVersion.id, updatePayload);
       } else {
         await submitAutoconerProcessParameter(payload);
       }

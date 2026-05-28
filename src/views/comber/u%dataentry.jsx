@@ -5,6 +5,12 @@ import CustomSelect from "@/components/CustomSelect";
 import SearchableSelect from "@/components/SearchableSelect";
 import styles from "@/styles/u%dataentry.module.css";
 import { sanitizeNumericInput } from "@/utils/inputValidation";
+import {
+  STATIC_DEPARTMENT_OPTIONS,
+  STATIC_MC_NO_OPTIONS,
+  STATIC_SHIFT_OPTIONS,
+  STATIC_VARIETY_OPTIONS,
+} from "@/views/carding/u%dataentry";
 import { getComberUqcEntries, submitComberUqc } from "@/store/slices/comber";
 import { fetchComberMasterVarieties, fetchComberUqcMasterDropdown } from "@/apis/comber";
 

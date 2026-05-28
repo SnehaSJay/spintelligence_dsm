@@ -233,7 +233,7 @@ const ConeDensity = forwardRef(function ConeDensity(
     weight: null,
     no_of_cuts: null,
     remarks: "Normal",
-    cone_density_readings: readingRows.map((row) => ({
+    cone_readings: readingRows.map((row) => ({
       drum_no: toNullableNumber(row.drumNo),
       base_dia_e: toNullableNumber(row.baseDiaE),
       nose_dia_e: toNullableNumber(row.noseDiaE),

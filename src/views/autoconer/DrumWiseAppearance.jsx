@@ -20,12 +20,18 @@ const getTodayDate = () => {
 };
 
 const countOptions = [
-  "10 COTTON POLY LINEN 60/20/20 400...",
-  "20 WHITE POLY YARN CONES",
-  "30 BLACK POLY YARN CONES",
+  { value: "", label: "Select Count Name" },
+  { value: "10 COTTON POLY LINEN 60/20/20 400...", label: "10 COTTON POLY LINEN 60/20/20 400..." },
+  { value: "20 WHITE POLY YARN CONES", label: "20 WHITE POLY YARN CONES" },
+  { value: "30 BLACK POLY YARN CONES", label: "30 BLACK POLY YARN CONES" },
 ];
 
-const autoconerOptions = ["AC03", "AC04", "AC05"];
+const autoconerOptions = [
+  { value: "", label: "Select Auto Coner" },
+  { value: "AC03", label: "AC03" },
+  { value: "AC04", label: "AC04" },
+  { value: "AC05", label: "AC05" },
+];
 
 const buildRowsFromRange = (from, to) => {
   const start = Number(from) || 1;
@@ -103,6 +109,10 @@ function DrumWiseAppearance({
     () => savedEntries.flatMap((entry) => mapDrumWiseEntryToRows(entry)).slice(0, 10),
     [savedEntries]
   );
+  const selectedCountLabel =
+    masterCounts.find((option) => String(option.value) === String(countName))?.label || countName;
+  const selectedMachineLabel =
+    masterMachines.find((option) => String(option.value) === String(autoconerNo))?.label || autoconerNo;
 
   useEffect(() => {
     setPortalReady(true);
@@ -150,8 +160,8 @@ function DrumWiseAppearance({
     { label: "Type", value: selectedType || "-" },
     { label: "Test No.", value: testNo || "-" },
     { label: "Entry ID", value: entryId || "-" },
-    { label: "Count Name", value: countName || "-" },
-    { label: "Auto Coner No.", value: autoconerNo || "-" },
+    { label: "Count Name", value: selectedCountLabel || "-" },
+    { label: "Auto Coner No.", value: selectedMachineLabel || "-" },
     { label: "Drum From", value: drumFrom || "-" },
     { label: "Drum To", value: drumTo || "-" },
     { label: "Remarks", value: remarks || "-" },
@@ -168,6 +178,8 @@ function DrumWiseAppearance({
         test_no: Number(testNo) || 0,
         entry_date: entryDate,
         type: "Drum Inspection",
+        machine_id: Number(autoconerNo) || null,
+        count_id: Number(countName) || null,
         drum_from: Number(drumFrom) || 0,
         drum_to: Number(drumTo) || 0,
         remarks,
