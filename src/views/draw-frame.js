@@ -51,6 +51,7 @@ const DRAW_FRAME_ENTRY_PREFIX = {
   "PP - Breaker Drawing": "DRB",
   "PP - Finisher Drawing": "DRF",
 };
+const STATIC_FR_MACHINE_NAMES = ["FR (HSR 1000-2)", "FR (HSR 1000-1)"];
 const getDrawFrameUniqueId = (seq, type = "") => {
   const prefix = DRAW_FRAME_ENTRY_PREFIX[type] || "DRAW";
   return `${prefix}-${String(Math.max(1, Number(seq) || 1)).padStart(3, "0")}`;
@@ -118,6 +119,20 @@ const calculateStats = (values, lengthInYards) => {
   };
 };
 
+const mergeUniqueMachineNames = (names = [], staticNames = []) => {
+  const seen = new Set();
+  const merged = [];
+  [...names, ...staticNames].forEach((name) => {
+    const clean = String(name || "").trim();
+    if (!clean) return;
+    const key = clean.toUpperCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    merged.push(clean);
+  });
+  return merged;
+};
+
 function DrawFrame() {
   const currentDateLabel = new Date().toLocaleDateString("en-IN");
   const router = useRouter();
@@ -170,6 +185,8 @@ function DrawFrame() {
   });
 
   const [machineEntries, setMachineEntries] = useState([]);
+  const [oneYardReadings, setOneYardReadings] = useState([]);
+  const [halfYardReadings, setHalfYardReadings] = useState([]);
   const [oneYardMetrics, setOneYardMetrics] = useState([]);
   const [halfYardMetrics, setHalfYardMetrics] = useState([]);
   const [hasCalculated, setHasCalculated] = useState(false);
@@ -181,6 +198,7 @@ function DrawFrame() {
   const [machineNameOptions, setMachineNameOptions] = useState([]);
   const [yarnCvMachineOptions, setYarnCvMachineOptions] = useState([]);
   const [machineMasterByName, setMachineMasterByName] = useState({});
+  const cvMachineDropdownRef = useRef(null);
   const [uPercentForm, setUPercentForm] = useState({
     date: today,
     shift: "",
@@ -228,11 +246,11 @@ function DrawFrame() {
           names.push(machineName);
           nextMasterByName[machineName] = { mcNo };
         });
-        setYarnCvMachineOptions(names);
+        setYarnCvMachineOptions(mergeUniqueMachineNames(names, STATIC_FR_MACHINE_NAMES));
         setMachineMasterByName(nextMasterByName);
       } catch (_error) {
         if (isMounted) {
-          setYarnCvMachineOptions([]);
+          setYarnCvMachineOptions(mergeUniqueMachineNames([], STATIC_FR_MACHINE_NAMES));
           setMachineMasterByName({});
         }
       }
@@ -255,10 +273,14 @@ function DrawFrame() {
           .map((item) => String(item?.mc_name || item?.machine_number || "").trim())
           .filter(Boolean);
         const filteredNames = rawNames.filter((name) => matchesCotsTypePrefix(name, form.processType));
-        const names = filteredNames;
+        const names = filteredNames.length ? filteredNames : rawNames;
         if (!isMounted) return;
         if (names.length) {
-          setMachineNameOptions(names);
+          const nextNames =
+            form.processType === "Finisher"
+              ? mergeUniqueMachineNames(names, STATIC_FR_MACHINE_NAMES)
+              : names;
+          setMachineNameOptions(nextNames);
           return;
         }
         const fallbackMachines = await fetchDrawFrameMachineMaster();
@@ -268,8 +290,12 @@ function DrawFrame() {
         const filteredFallbackNames = fallbackRawNames.filter((name) =>
           matchesCotsTypePrefix(name, form.processType)
         );
-        const fallbackNames = filteredFallbackNames;
-        setMachineNameOptions(fallbackNames);
+        const fallbackNames = filteredFallbackNames.length ? filteredFallbackNames : fallbackRawNames;
+        const nextFallbackNames =
+          form.processType === "Finisher"
+            ? mergeUniqueMachineNames(fallbackNames, STATIC_FR_MACHINE_NAMES)
+            : fallbackNames;
+        setMachineNameOptions(nextFallbackNames);
       } catch (_error) {
         if (!isMounted) return;
         try {
@@ -280,10 +306,14 @@ function DrawFrame() {
           const filteredFallbackNames = fallbackRawNames.filter((name) =>
             matchesCotsTypePrefix(name, form.processType)
           );
-          const fallbackNames = filteredFallbackNames;
-          setMachineNameOptions(fallbackNames);
+          const fallbackNames = filteredFallbackNames.length ? filteredFallbackNames : fallbackRawNames;
+          const nextFallbackNames =
+            form.processType === "Finisher"
+              ? mergeUniqueMachineNames(fallbackNames, STATIC_FR_MACHINE_NAMES)
+              : fallbackNames;
+          setMachineNameOptions(nextFallbackNames);
         } catch (_fallbackError) {
-          setMachineNameOptions([]);
+          setMachineNameOptions(form.processType === "Finisher" ? [...STATIC_FR_MACHINE_NAMES] : []);
         }
       }
     };
@@ -423,6 +453,8 @@ function DrawFrame() {
       readingCount: 5,
     });
     setMachineEntries([]);
+    setOneYardReadings([]);
+    setHalfYardReadings([]);
     setOneYardMetrics([]);
     setHalfYardMetrics([]);
     setHasCalculated(false);
@@ -628,12 +660,14 @@ function DrawFrame() {
 
   const handleSubmit = () => {
     const isCots = form.type === "Draw Frame Cots Data Entry";
+    const entryId = getDrawFrameUniqueId(entrySeq, form.type);
 
     if (!validate()) return;
 
     if (form.type === "U% Data Entry") {
       dispatch(
         submitDrawFrameUqcInspection({
+          entry_id: entryId,
           entry_type: form.type,
           entry_date: uPercentForm.date,
           shift: uPercentForm.shift,
@@ -656,6 +690,7 @@ function DrawFrame() {
 
     const payload = isCots
       ? {
+          entry_id: entryId,
           sub_type: form.processType,
           entry_date: form.date,
           shift: form.shift,
@@ -673,6 +708,7 @@ function DrawFrame() {
           })),
         }
       : {
+          entry_id: entryId,
           type: form.type,
           s_no: form.serialNumber,
           entry_date: form.date,
@@ -702,6 +738,13 @@ function DrawFrame() {
 
   useEffect(() => {
     if (actionSuccess) {
+      setEntrySeq((current) => {
+        const next = Math.max(1, Number(current) || 1) + 1;
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem(DRAW_FRAME_ENTRY_SEQ_KEY, String(next));
+        }
+        return next;
+      });
       if (form.type === "Draw Frame Cots Data Entry") {
         dispatch(fetchDrawFrameCotsEntries({ page: 1, limit: 10 }));
       }
@@ -785,16 +828,14 @@ function DrawFrame() {
 
                 <div className={uPercentStyles.field}>
                   <label>Variety</label>
-                  <select
+                  <SearchableSelect
                     value={uPercentForm.variety}
-                    onChange={(e) => handleUPercentChange("variety", e.target.value)}
+                    onChange={(value) => handleUPercentChange("variety", value)}
+                    options={["WPSF 0.90", "WPSF 1.20", "PSF Blend"]}
+                    placeholder="Select"
                     className={errors.uPercent?.variety ? uPercentStyles.errorField : ""}
-                  >
-                    <option value="">Select</option>
-                    <option value="WPSF 0.90">WPSF 0.90</option>
-                    <option value="WPSF 1.20">WPSF 1.20</option>
-                    <option value="PSF Blend">PSF Blend</option>
-                  </select>
+                    ariaLabel="Variety"
+                  />
                 </div>
 
                 <div className={uPercentStyles.field}>
