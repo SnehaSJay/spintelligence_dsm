@@ -44,7 +44,11 @@ const primaryTypeOptions = [
     name: "PP - Finisher Drawing",
     aliases: ["PP - Finisher Drawing", "Finisher Drawing"],
   },
-  { id: 6, name: "A%", aliases: ["A%", "A Percent"] },
+  {
+    id: 6,
+    name: "Wrapping Drawframe Notebook",
+    aliases: ["Wrapping Drawframe Notebook", "Wrapping Draw Frame Notebook", "Drawframe Wrapping Notebook"],
+  },
 ];
 
 export const DRAW_FRAME_INPUT_SCREEN_COUNT = primaryTypeOptions.length;

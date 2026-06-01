@@ -27,7 +27,6 @@ const simplexTypes = [
   { id: 2, name: "SMX Breaks Study Report", aliases: ["SMX Breaks Study Report", "Breaks Study Report"], component: SMXBreaksStudyReport },
   { id: 3, name: "U% Data Entry", aliases: ["U% Data Entry", "U Percent Data Entry", "U% Checking"], component: UPercentDataEntry },
   { id: 4, name: "Wrapping Simplex Notebook", aliases: ["Wrapping Simplex Notebook", "Simplex Wrapping Notebook"] },
-  { id: 5, name: "Stretch %", aliases: ["Stretch %", "Stretch Percent", "Simplex Stretch %"], component: PdfOcrTableEntry },
 ];
 
 export const SIMPLEX_INPUT_SCREEN_COUNT = simplexTypes.length;
@@ -149,7 +148,7 @@ function Simplex() {
 
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
           <div className="p-5">
-            {selectedTypeName !== "Process Parameter" && !isWrappingSimplexNotebook ? (
+            {selectedTypeName !== "Process Parameter" ? (
               <>
                 <div className="flex items-center justify-between gap-3 mb-4">
                   <div className="flex items-center gap-2 min-w-0">
@@ -179,27 +178,15 @@ function Simplex() {
                 title="Quality Control - Wrapping Simplex Notebook"
               />
             ) : SelectedComponent ? (
-              selectedTypeName === "Stretch %" ? (
-                <PdfOcrTableEntry
-                  key={selectedTypeName}
-                  ref={childRef}
-                  selectedType={selectedTypeName}
-                  onTypeChange={setSelectedTypeName}
-                  typeOptions={typeOptions.map((type) => type.name)}
-                  docType="strech"
-                  entryId={entryId}
-                />
-              ) : (
-                <SelectedComponent
-                  key={selectedTypeName}
-                  ref={childRef}
-                  selectedTypeName={selectedTypeName}
-                  onTypeChange={setSelectedTypeName}
-                  typeOptions={typeOptions.map((type) => type.name)}
-                  entryId={entryId}
-                  tablePortalTargetId="simplex-report-table-slot"
-                />
-              )
+              <SelectedComponent
+                key={selectedTypeName}
+                ref={childRef}
+                selectedTypeName={selectedTypeName}
+                onTypeChange={setSelectedTypeName}
+                typeOptions={typeOptions.map((type) => type.name)}
+                entryId={entryId}
+                tablePortalTargetId="simplex-report-table-slot"
+              />
             ) : (
               <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
                 No accessible input screens are available for this department.
@@ -215,7 +202,7 @@ function Simplex() {
             </div>
           ) : null}
 
-          {!isWrappingSimplexNotebook ? <Footer
+          <Footer
             onBack={() => router.push("/departments/quality-control")}
             onClear={() => {
               setValidationMessage("");
@@ -223,7 +210,7 @@ function Simplex() {
             }}
             onSave={openPreview}
             saveLabel="Save Record"
-          /> : null}
+          />
         </div>
 
         <div id="simplex-report-table-slot" className="mt-8" />
