@@ -12,6 +12,7 @@ import ProcessParameterDataEntry from "@/views/simplex/processParameterDataEntry
 import SMXCotsChangeDataEntry from "@/views/simplex/SMXCotsChangeDataEntry";
 import SMXBreaksStudyReport from "@/views/simplex/SMXBreaksStudyReport";
 import UPercentDataEntry from "@/views/simplex/u%dataentry";
+import Wrapping from "@/views/wrapping";
 import {
   clearSimplexState,
   getSimplexCotsChangeEntries,
@@ -78,11 +79,7 @@ function Simplex() {
     leadingHash: true,
   });
   const SelectedComponent = selectedType?.component ?? null;
-  const { entryId, reserveEntryId } = useDatabaseEntryId({
-    department: "Simplex",
-    typeName: selectedTypeName,
-    config: getSimplexEntryConfig(selectedTypeName),
-  });
+  const isWrappingSimplexNotebook = selectedTypeName === "Wrapping Simplex Notebook";
   const entryTableTheme = {
     surface: isDarkMode ? "#050505" : "#fff",
     header: isDarkMode ? "#3b3b3b" : "#f4f6f8",

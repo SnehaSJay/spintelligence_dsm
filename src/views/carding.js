@@ -36,6 +36,7 @@ const cardingDepartmentTypes = [
     { id: 6, name: "Card DFK Pressure Checking", aliases: ["Card DFK Pressure Checking", "DFK Pressure Checking", "Carding DFK Pressure"] },
     { id: 7, name: "WheelChange", aliases: ["WheelChange", "Wheel Change"], component: CardingWheelChange },
     { id: 8, name: "Card Waste Study", aliases: ["Card Waste Study", "Card Waste Study Entry"] },
+    { id: 9, name: "Wrapping Carding Notebook", aliases: ["Wrapping Carding Notebook", "Carding Wrapping Notebook"], component: WrappingCardingNotebook },
 ];
 
 export const CARDING_INPUT_SCREEN_COUNT = cardingDepartmentTypes.length;
@@ -131,12 +132,8 @@ function Carding() {
     const isProcessParameter = selectedType === "Process Parameter";
     const isWheelChange = selectedType === "WheelChange";
     const isCardWasteStudy = selectedType === "Card Waste Study";
+    const isWrappingCardingNotebook = selectedType === "Wrapping Carding Notebook";
     const showParentFooter = isProcessParameter || isCardWasteStudy;
-    const { entryId, reserveEntryId } = useDatabaseEntryId({
-        department: "Carding",
-        typeName: selectedType,
-        config: getCardingEntryConfig(selectedType),
-    });
     const entryTableTheme = {
         surface: isDarkMode ? "#050505" : "#fff",
         header: isDarkMode ? "#3b3b3b" : "#f4f6f8",

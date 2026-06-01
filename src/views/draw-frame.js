@@ -63,7 +63,7 @@ const DRAW_FRAME_ENTRY_ID_CONFIG = {
 };
 
 const getDrawFrameEntryConfig = (type = "") =>
-  ({ prefix: DRAW_FRAME_ENTRY_PREFIX[type] || "DRAW" });
+  DRAW_FRAME_ENTRY_ID_CONFIG[type] || { prefix: "DRAW" };
 
 const getDrawFrameUniqueId = (sequence, type = "") => {
   const config = getDrawFrameEntryConfig(type);
@@ -504,6 +504,7 @@ function DrawFrame() {
     remarks: "",
   });
   const isUPercentEntry = form.type === "U% Data Entry";
+  const isAPercentEntry = form.type === "A%";
   const isWrappingDrawframeNotebook = form.type === "Wrapping Drawframe Notebook";
   const isHeaderEntry =
     form.type === "PP - Breaker Drawing" || form.type === "PP - Finisher Drawing";
