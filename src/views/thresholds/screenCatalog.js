@@ -23,7 +23,6 @@ export const thresholdScreenCatalog = {
             "U% Data Entry",
             "Card DFK Pressure Checking",
             "WheelChange",
-            "Wrapping Carding Notebook",
         ],
         comber: [
             "Ribbon Lap CV Data Entry",
@@ -36,14 +35,12 @@ export const thresholdScreenCatalog = {
             "U% Data Entry",
             "PP - Breaker Drawing",
             "PP - Finisher Drawing",
-            "Wrapping Drawframe Notebook",
         ],
         simplex: [
             "Process Parameter",
             "SMXCots Change Data Entry",
             "SMX Breaks Study Report",
             "U% Data Entry",
-            "Wrapping Simplex Notebook",
         ],
         spinning: [
             "Process Parameter",
@@ -51,7 +48,6 @@ export const thresholdScreenCatalog = {
             "Count Change",
             "Ring Frame Log Book",
             "Speed Checking",
-            "Lycra Missing",
             "Bottom Apron Checking",
             "Lycra Centering",
             "RSM & Lycrasensor Checking Online",

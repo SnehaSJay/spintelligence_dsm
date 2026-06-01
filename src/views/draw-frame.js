@@ -9,7 +9,6 @@ import PreviewModal from "@/components/PreviewModal";
 import SearchableSelect from "@/components/SearchableSelect";
 import SuccessModal from "@/components/SuccessModal";
 import DrawFrameHeaderEntry from "@/views/draw-frame/DrawFrameHeaderEntry";
-import Wrapping from "@/views/wrapping";
 import { fetchDrawFrameCotsMachineMaster, fetchDrawFrameMachineMaster } from "@/apis/draw-frame";
 import {
   clearDrawFrameState,
@@ -41,11 +40,6 @@ const primaryTypeOptions = [
     id: 5,
     name: "PP - Finisher Drawing",
     aliases: ["PP - Finisher Drawing", "Finisher Drawing"],
-  },
-  {
-    id: 6,
-    name: "Wrapping Drawframe Notebook",
-    aliases: ["Wrapping Drawframe Notebook", "Wrapping Draw Frame Notebook", "Drawframe Wrapping Notebook"],
   },
 ];
 
@@ -229,7 +223,6 @@ function DrawFrame() {
     remarks: "",
   });
   const isUPercentEntry = form.type === "U% Data Entry";
-  const isWrappingDrawframeNotebook = form.type === "Wrapping Drawframe Notebook";
   const isHeaderEntry =
     form.type === "PP - Breaker Drawing" || form.type === "PP - Finisher Drawing";
   const { entryId, reserveEntryId } = useDatabaseEntryId({
@@ -780,13 +773,7 @@ function DrawFrame() {
           <div className="mt-2 text-right text-base font-semibold text-slate-600">Current Date: {currentDateLabel}</div>
         </div>
 
-        {isWrappingDrawframeNotebook ? (
-          <Wrapping
-            fixedType="Drawing"
-            backPath="/draw-frame"
-            title="Quality Control - Wrapping Drawframe Notebook"
-          />
-        ) : isHeaderEntry ? (
+        {isHeaderEntry ? (
           <DrawFrameHeaderEntry
             entryId={entryId}
             typeOptions={typeOptions}

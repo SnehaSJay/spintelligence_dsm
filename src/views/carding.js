@@ -15,7 +15,6 @@ import NatiDataEntry from "./carding/natiDataEntry";
 import UPercentDataEntry from "./carding/u%dataentry";
 import CardingWheelChange from "./carding/WheelChange";
 import BrWasteStudyEntry from "./mixing/brWasteStudyEntry";
-import Wrapping from "./wrapping";
 import { fetchCardWasteStudyEntries, fetchCardingMasterMachines, submitCardWasteStudyEntry } from "@/apis/carding";
 import brWasteStyles from "@/styles/brWasteStudyEntry.module.css";
 import { useDispatch, useSelector } from "react-redux";
@@ -36,7 +35,6 @@ const cardingDepartmentTypes = [
     { id: 6, name: "Card DFK Pressure Checking", aliases: ["Card DFK Pressure Checking", "DFK Pressure Checking", "Carding DFK Pressure"] },
     { id: 7, name: "WheelChange", aliases: ["WheelChange", "Wheel Change"], component: CardingWheelChange },
     { id: 8, name: "Card Waste Study", aliases: ["Card Waste Study", "Card Waste Study Entry"] },
-    { id: 9, name: "Wrapping Carding Notebook", aliases: ["Wrapping Carding Notebook", "Carding Wrapping Notebook", "Wrapping Carding"] },
 ];
 
 export const CARDING_INPUT_SCREEN_COUNT = cardingDepartmentTypes.length;
@@ -125,7 +123,6 @@ function Carding() {
     const isProcessParameter = selectedType === "Process Parameter";
     const isWheelChange = selectedType === "WheelChange";
     const isCardWasteStudy = selectedType === "Card Waste Study";
-    const isWrappingCardingNotebook = selectedType === "Wrapping Carding Notebook";
     const showParentFooter = isProcessParameter || isCardWasteStudy;
     const { entryId, reserveEntryId } = useDatabaseEntryId({
         department: "Carding",
@@ -177,7 +174,7 @@ function Carding() {
                 </div>
 
                 <div className={styles["card-shell"]}>
-                    {!isProcessParameter && !isWheelChange && !isWrappingCardingNotebook ? (
+                    {!isProcessParameter && !isWheelChange ? (
                         <div className={styles["card-form-title"]}>
                             <MdEditNote />
                             <h3>Inspection Data Entry</h3>
@@ -204,14 +201,6 @@ function Carding() {
                             selectedType={selectedType}
                             onTypeChange={handleTypeChange}
                             savedVersionsTargetId="carding-process-parameter-saved-versions"
-                        />
-                    ) : null}
-
-                    {isWrappingCardingNotebook ? (
-                        <Wrapping
-                            fixedType="Carding"
-                            backPath="/carding"
-                            title="Quality Control - Wrapping Carding Notebook"
                         />
                     ) : null}
 
