@@ -13,7 +13,6 @@ import {
   STATIC_DEPARTMENT_OPTIONS,
   STATIC_MC_NO_OPTIONS,
   STATIC_SHIFT_OPTIONS,
-  STATIC_VARIETY_OPTIONS,
 } from "@/views/carding/u%dataentry";
 import { fetchDrawFrameCotsMachineMaster, fetchDrawFrameMachineMaster } from "@/apis/draw-frame";
 import {
@@ -205,7 +204,6 @@ function DrawFrame() {
   const [machineNameOptions, setMachineNameOptions] = useState([]);
   const [yarnCvMachineOptions, setYarnCvMachineOptions] = useState([]);
   const [machineMasterByName, setMachineMasterByName] = useState({});
-  const cvMachineDropdownRef = useRef(null);
   const [uPercentForm, setUPercentForm] = useState({
     date: today,
     shift: "",

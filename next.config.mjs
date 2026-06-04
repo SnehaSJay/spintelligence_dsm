@@ -17,20 +17,10 @@ const allowedDevOrigins = (() => {
 })();
 
 const nextConfig = {
+  output: "export",
   reactStrictMode: true,
   allowedDevOrigins,
-  async rewrites() {
-    return [
-      {
-        source: "/operator/:ticketId",
-        destination: "/operatordetail?ticketId=:ticketId",
-      },
-      {
-        source: "/operatordetail/:ticketId",
-        destination: "/operatordetail?ticketId=:ticketId",
-      },
-    ];
-  },
+  images: { unoptimized: true },
 };
 
 export default nextConfig;
