@@ -30,6 +30,7 @@ import { fetchAnalysisRankingApi, fetchL1AnalysisApi, fetchL2AnalysisApi } from 
 import { fetchUsersAPI } from "@/apis/userApi";
 import { emitGlobalFailureModal } from "@/utils/globalFailureModal";
 import { emitGlobalSuccessModal } from "@/utils/globalSuccessModal";
+import { notifyAdminAction } from "@/utils/adminActionNotifications";
 import { isFullAccessUser } from "@/utils/accessControl";
 import { departmentDirectory } from "@/views/departments/data";
 import { getThresholdFieldsForScreen } from "@/views/thresholds/fieldCatalog";
@@ -82,6 +83,15 @@ import styles from "@/styles/reports.module.css";
 const fetchEndpointRows = async (endpoint, params = {}) => {
   const response = await apiConfig.get(
     endpoint,
+    { page: 1, limit: 500, ...params },
+    { skipGlobalErrorModal: true }
+  );
+  return response.data;
+};
+
+const fetchGeneralReportDataRows = async (params = {}) => {
+  const response = await apiConfig.get(
+    "/reports/general-report/data",
     { page: 1, limit: 500, ...params },
     { skipGlobalErrorModal: true }
   );
@@ -1312,14 +1322,29 @@ function ReportsPage() {
           reportSource?.fetcher ||
           (reportSource?.endpoint ? fetchEndpointRows.bind(null, reportSource.endpoint) : null);
 
-        if (!reportFetcher) {
-          throw new Error("No report API configured for the selected type.");
-        }
-
-        const nextRows = await fetchAllReportRows(reportFetcher, {
+        const baseReportParams = {
           start_date: startDate,
           end_date: endDate,
-        });
+          department,
+          subDepartment,
+          sub_department: subDepartment,
+          reportType,
+          report_type: reportType,
+          input_screen: reportType,
+        };
+        const generalReportFetcher = (params = {}) => fetchGeneralReportDataRows({ ...baseReportParams, ...params });
+
+        let nextRows = [];
+        if (reportFetcher) {
+          try {
+            nextRows = await fetchAllReportRows(reportFetcher, baseReportParams);
+          } catch (directError) {
+            nextRows = await fetchAllReportRows(generalReportFetcher, baseReportParams);
+          }
+        } else {
+          nextRows = await fetchAllReportRows(generalReportFetcher, baseReportParams);
+        }
+
         if (isActive && requestIdRef.current === requestId) {
           setRows(nextRows);
           setSelectedFields([]);
@@ -1523,15 +1548,29 @@ function ReportsPage() {
     const reportFetcher =
       scheduleSource?.fetcher ||
       (scheduleSource?.endpoint ? fetchEndpointRows.bind(null, scheduleSource.endpoint) : null);
-
-    if (!reportFetcher) {
-      throw new Error("This user does not have access to the scheduled report screen.");
-    }
-
-    const scheduleRows = await fetchAllReportRows(reportFetcher, {
+    const baseScheduleParams = {
       start_date: schedule.startDate,
       end_date: schedule.endDate,
-    });
+      department: schedule.department,
+      subDepartment: schedule.subDepartment,
+      sub_department: schedule.subDepartment,
+      reportType: schedule.reportType,
+      report_type: schedule.reportType,
+      input_screen: schedule.reportType,
+    };
+    const generalReportFetcher = (params = {}) => fetchGeneralReportDataRows({ ...baseScheduleParams, ...params });
+    let scheduleRows = [];
+
+    if (reportFetcher) {
+      try {
+        scheduleRows = await fetchAllReportRows(reportFetcher, baseScheduleParams);
+      } catch (directError) {
+        scheduleRows = await fetchAllReportRows(generalReportFetcher, baseScheduleParams);
+      }
+    } else {
+      scheduleRows = await fetchAllReportRows(generalReportFetcher, baseScheduleParams);
+    }
+
     return filterRowsByScheduleDate(schedule, scheduleRows);
   };
 
@@ -1775,6 +1814,10 @@ function ReportsPage() {
       setScheduledReports((currentSchedules) =>
         currentSchedules.filter((schedule) => getScheduleRecordId(schedule) !== scheduleId)
       );
+      notifyAdminAction({
+        title: "Report schedule deleted",
+        body: "A scheduled report was deleted.",
+      });
     } catch (deleteError) {
       emitGlobalFailureModal({
         message: deleteError?.response?.data?.message || deleteError.message || "Schedule could not be deleted.",
@@ -1815,7 +1858,13 @@ function ReportsPage() {
     return `${header}\n${body}`;
   };
 
-  const handleExportCsv = () => downloadFile("report.csv", buildCsv(), "text/csv;charset=utf-8");
+  const handleExportCsv = () => {
+    downloadFile("report.csv", buildCsv(), "text/csv;charset=utf-8");
+    notifyAdminAction({
+      title: "Report CSV exported",
+      body: `${department} / ${subDepartment} / ${reportType} report was exported as CSV.`,
+    });
+  };
 
   const handleExportExcel = async () => {
     try {
@@ -1892,6 +1941,10 @@ function ReportsPage() {
     popup.document.close();
     popup.focus();
     popup.print();
+    notifyAdminAction({
+      title: "Report PDF exported",
+      body: `${department} / ${subDepartment} / ${reportType} report was exported as PDF.`,
+    });
   };
 
   return (
