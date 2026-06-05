@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
     FiBell,
+    FiBookOpen,
     FiCalendar,
     FiChevronDown,
     FiChevronLeft,
@@ -51,6 +52,7 @@ const sidebarLinks = [
     { href: "/operator", label: "Ticketing System", icon: FiHeadphones, section: "tickets" },
     { href: "/l1-analysis", label: "Insights & Analytics", icon: FiCalendar, section: "calendars" },
     { href: "/reports", label: "Reports", icon: FiFileText, section: "reports" },
+    { href: "/help", label: "Help Center", icon: FiBookOpen },
     { href: "/threshold-values", label: "Threshold", icon: FiSliders, admin: true, section: "thresholds" },
     { href: "/settings", label: "Settings", icon: FiSettings, admin: true, section: "settings" },
 ];

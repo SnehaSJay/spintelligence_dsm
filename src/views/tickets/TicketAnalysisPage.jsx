@@ -17,6 +17,7 @@ import {
   fetchL1AnalysisApi,
   fetchL2AnalysisApi,
   fetchStatisticsAnalyticsApi,
+  fetchTeamPerformanceOptionsApi,
 } from "@/apis/analysisApi";
 import { getSubmissionTickets } from "@/apis/operatorApi";
 import styles from "@/styles/ticketCalendar.module.css";
@@ -124,6 +125,33 @@ const periodToBackendPeriod = {
 };
 const formatMetricPercent = (value) => `${Number(value || 0).toFixed(2).replace(/\.00$/, "")}%`;
 const normalizeLookup = (value) => String(value || "").trim().toLowerCase();
+const optionLabel = (item) =>
+  String(
+    item?.label ||
+      item?.name ||
+      item?.title ||
+      item?.notebook ||
+      item?.input_screen ||
+      item?.machine_name ||
+      item?.employee_name ||
+      item?.user_name ||
+      item ||
+      ""
+  ).trim();
+const optionValue = (item) =>
+  String(item?.value || item?.slug || item?.id || item?.employee_id || optionLabel(item)).trim();
+const normalizeOptions = (value) => {
+  const rows = Array.isArray(value) ? value : [];
+  const seen = new Set();
+  return rows
+    .map((item) => ({ label: optionLabel(item), value: optionValue(item) }))
+    .filter((item) => {
+      const key = normalizeLookup(item.value || item.label);
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+};
 const formatShortDay = (date) =>
   date.toLocaleDateString("en-US", { weekday: "short" });
 const formatShortDate = (date) =>
@@ -315,9 +343,27 @@ function TeamPerformanceFilter({
   setSelectedDepartmentSlug,
   selectedSubDepartmentSlug,
   setSelectedSubDepartmentSlug,
+  selectedNotebook,
+  setSelectedNotebook,
+  selectedInputScreen,
+  setSelectedInputScreen,
+  selectedMachineName,
+  setSelectedMachineName,
+  options,
 }) {
   const selectedDepartment = departmentDirectory.find((department) => department.slug === selectedDepartmentSlug);
+  const backendDepartments = normalizeOptions(options?.departments);
+  const backendSubDepartments = normalizeOptions(options?.sub_departments || options?.subDepartments);
+  const departmentOptions = backendDepartments.length
+    ? backendDepartments
+    : departmentDirectory.map((department) => ({ label: department.name, value: department.slug }));
   const subDepartments = selectedDepartment?.subDepartments || [];
+  const subDepartmentOptions = backendSubDepartments.length
+    ? backendSubDepartments
+    : subDepartments.map((subDepartment) => ({ label: subDepartment.name, value: subDepartment.slug }));
+  const notebookOptions = normalizeOptions(options?.notebooks || options?.input_screens || options?.inputScreens);
+  const inputScreenOptions = normalizeOptions(options?.input_screens || options?.inputScreens || options?.notebooks);
+  const machineOptions = normalizeOptions(options?.machine_names || options?.machines || options?.machineNames);
 
   const handleDepartmentChange = (event) => {
     setSelectedDepartmentSlug(event.target.value);
@@ -331,9 +377,9 @@ function TeamPerformanceFilter({
           <span>Department</span>
           <select value={selectedDepartmentSlug} onChange={handleDepartmentChange}>
             <option value="">All Departments</option>
-            {departmentDirectory.map((department) => (
-              <option key={department.slug} value={department.slug}>
-                {department.name}
+            {departmentOptions.map((department) => (
+              <option key={department.value} value={department.value}>
+                {department.label}
               </option>
             ))}
           </select>
@@ -343,13 +389,40 @@ function TeamPerformanceFilter({
           <select
             value={selectedSubDepartmentSlug}
             onChange={(event) => setSelectedSubDepartmentSlug(event.target.value)}
-            disabled={!selectedDepartmentSlug}
+            disabled={!selectedDepartmentSlug && !backendSubDepartments.length}
           >
             <option value="">All Sub Departments</option>
-            {subDepartments.map((subDepartment) => (
-              <option key={subDepartment.slug} value={subDepartment.slug}>
-                {subDepartment.name}
+            {subDepartmentOptions.map((subDepartment) => (
+              <option key={subDepartment.value} value={subDepartment.value}>
+                {subDepartment.label}
               </option>
+            ))}
+          </select>
+        </label>
+        <label className={styles.performanceSelectField}>
+          <span>Notebook</span>
+          <select value={selectedNotebook} onChange={(event) => setSelectedNotebook(event.target.value)}>
+            <option value="">All Notebooks</option>
+            {notebookOptions.map((item) => (
+              <option key={item.value} value={item.value}>{item.label}</option>
+            ))}
+          </select>
+        </label>
+        <label className={styles.performanceSelectField}>
+          <span>Input Screen</span>
+          <select value={selectedInputScreen} onChange={(event) => setSelectedInputScreen(event.target.value)}>
+            <option value="">All Input Screens</option>
+            {inputScreenOptions.map((item) => (
+              <option key={item.value} value={item.value}>{item.label}</option>
+            ))}
+          </select>
+        </label>
+        <label className={styles.performanceSelectField}>
+          <span>Machine</span>
+          <select value={selectedMachineName} onChange={(event) => setSelectedMachineName(event.target.value)}>
+            <option value="">All Machines</option>
+            {machineOptions.map((item) => (
+              <option key={item.value} value={item.value}>{item.label}</option>
             ))}
           </select>
         </label>
@@ -480,8 +553,12 @@ export default function TicketAnalysisPage({ mode = "L1" }) {
   const [toDate, setToDate] = useState(toInputDate(new Date()));
   const [selectedDepartmentSlug, setSelectedDepartmentSlug] = useState("");
   const [selectedSubDepartmentSlug, setSelectedSubDepartmentSlug] = useState("");
+  const [selectedNotebook, setSelectedNotebook] = useState("");
+  const [selectedInputScreen, setSelectedInputScreen] = useState("");
+  const [selectedMachineName, setSelectedMachineName] = useState("");
   const [submissionTickets, setSubmissionTickets] = useState([]);
   const [submissionError, setSubmissionError] = useState("");
+  const [teamOptions, setTeamOptions] = useState({});
   const [performanceApiData, setPerformanceApiData] = useState({
     l1: null,
     l2: null,
@@ -497,13 +574,21 @@ export default function TicketAnalysisPage({ mode = "L1" }) {
   } = useSelector((state) => state.supervisor) || {};
   const { users } = useSelector((state) => state.users) || {};
   const selectedDepartment = useMemo(
-    () => departmentDirectory.find((department) => department.slug === selectedDepartmentSlug) || null,
+    () =>
+      departmentDirectory.find(
+        (department) =>
+          department.slug === selectedDepartmentSlug ||
+          normalizeLookup(department.name) === normalizeLookup(selectedDepartmentSlug)
+      ) || (selectedDepartmentSlug ? { name: selectedDepartmentSlug, slug: selectedDepartmentSlug } : null),
     [selectedDepartmentSlug]
   );
   const selectedSubDepartment = useMemo(
     () =>
       selectedDepartment?.subDepartments?.find((subDepartment) => subDepartment.slug === selectedSubDepartmentSlug) ||
-      null,
+      selectedDepartment?.subDepartments?.find(
+        (subDepartment) => normalizeLookup(subDepartment.name) === normalizeLookup(selectedSubDepartmentSlug)
+      ) ||
+      (selectedSubDepartmentSlug ? { name: selectedSubDepartmentSlug, slug: selectedSubDepartmentSlug } : null),
     [selectedDepartment, selectedSubDepartmentSlug]
   );
 
@@ -566,6 +651,24 @@ export default function TicketAnalysisPage({ mode = "L1" }) {
     if (mode !== "L2") return undefined;
 
     let isMounted = true;
+    fetchTeamPerformanceOptionsApi()
+      .then((response) => {
+        if (!isMounted) return;
+        setTeamOptions(response?.options || response?.data || response || {});
+      })
+      .catch(() => {
+        if (isMounted) setTeamOptions({});
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [mode]);
+
+  useEffect(() => {
+    if (mode !== "L2") return undefined;
+
+    let isMounted = true;
     const isCustomPeriod = performanceFilterMode === "custom";
     const period = isCustomPeriod ? "custom" : periodToBackendPeriod[activePeriod] || "month";
     const params = {
@@ -575,6 +678,9 @@ export default function TicketAnalysisPage({ mode = "L1" }) {
       ...(selectedSubDepartment
         ? { sub_department: selectedSubDepartment.name, sub_department_slug: selectedSubDepartment.slug }
         : {}),
+      ...(selectedNotebook ? { notebook: selectedNotebook } : {}),
+      ...(selectedInputScreen ? { input_screen: selectedInputScreen } : {}),
+      ...(selectedMachineName ? { machine_name: selectedMachineName } : {}),
     };
 
     setPerformanceApiData((current) => ({ ...current, loading: true, error: "" }));
@@ -606,7 +712,18 @@ export default function TicketAnalysisPage({ mode = "L1" }) {
     return () => {
       isMounted = false;
     };
-  }, [activePeriod, fromDate, mode, performanceFilterMode, selectedDepartment, selectedSubDepartment, toDate]);
+  }, [
+    activePeriod,
+    fromDate,
+    mode,
+    performanceFilterMode,
+    selectedDepartment,
+    selectedInputScreen,
+    selectedMachineName,
+    selectedNotebook,
+    selectedSubDepartment,
+    toDate,
+  ]);
 
   useEffect(() => {
     if (mode !== "L1") return undefined;
@@ -727,9 +844,29 @@ export default function TicketAnalysisPage({ mode = "L1" }) {
       ) {
         return false;
       }
+      if (selectedNotebook && normalizeLookup(ticket?.notebook || ticket?.notebook_name) !== normalizeLookup(selectedNotebook)) {
+        return false;
+      }
+      if (
+        selectedInputScreen &&
+        normalizeLookup(ticket?.input_screen || ticket?.screen_name || ticket?.title) !== normalizeLookup(selectedInputScreen)
+      ) {
+        return false;
+      }
+      if (selectedMachineName && normalizeLookup(ticket?.machine_name || ticket?.machine) !== normalizeLookup(selectedMachineName)) {
+        return false;
+      }
       return true;
     },
-    [selectedDepartment, selectedSubDepartment, userById, userIdByName]
+    [
+      selectedDepartment,
+      selectedInputScreen,
+      selectedMachineName,
+      selectedNotebook,
+      selectedSubDepartment,
+      userById,
+      userIdByName,
+    ]
   );
   const modeTickets = useMemo(() => {
     const filteredTickets = combinedTickets.filter((t) =>
@@ -915,7 +1052,7 @@ export default function TicketAnalysisPage({ mode = "L1" }) {
     const l2ApiMetrics = performanceApiData.l2?.metrics;
     const topRanking = performanceApiData.ranking?.[0];
 
-    if (!selectedDepartment && !selectedSubDepartment && (l1ApiMetrics || l2ApiMetrics || topRanking)) {
+    if (l1ApiMetrics || l2ApiMetrics || topRanking) {
       return {
         l1Submission: [
           { label: "Allocated Submission", value: Number(l1ApiMetrics?.allocated_submissions || 0) },
@@ -1084,6 +1221,13 @@ export default function TicketAnalysisPage({ mode = "L1" }) {
           setSelectedDepartmentSlug={setSelectedDepartmentSlug}
           selectedSubDepartmentSlug={selectedSubDepartmentSlug}
           setSelectedSubDepartmentSlug={setSelectedSubDepartmentSlug}
+          selectedNotebook={selectedNotebook}
+          setSelectedNotebook={setSelectedNotebook}
+          selectedInputScreen={selectedInputScreen}
+          setSelectedInputScreen={setSelectedInputScreen}
+          selectedMachineName={selectedMachineName}
+          setSelectedMachineName={setSelectedMachineName}
+          options={teamOptions}
         />
         {performanceApiData.loading && <p className={styles.statisticsError}>Fetching team performance data...</p>}
         {performanceApiData.error && <p className={styles.statisticsError}>{performanceApiData.error}</p>}
@@ -1120,6 +1264,13 @@ export default function TicketAnalysisPage({ mode = "L1" }) {
           setSelectedDepartmentSlug={setSelectedDepartmentSlug}
           selectedSubDepartmentSlug={selectedSubDepartmentSlug}
           setSelectedSubDepartmentSlug={setSelectedSubDepartmentSlug}
+          selectedNotebook={selectedNotebook}
+          setSelectedNotebook={setSelectedNotebook}
+          selectedInputScreen={selectedInputScreen}
+          setSelectedInputScreen={setSelectedInputScreen}
+          selectedMachineName={selectedMachineName}
+          setSelectedMachineName={setSelectedMachineName}
+          options={teamOptions}
         />
         <section className={styles.performancePanel}>
           <div className={styles.performanceGrid}>
