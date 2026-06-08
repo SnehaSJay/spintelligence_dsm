@@ -61,7 +61,6 @@ const sidebarLinks = [
     { href: "/operator", label: "Ticketing System", icon: FiHeadphones, section: "tickets" },
     { href: "/submitted-notebooks", label: "Management Hub", icon: FiBriefcase, section: "management" },
     { href: "/reports", label: "Reports", icon: FiFileText, section: "reports" },
-    { href: "/activity-log", label: "Activity Log", icon: FiClock },
     { href: "/threshold-values", label: "Threshold", icon: FiSliders, admin: true, section: "thresholds" },
     { href: "/settings", label: "Settings", icon: FiSettings, admin: true, section: "settings" },
 ];
@@ -84,12 +83,14 @@ const settingsLinks = [
 const ticketingLinks = [
     { href: "/operator", label: "L1 Ticketing System" },
     { href: "/supervisordashboard", label: "L2 Ticketing System" },
+    { href: "/l3-ticketing", label: "L3 Ticketing System" },
     { href: "/ticket-calendar", label: "L1 Calendar" },
     { href: "/ticket-calendar-l2", label: "L2 Calendar" },
 ];
 const managementHubLinks = [
     { href: "/submitted-notebooks", label: "Submitted Notebooks" },
-    { href: "/submitted-notebook-threshold", label: "Submission Threshold" },
+    { href: "/submitted-notebook-threshold", label: "Submitted Notebooks Threshold" },
+    { href: "/activity-log", label: "Activity Log" },
 ];
 const analyticsHubLinks = [
     { href: "/statistics-analysis", label: "Statistics Analytics" },
@@ -200,7 +201,7 @@ const Header = ({ navLinks = defaultNavLinks }) => {
     );
     const visibleTicketingLinks = hasSupervisorNavAccess
         ? ticketingLinks.filter((link) =>
-            link.href === "/supervisordashboard" || link.href === "/ticket-calendar-l2"
+            link.href === "/supervisordashboard" || link.href === "/ticket-calendar-l2" || link.href === "/l3-ticketing"
         )
         : ticketingLinks;
     const currentPath = router.asPath?.split("?")[0] || router.pathname;
@@ -266,6 +267,10 @@ const Header = ({ navLinks = defaultNavLinks }) => {
 
         if (href === "/submitted-notebook-threshold") {
             return currentPath === "/submitted-notebook-threshold";
+        }
+
+        if (href === "/activity-log") {
+            return currentPath === "/activity-log";
         }
 
         if (href === "/settings") {
@@ -480,7 +485,8 @@ const Header = ({ navLinks = defaultNavLinks }) => {
         );
         setIsManagementHubOpen(
             currentPath === "/submitted-notebooks" ||
-            currentPath === "/submitted-notebook-threshold"
+            currentPath === "/submitted-notebook-threshold" ||
+            currentPath === "/activity-log"
         );
         setIsAnalyticsHubOpen(
             currentPath === "/statistics-analysis" ||
@@ -568,7 +574,8 @@ const Header = ({ navLinks = defaultNavLinks }) => {
         );
                         const isManagementGroupActive = isManagementGroup && (
                             currentPath === "/submitted-notebooks" ||
-                            currentPath === "/submitted-notebook-threshold"
+                            currentPath === "/submitted-notebook-threshold" ||
+                            currentPath === "/activity-log"
                         );
                         const isAnalyticsHubGroupActive = isAnalyticsHubGroup && (
                             currentPath === "/statistics-analysis" ||
@@ -937,7 +944,7 @@ const Header = ({ navLinks = defaultNavLinks }) => {
                                     router.push("/glossary");
                                 }}
                             >
-                                <FiBookOpen />
+                                <FiFileText />
                                 <span>Glossary</span>
                             </button>
                             <button
