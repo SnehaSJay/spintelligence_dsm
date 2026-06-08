@@ -16,14 +16,9 @@ const buildSubmittedNotebookPayload = (payload = {}) => {
 
     return {
         ...payload,
+        screen_name: payload.screen_name || payload.screenName || payload.input_screen || payload.notebook_name,
         submitted_fields: submittedFields,
         submittedFields,
-        input_fields: submittedFields,
-        inputFields: submittedFields,
-        fields: submittedFields,
-        form_data: submittedFields,
-        formData: submittedFields,
-        payload: submittedFields,
     };
 };
 
