@@ -507,6 +507,9 @@ const SMXBreaksStudyReport = forwardRef(function SMXBreaksStudyReport(
             />
           </div>
         </div>
+            </>
+          );
+        })()}
       </div>
     </section>
   );
