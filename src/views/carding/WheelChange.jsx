@@ -84,9 +84,20 @@ function CardingWheelChange({ types = [], selectedType = "WheelChange", onTypeCh
   const [showSuccess, setShowSuccess] = useState(false);
   const [cdgOptions, setCdgOptions] = useState(DEFAULT_CDG_OPTIONS);
 
-  const loadLatestSaved = async () => {
-    const payload = await fetchCardingChangeControlEntries({ page: 1, limit: 1 });
-    const latest = extractLatestEntry(payload);
+  const findLatestEntryForMixing = (entries = [], mixing = "") => {
+    const normalizedMixing = String(mixing || "").trim().toLowerCase();
+    if (!normalizedMixing) return entries[0] || null;
+    return (
+      entries.find((entry) => String(entry?.mixing ?? entry?.mixing_name ?? entry?.variety ?? entry?.prep_variety_name ?? "").trim().toLowerCase() === normalizedMixing) ||
+      entries[0] ||
+      null
+    );
+  };
+
+  const loadLatestSaved = async (mixing = "") => {
+    const payload = await fetchCardingChangeControlEntries({ page: 1, limit: 100 });
+    const rows = Array.isArray(payload?.data) ? payload.data : Array.isArray(payload) ? payload : [];
+    const latest = findLatestEntryForMixing(rows, mixing);
     if (!latest) return null;
 
     setCdoNo(trimValue(latest.cdg_no_proposed ?? latest.cdo_no ?? ""));
@@ -242,7 +253,7 @@ function CardingWheelChange({ types = [], selectedType = "WheelChange", onTypeCh
       setShowPreview(false);
       setShowSuccess(true);
       setEntryDate(getTodayDate());
-      await loadLatestSaved();
+      await loadLatestSaved(values.mixing?.existing || values.mixing?.proposed || "");
     } catch (error) {
       setShowPreview(false);
       setMessage(error?.response?.data?.message || error?.message || "Wheel Change could not be submitted.");
