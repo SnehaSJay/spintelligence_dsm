@@ -1393,6 +1393,7 @@ function SpinningDepartment() {
                     setShowSuccess(false);
                     handleClearForm();
                 }}
+                closeLabel="OK"
             />
         </div>
     );
