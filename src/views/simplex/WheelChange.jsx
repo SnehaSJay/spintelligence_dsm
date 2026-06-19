@@ -29,7 +29,7 @@ const rowGroups = {
     { key: "lm", label: "LM", select: true },
     { key: "lcw0", label: "LCW (1)", select: true },
     { key: "lcw1", label: "LCW (0)", select: true },
-    { key: "bottomRollerSetting", label: "Bottom Roller Setting", dark: true },
+    { key: "bottomRollerSetting", label: "Bottom Roller Setting", dark: true },      
     { key: "topArmSetting", label: "Top Arm Setting", dark: true },
     { key: "topArmLoad", label: "Top Arm Load", dark: true },
     { key: "floatingCondensor", label: "Floating Condenser", dark: true },

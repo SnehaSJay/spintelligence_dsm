@@ -318,21 +318,21 @@ const OpennessDataEntry = forwardRef(function OpennessDataEntry(
                 <div className={styles.rowNumber}>{runningIndex}</div>
                 <div className={styles.rowGrid}>
                   <CustomInput
-                    label="Weight (W)"
+                    label="Weight in Gms"
                     placeholder="0.00"
                     value={row.weight}
                     onChange={(value) => handleRowChange(stageIndex, rowIndex, "weight", value)}
                     error={errors[`stage-${stageIndex}-row-${rowIndex}-weight`]}
                   />
                   <CustomInput
-                    label="Volume 1"
+                    label="Volume 1 in CC"
                     placeholder="0.00"
                     value={row.vol1}
                     onChange={(value) => handleRowChange(stageIndex, rowIndex, "vol1", value)}
                     error={errors[`stage-${stageIndex}-row-${rowIndex}-vol1`]}
                   />
                   <CustomInput
-                    label="Volume 2"
+                    label="Volume 2 in CC"
                     placeholder="0.00"
                     value={row.vol2}
                     onChange={(value) => handleRowChange(stageIndex, rowIndex, "vol2", value)}
