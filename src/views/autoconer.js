@@ -47,18 +47,44 @@ const AUTOCONER_PROCESS_PARAMETER_TYPES = [
   "PP - Autoconer Q3",
 ];
 const AUTOCONER_ENTRY_ID_CONFIG = {
-  "Process Parameter": { prefix: "APP", width: 4, routePath: "/autoconer/process-parameters" },
-  "PP - Autoconer Q2": { prefix: "AQD", width: 4, routePath: "/autoconer/q2" },
-  "PP - Autoconer Q3": { prefix: "AQT", width: 4, routePath: "/autoconer/q3" },
-  "Rewinding Study": { prefix: "ARW", width: 4, routePath: "/autoconer/inspection-data-entry" },
-  "Cone Density": { prefix: "ACD", width: 4, routePath: "/autoconer/cone-density" },
-  "Cone Packing Audit": { prefix: "ACP", width: 4, routePath: "/autoconer/cone-packing-audit" },
-  "Lycra Checking": { prefix: "ALC", width: 4, routePath: "/autoconer/lycra-checking" },
-  "Count Wise Cuts Record": { prefix: "ACW", width: 4, routePath: "/autoconer/count-wise-cuts" },
-  "Splice Strength": { prefix: "ASS", width: 4, routePath: "/autoconer/splice-strength" },
-  "Drum wise Appearance": { prefix: "ADA", width: 4, routePath: "/autoconer/drum-wise-appearance" },
-  "CSP Parameter Entries": { prefix: "ACS", width: 4, routePath: "/autoconer/parameter-entries/pending-csp" },
-  "U% Parameter Entries": { prefix: "AUP", width: 4, routePath: "/autoconer/parameter-entries/pending-quality" },
+  "Process Parameter": {
+    prefix: "PP",
+    width: 4,
+    routePath: "/autoconer",
+    fetchPath: "/autoconer/process-parameter",
+    pagePath: "/autoconer?type=Process%20Parameter",
+    scope: "process-parameter",
+  },
+  "PP - Autoconer Q2": {
+    prefix: "PP",
+    width: 4,
+    routePath: "/autoconer",
+    fetchPath: "/autoconer/q2",
+    pagePath: "/autoconer?type=PP%20-%20Autoconer%20Q2",
+    scope: "q2",
+  },
+  "PP - Autoconer Q3": {
+    prefix: "PP",
+    width: 4,
+    routePath: "/autoconer",
+    fetchPath: "/autoconer/q3",
+    pagePath: "/autoconer?type=PP%20-%20Autoconer%20Q3",
+    scope: "q3",
+  },
+  "Rewinding Study": {
+    prefix: "ARW",
+    width: 4,
+    routePath: "/autoconer/inspection-data-entry",
+    pagePath: "/autoconer/inspection-data-entry",
+  },
+  "Cone Density": { prefix: "ACD", width: 4, routePath: "/autoconer/cone-density", pagePath: "/autoconer/cone-density" },
+  "Cone Packing Audit": { prefix: "ACP", width: 4, routePath: "/autoconer/cone-packing-audit", pagePath: "/autoconer/cone-packing-audit" },
+  "Lycra Checking": { prefix: "ALC", width: 4, routePath: "/autoconer/lycra-checking", pagePath: "/autoconer/lycra-checking" },
+  "Count Wise Cuts Record": { prefix: "ACW", width: 4, routePath: "/autoconer/count-wise-cuts", pagePath: "/autoconer/count-wise-cuts" },
+  "Splice Strength": { prefix: "ASS", width: 4, routePath: "/autoconer/splice-strength", pagePath: "/autoconer/splice-strength" },
+  "Drum wise Appearance": { prefix: "ADA", width: 4, routePath: "/autoconer/drum-wise-appearance", pagePath: "/autoconer/drum-wise-appearance" },
+  "CSP Parameter Entries": { prefix: "ACS", width: 4, routePath: "/autoconer/parameter-entries/pending-csp", pagePath: "/autoconer/parameter-entries/pending-csp" },
+  "U% Parameter Entries": { prefix: "AUP", width: 4, routePath: "/autoconer/parameter-entries/pending-quality", pagePath: "/autoconer/parameter-entries/pending-quality" },
 };
 
 const getAutoconerEntryConfig = (typeName) =>
@@ -66,6 +92,19 @@ const getAutoconerEntryConfig = (typeName) =>
     prefix: "ACR",
   };
 const normalizeTypeName = (value = "") => String(value).trim().toLowerCase();
+const getTypeName = (value = "") => String(value?.name ?? value ?? "").trim();
+const formatTypeValue = (value = "") => getTypeName(value);
+const stripTypeOptionsForUi = (options = []) =>
+  (Array.isArray(options) ? options : []).map((option) => ({
+    id: option?.id,
+    name: option?.name || "",
+    displayName: option?.displayName || option?.name || "",
+    aliases: Array.isArray(option?.aliases) ? option.aliases : [],
+  }));
+const normalizeTypeOptionsForChildren = (options = []) =>
+  (Array.isArray(options) ? options : []).map((option) =>
+    String(option?.displayName ?? option?.name ?? option ?? "").trim()
+  ).filter(Boolean);
 const dedupeOptionsByName = (options = []) => {
   const seen = new Set();
 
@@ -86,7 +125,11 @@ function Autoconer() {
   const user = useSelector((state) => state.auth?.user);
   const accessByDepartment = useSelector((state) => state.auth?.accessByDepartment);
   const requestedType = Array.isArray(router.query.type) ? router.query.type[0] : router.query.type;
-  const isProcessParameterRequest = normalizeTypeName(requestedType) === "process parameter";
+  const isProcessParameterRequest = [
+    "process parameter",
+    "pp - autoconer q2",
+    "pp - autoconer q3",
+  ].includes(normalizeTypeName(requestedType));
   const fullTypeOptions = useMemo(
     () =>
       filterOptionsByDepartmentAccess(
@@ -105,8 +148,13 @@ function Autoconer() {
         : fullTypeOptions.filter(
             (item) => !AUTOCONER_PROCESS_PARAMETER_TYPES.includes(item.name)
           ),
-      ),
+    ),
     [fullTypeOptions, isProcessParameterRequest]
+  );
+  const uiTypeOptions = useMemo(() => stripTypeOptionsForUi(typeOptions), [typeOptions]);
+  const childTypeOptions = useMemo(
+    () => normalizeTypeOptionsForChildren(typeOptions),
+    [typeOptions]
   );
   const [checkingType, setCheckingType] = useState(typeOptions[0]?.name || "");
   const [showPreview, setShowPreview] = useState(false);
@@ -115,18 +163,30 @@ function Autoconer() {
   const [registeredActions, setRegisteredActions] = useState({});
   const [validationMessage, setValidationMessage] = useState("");
   const [currentDateLabel, setCurrentDateLabel] = useState("");
+  const [isMounted, setIsMounted] = useState(false);
   const selectedType = useMemo(
-    () => typeOptions.find((item) => item.name === checkingType)?.name || "",
+    () => formatTypeValue(checkingType),
     [checkingType, typeOptions]
   );
+  const useParentEntryId =
+    selectedType === "Process Parameter" ||
+    selectedType === "Rewinding Study" ||
+    selectedType === "Cone Density" ||
+    selectedType === "Cone Packing Audit" ||
+    selectedType === "Lycra Checking" ||
+    selectedType === "Count Wise Cuts Record" ||
+    selectedType === "Splice Strength" ||
+    selectedType === "Drum wise Appearance" ||
+    selectedType === "CSP Parameter Entries" ||
+    selectedType === "U% Parameter Entries";
   const SelectedComponent = useMemo(
     () => typeOptions.find((item) => item.name === checkingType)?.component || null,
     [checkingType, typeOptions]
   );
   const { entryId, reserveEntryId } = useDatabaseEntryId({
     department: "Autoconer",
-    typeName: selectedType,
-    config: getAutoconerEntryConfig(selectedType),
+    typeName: useParentEntryId ? selectedType : "",
+    config: useParentEntryId ? getAutoconerEntryConfig(selectedType) : {},
   });
   const isFooterHistoryType =
     selectedType === "Process Parameter" ||
@@ -172,27 +232,38 @@ function Autoconer() {
         ? await registeredActions.submit()
         : false;
     if (ok) {
+      const previewEntryId =
+        previewItems.find((item) => ["Entry ID", "Process Parameter ID"].includes(String(item?.label || "").trim()))?.value ||
+        "";
       await recordSubmittedNotebook({
         department: "Quality Control",
         subDepartment: "Autoconer",
         notebookName: selectedType,
-        entryId,
+        entryId: useParentEntryId ? entryId : previewEntryId,
         childRef,
         registeredActions,
         previewItems,
         user,
       });
-      await reserveEntryId();
+      if (useParentEntryId) {
+        await reserveEntryId();
+      }
       setShowSuccess(true);
     }
   };
 
   const handleTypeChange = (nextType) => {
-    setCheckingType(nextType);
+    const nextTypeName = getTypeName(nextType);
+    setCheckingType(nextTypeName);
     setRegisteredActions({});
     setPreviewItems([]);
     setShowPreview(false);
     setShowSuccess(false);
+
+    const nextRoute = getAutoconerEntryConfig(nextTypeName)?.pagePath || getAutoconerEntryConfig(nextTypeName)?.routePath;
+    if (nextRoute && nextRoute !== router.asPath.split("?")[0]) {
+      router.push(nextRoute);
+    }
   };
 
   useEffect(() => {
@@ -202,6 +273,7 @@ function Autoconer() {
   }, [checkingType, typeOptions]);
 
   useEffect(() => {
+    setIsMounted(true);
     setCurrentDateLabel(new Date().toLocaleDateString("en-IN"));
   }, []);
 
@@ -221,7 +293,9 @@ function Autoconer() {
         <div className={styles.header}>
           <h1>Quality Control - Autoconer Notebook</h1>
           <p>Record and manage industrial machine quality inspections.</p>
-          <div className="mt-2 text-right text-base font-semibold text-slate-600">Current Date: {currentDateLabel}</div>
+          <div className="mt-2 text-right text-base font-semibold text-slate-600">
+            Current Date: {isMounted ? currentDateLabel : "--"}
+          </div>
         </div>
         <div className={styles.shell}>
           <div className={styles.formBody}>
@@ -237,9 +311,9 @@ function Autoconer() {
                 selectedTypeName={selectedType}
                 selectedType={selectedType}
                 onTypeChange={handleTypeChange}
-                types={typeOptions}
-                typeOptions={typeOptions.map((type) => type.name)}
-                entryId={entryId}
+                types={childTypeOptions}
+                typeOptions={childTypeOptions}
+                entryId={useParentEntryId ? entryId : ""}
                 tablePortalTargetId="autoconer-table-slot"
                 savedVersionsTargetId={isFooterHistoryType ? "autoconer-post-footer-slot" : ""}
                 postFooterPortalTargetId="autoconer-post-footer-slot"

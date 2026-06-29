@@ -63,8 +63,9 @@ const DRAW_FRAME_ENTRY_ID_CONFIG = {
   "Yarn CV% Calculation Form": { prefix: "YCV" },
   "Draw Frame Cots Data Entry": { prefix: "DRC", width: 4, routePath: "/drawframe/cots" },
   "U% Data Entry": { prefix: "DUP", width: 4, routePath: "/drawframe/uqc" },
-  "PP - Breaker Drawing": { prefix: "DRB", width: 4, routePath: "/drawframe/header" },
-  "PP - Finisher Drawing": { prefix: "DRF", width: 4, routePath: "/drawframe/finisher" },
+  // Keep breaker and finisher on separate sequence scopes so they do not share storage identity.
+  "PP - Breaker Drawing": { prefix: "PP", width: 4, routePath: "/drawframe/header?scope=breaker" },
+  "PP - Finisher Drawing": { prefix: "PP", width: 4, routePath: "/drawframe/finisher?scope=finisher" },
   "A%": { prefix: "DAP", width: 4, routePath: "/drawframe/a-percent" },
   "Wheel Change": { prefix: "DWC", width: 4, routePath: "/drawframe/wheel-change" },
 };
@@ -74,6 +75,7 @@ const getDrawFrameEntryConfig = (type = "") =>
 
 const normalizeTypeName = (value = "") =>
   String(value).trim().toLowerCase();
+const getTypeName = (value = "") => String(value?.name ?? value ?? "").trim();
 
 const getDrawFrameUniqueId = (sequence, type = "") => {
   const config = getDrawFrameEntryConfig(type);
@@ -729,7 +731,10 @@ function DrawFrame() {
   const { entryId, reserveEntryId } = useDatabaseEntryId({
     department: "Draw Frame",
     typeName: form.type,
-    config: getDrawFrameEntryConfig(form.type),
+    config: {
+      ...getDrawFrameEntryConfig(form.type),
+      scope: form.type === "PP - Finisher Drawing" ? "finisher" : form.type === "PP - Breaker Drawing" ? "breaker" : "",
+    },
   });
 
   useEffect(() => {
@@ -902,9 +907,16 @@ function DrawFrame() {
   }, [isUPercentEntry]);
 
   const handleFormChange = (field, value) => {
+    const normalizedValue = field === "type" ? getTypeName(value) : value;
+    const nextValue = field === "readingCount" ? Number(value) || 0 : normalizedValue;
     setForm((current) => ({
       ...current,
-      [field]: field === "readingCount" ? Number(value) || 0 : value,
+      [field]: nextValue,
+      ...(field === "type"
+        ? {
+            processType: nextValue === "PP - Finisher Drawing" ? "Finisher" : "Breaker",
+          }
+        : {}),
     }));
     setErrors((prev) => {
       if (!prev.header?.[field]) return prev;
@@ -912,6 +924,13 @@ function DrawFrame() {
       delete nextHeader[field];
       return { ...prev, header: nextHeader };
     });
+
+    if (field === "type") {
+      const nextRoute = getDrawFrameEntryConfig(nextValue)?.routePath;
+      if (nextRoute && nextRoute !== router.asPath.split("?")[0]) {
+        router.push(nextRoute);
+      }
+    }
   };
 
   const handleMachineChange = (index, field, value) => {

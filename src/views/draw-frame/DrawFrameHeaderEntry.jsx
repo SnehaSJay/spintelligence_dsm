@@ -25,6 +25,7 @@ import {
 import styles from "@/styles/draw-frame.module.css";
 import { sanitizeNumericInput } from "@/utils/inputValidation";
 import { createThresholdViolationTickets } from "@/utils/thresholdTicketing";
+import { normalizeProcessParameterId } from "@/utils/processParameterId";
 
 const today = new Date().toISOString().split("T")[0];
 
@@ -85,8 +86,10 @@ const TYPE_CONFIG = {
       pressureBar: "",
     }),
     updateEntry: updateDrawFrameHeaderEntry,
-    buildPayload: (form) => ({
+    buildPayload: (form, entryId) => ({
+      entry_id: entryId || undefined,
       type: form.type,
+      entry_scope: "breaker",
       count_name: form.countName,
       consignee_name: form.consigneeName,
       creation_date: form.creationDate,
@@ -165,7 +168,9 @@ const TYPE_CONFIG = {
       scanningRollsSize: "",
     }),
     updateEntry: updateDrawFrameFinisherEntry,
-    buildPayload: (form) => ({
+    buildPayload: (form, entryId) => ({
+      entry_id: entryId || undefined,
+      entry_scope: "finisher",
       count_name: form.countName,
       consignee_name: form.consigneeName,
       creation_date: form.creationDate,
@@ -219,13 +224,17 @@ function normalizeBreakerEntries(payload) {
   const rows = Array.isArray(payload) ? payload : Array.isArray(payload?.data) ? payload.data : [];
   return rows.map((entry, index) => ({
     id: String(entry?.ins_id || entry?.id || index),
-    paramId: String(entry?.param_id || entry?.parameter_id || entry?.ins_id || entry?.id || "-"),
+    paramId: normalizeProcessParameterId(
+      entry?.entry_id || entry?.process_parameter_id || entry?.param_id || entry?.parameter_id || entry?.ins_id || entry?.id
+    ) || String(entry?.entry_id || entry?.process_parameter_id || entry?.param_id || entry?.parameter_id || entry?.ins_id || entry?.id || "-").trim(),
     countName: entry?.count_name || "",
     consigneeName: entry?.consignee_name || "",
     creationDate: entry?.creation_date || "",
     data: {
       versionId: String(entry?.ins_id || entry?.id || index),
-      paramId: String(entry?.param_id || entry?.parameter_id || entry?.ins_id || entry?.id || ""),
+      paramId: normalizeProcessParameterId(
+        entry?.entry_id || entry?.process_parameter_id || entry?.param_id || entry?.parameter_id || entry?.ins_id || entry?.id
+      ) || String(entry?.entry_id || entry?.process_parameter_id || entry?.param_id || entry?.parameter_id || entry?.ins_id || entry?.id || "").trim(),
       type: "PP - Breaker Drawing",
       countName: entry?.count_name || "",
       consigneeName: entry?.consignee_name || "",
@@ -260,13 +269,17 @@ function normalizeFinisherEntries(payload) {
   const rows = Array.isArray(payload) ? payload : Array.isArray(payload?.data) ? payload.data : [];
   return rows.map((entry, index) => ({
     id: String(entry?.id || index),
-    paramId: String(entry?.param_id || entry?.id || "-"),
+    paramId: normalizeProcessParameterId(
+      entry?.entry_id || entry?.process_parameter_id || entry?.param_id || entry?.id
+    ) || String(entry?.entry_id || entry?.process_parameter_id || entry?.param_id || entry?.id || "-").trim(),
     countName: entry?.count_name || "",
     consigneeName: entry?.consignee_name || "",
     creationDate: entry?.creation_date || "",
     data: {
       versionId: String(entry?.id || index),
-      paramId: String(entry?.param_id || entry?.id || ""),
+      paramId: normalizeProcessParameterId(
+        entry?.entry_id || entry?.process_parameter_id || entry?.param_id || entry?.id
+      ) || String(entry?.entry_id || entry?.process_parameter_id || entry?.param_id || entry?.id || "").trim(),
       type: "PP - Finisher Drawing",
       countName: entry?.count_name || "",
       consigneeName: entry?.consignee_name || "",
@@ -312,12 +325,24 @@ function isEntryComplete(entry) {
   return Array.isArray(entry?.details) && entry.details.some((detail) => String(detail?.value ?? "").trim());
 }
 
+function extractEntrySequence(value) {
+  const normalized = String(value ?? "").trim();
+  if (!normalized) return 0;
+  const match = normalized.match(/(\d+)(?!.*\d)/);
+  return match ? Number(match[1]) || 0 : 0;
+}
+
 function getEntrySortValue(entry) {
-  const dateValue = entry?.creationDate ? new Date(entry.creationDate).getTime() : 0;
+  const dateValue = entry?.creationDate ? new Date(`${String(entry.creationDate).split("T")[0]}T00:00:00`).getTime() : 0;
   if (Number.isFinite(dateValue) && dateValue > 0) return dateValue;
 
-  const numericId = Number(entry?.id);
-  return Number.isFinite(numericId) ? numericId : 0;
+  const paramSequence = extractEntrySequence(entry?.paramId);
+  if (paramSequence > 0) return paramSequence;
+
+  const idSequence = extractEntrySequence(entry?.id);
+  if (idSequence > 0) return idSequence;
+
+  return 0;
 }
 
 function DrawFrameHeaderEntry({ entryId = "", typeOptions, selectedType, onTypeChange }) {
@@ -494,7 +519,7 @@ function DrawFrameHeaderEntry({ entryId = "", typeOptions, selectedType, onTypeC
   const handleSubmit = async () => {
     try {
       setIsSubmitting(true);
-      const payload = activeConfig.buildPayload(form);
+      const payload = activeConfig.buildPayload(form, entryId);
       const selectedExistingEntry = recentEntries.find(
         (entry) => String(entry.id) === String(form.versionId)
       );
@@ -539,7 +564,7 @@ function DrawFrameHeaderEntry({ entryId = "", typeOptions, selectedType, onTypeC
   };
 
   const handleEntrySelect = (entry) => {
-    setForm({ ...entry.data, versionId: entry.id });
+    setForm({ ...activeConfig.createForm(activeType), ...entry.data, versionId: entry.id });
     setErrors({});
     setFormMessage("");
   };
@@ -585,7 +610,7 @@ function DrawFrameHeaderEntry({ entryId = "", typeOptions, selectedType, onTypeC
         <div key={field.key} className={styles.field}>
           <label className={styles.label}>{field.label}</label>
           <SearchableSelect
-            value={form.countName}
+            value={form.countName || ""}
             onChange={(value) => handleFieldChange(field.key, value)}
             className={`${styles.input} ${styles.headerEntryControl} ${
               errors.countName ? styles.inputError : ""
@@ -603,7 +628,7 @@ function DrawFrameHeaderEntry({ entryId = "", typeOptions, selectedType, onTypeC
         <div key={field.key} className={styles.field}>
           <label className={styles.label}>{field.label}</label>
           <SearchableSelect
-            value={form.consigneeName}
+            value={form.consigneeName || ""}
             onChange={(value) => handleFieldChange(field.key, value)}
             className={`${styles.input} ${styles.headerEntryControl} ${
               errors.consigneeName ? styles.inputError : ""
@@ -641,7 +666,7 @@ function DrawFrameHeaderEntry({ entryId = "", typeOptions, selectedType, onTypeC
         <label className={styles.label}>{field.label}</label>
         <input
           type="text"
-          value={form[field.key]}
+          value={form[field.key] || ""}
           onChange={(event) => handleFieldChange(field.key, event.target.value)}
           className={controlClass}
         />

@@ -7,10 +7,10 @@ import {
   fetchAutoconerConsigneeMaster,
   fetchAutoconerQ2Entries,
   submitAutoconerQ2Entry,
-  updateAutoconerQ2Entry,
 } from "@/apis/autoconer";
 import SearchableSelect from "@/components/SearchableSelect";
 import useAutoconerCountOptions from "@/hooks/useAutoconerCountOptions";
+import useDatabaseEntryId from "@/hooks/useDatabaseEntryId";
 import {
   buildProcessParameterOptions,
   PROCESS_PARAMETER_CONSIGNEE_OPTIONS,
@@ -206,6 +206,7 @@ const isVersionComplete = (version) =>
 
 const buildPayload = (form, entryId = "") => ({
   entry_id: entryId || undefined,
+  scope: "q2",
   count_name: form.countName,
   consignee_name: form.consigneeName,
   creation_date: form.creationDate,
@@ -273,6 +274,16 @@ const AutoconerQ2 = forwardRef(function AutoconerQ2(
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { countOptions: masterCountOptions, countOptionsError, loadingCountOptions } = useAutoconerCountOptions("q2");
   const [masterConsigneeOptions, setMasterConsigneeOptions] = useState([]);
+  const { entryId: reservedEntryId, reserveEntryId, loading: entryIdLoading } = useDatabaseEntryId({
+    department: "Autoconer",
+    typeName: selectedType,
+    config: {
+      prefix: "PP",
+      width: 4,
+      routePath: "/autoconer/q2",
+    },
+  });
+  const displayEntryId = reservedEntryId || (entryIdLoading ? "Generating next ID..." : "Generating next ID...");
 
   const countOptions = useMemo(
     () =>
@@ -389,7 +400,12 @@ const AutoconerQ2 = forwardRef(function AutoconerQ2(
   };
 
   const handleVersionSelect = (version) => {
-    setForm({ ...version.data, versionId: version.id, type: selectedType });
+    setForm({
+      ...createDefaultForm(selectedType),
+      ...version.data,
+      versionId: version.id,
+      type: selectedType,
+    });
     setErrors({});
     setSubmitError("");
   };
@@ -420,7 +436,7 @@ const AutoconerQ2 = forwardRef(function AutoconerQ2(
     { label: "Type", value: selectedType || "-" },
     { label: "Count Name", value: form.countName || "-" },
     { label: "Consignee Name", value: form.consigneeName || "-" },
-    { label: "Entry ID", value: entryId || "-" },
+    { label: "Entry ID", value: reservedEntryId || "-" },
     ...fieldDefs.map((field) => ({
       label: field.label,
       value: form[field.key] || "-",
@@ -433,17 +449,11 @@ const AutoconerQ2 = forwardRef(function AutoconerQ2(
     try {
       setIsSubmitting(true);
       setSubmitError("");
-      const payload = buildPayload(form, entryId);
-      const selectedExistingVersion = versions.find((item) => item.id === form.versionId);
-
-      if (selectedExistingVersion) {
-        const { entry_id, ...updatePayload } = payload;
-        await updateAutoconerQ2Entry(selectedExistingVersion.id, updatePayload);
-      } else {
-        await submitAutoconerQ2Entry(payload);
-      }
+      const payload = buildPayload(form, reservedEntryId);
+      await submitAutoconerQ2Entry(payload);
 
       await loadVersions();
+      await reserveEntryId();
       return true;
     } catch (error) {
       const errorMessage = String(error?.message || "");
@@ -554,20 +564,24 @@ const AutoconerQ2 = forwardRef(function AutoconerQ2(
               onChange={(event) => onTypeChange?.(event.target.value)}
             >
               <option value="">Select Type</option>
-              {types.map((item) => (
-                <option key={item.id} value={item.name}>
-                  {item.displayName ?? item.name}
-                </option>
-              ))}
+              {types.map((item) => {
+                const value = typeof item === "string" ? item : String(item?.name ?? "").trim();
+                const label = typeof item === "string" ? item : String(item?.displayName ?? item?.name ?? "").trim();
+                return (
+                  <option key={value} value={value}>
+                    {label || value}
+                  </option>
+                );
+              })}
             </select>
           </div>
 
           <div className={styles.fieldGroup}>
             <label>Count Name</label>
-            <SearchableSelect
-              className={`${styles.field}${errors.countName ? ` ${styles.errorField}` : ""}`}
-              value={form.countName}
-              onChange={(value) => handleFieldChange("countName", value)}
+              <SearchableSelect
+                className={`${styles.field}${errors.countName ? ` ${styles.errorField}` : ""}`}
+                value={form.countName || ""}
+                onChange={(value) => handleFieldChange("countName", value)}
               options={countOptions}
               placeholder={
                 loadingCountOptions
@@ -582,10 +596,10 @@ const AutoconerQ2 = forwardRef(function AutoconerQ2(
 
           <div className={styles.fieldGroup}>
             <label>Consignee Name</label>
-            <SearchableSelect
-              className={`${styles.field}${errors.consigneeName ? ` ${styles.errorField}` : ""}`}
-              value={form.consigneeName}
-              onChange={(value) => handleFieldChange("consigneeName", value)}
+              <SearchableSelect
+                className={`${styles.field}${errors.consigneeName ? ` ${styles.errorField}` : ""}`}
+                value={form.consigneeName || ""}
+                onChange={(value) => handleFieldChange("consigneeName", value)}
               options={consigneeOptions}
               placeholder="Search or enter consignee name"
               ariaLabel="Consignee Name"
@@ -597,7 +611,7 @@ const AutoconerQ2 = forwardRef(function AutoconerQ2(
             <input
               type="text"
               className={styles.field}
-              value={entryId}
+              value={displayEntryId}
               readOnly
               disabled
             />
@@ -611,12 +625,12 @@ const AutoconerQ2 = forwardRef(function AutoconerQ2(
               className={`${styles.fieldGroup}${field.wide ? ` ${styles.wideField}` : ""}`}
             >
               <label>{field.label}</label>
-              <input
-                type="text"
-                className={`${styles.field}${errors[field.key] ? ` ${styles.errorField}` : ""}`}
-                value={form[field.key]}
-                onChange={(event) => handleFieldChange(field.key, event.target.value)}
-              />
+                <input
+                  type="text"
+                  className={`${styles.field}${errors[field.key] ? ` ${styles.errorField}` : ""}`}
+                  value={form[field.key] || ""}
+                  onChange={(event) => handleFieldChange(field.key, event.target.value)}
+                />
             </div>
           ))}
         </div>
