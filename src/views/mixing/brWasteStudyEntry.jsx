@@ -5,7 +5,7 @@ import SearchableSelect from '@/components/SearchableSelect';
 import useBlowroomMasterVarieties from '@/hooks/useBlowroomMasterVarieties';
 import useBlowroomMasterWasteTypes from '@/hooks/useBlowroomMasterWasteTypes';
 import { saveBlowroomBrWaste, resetState } from '@/store/slices/blowroomSlice';
-import { fetchBlowroomBrWasteApi, saveBlowroomMasterWasteType } from '@/apis/blowroom';
+import { saveBlowroomMasterWasteType } from '@/apis/blowroom';
 import { sanitizeIntegerInput, sanitizeNumericInput } from '@/utils/inputValidation';
 import styles from '@/styles/brWasteStudyEntry.module.css';
 
@@ -45,7 +45,7 @@ const emptyType1Row = () =>
     TYPE_1_COLUMNS.reduce((acc, col) => ({ ...acc, [col.key]: "" }), {});
 const emptyWasteKgRow = () => ({ wasteType: '', wasteKgValue: '', wasteKgPercent: '' });
 
-const initialForm = { brWasteId: '', variety: '', cardingProduction: '', studyType: '' };
+const initialForm = { variety: '', cardingProduction: '', studyType: '' };
 const DEFAULT_BLOWROOM_STATE = { success: false };
 const FORM_NUMERIC_FIELDS = new Set(['cardingProduction']);
 const TYPE_1_MAX_ENTRIES = 10;
@@ -116,6 +116,9 @@ const buildBrWastePayload = ({ date, entryId, lotNo, formData, type1Rows, type2R
             delivery_speed: Number(row.deliverySpeed) || null,
             wing_setting_1: Number(row.wingSettling1) || null,
             wing_setting_2: Number(row.wingSettling2) || null,
+            first_lickerin_speed: Number(row.firstLickerinSpeed) || null,
+            second_lickerin_speed: Number(row.secondLickerinSpeed) || null,
+            third_lickerin_speed: Number(row.thirdLickerinSpeed) || null,
             mc_no: row.mcNo || null,
             mc_production: Number(row.mcProduction) || null,
         };
@@ -130,9 +133,9 @@ const buildBrWastePayload = ({ date, entryId, lotNo, formData, type1Rows, type2R
 
     return {
         type: entryTypeLabel,
-        entry_id: entryId || formData.brWasteId || null,
+        entry_id: entryId || null,
         lot_no: lotNo || null,
-        waste_study_id: entryId || formData.brWasteId || null,
+        waste_study_id: entryId || null,
         date,
         variety: formData.variety || null,
         study_type: formData.studyType,
@@ -154,24 +157,15 @@ const BrWasteStudyEntry = forwardRef(function BrWasteStudyEntry({
     lotNo,
     onLotNoChange,
     saveEntryApi = null,
-    fetchEntriesApi = null,
     fetchMachineOptionsApi = null,
     entryTypeLabel = "BR Waste Study Entry",
     useBlowroomRedux = true,
     showEntryId = true,
-    hideSavedEntryRow = false,
-    onSavedEntriesChange = null,
-    onSavedEntriesLoadingChange = null,
-    onSavedEntriesErrorChange = null,
 }, ref) {
     const dispatch = useDispatch();
     const { success } = useSelector((state) => state.blowroom ?? DEFAULT_BLOWROOM_STATE);
     const [formData, setFormData] = useState(initialForm);
     const [errors, setErrors] = useState({});
-    const [savedEntries, setSavedEntries] = useState([]);
-    const [loadingSavedEntries, setLoadingSavedEntries] = useState(false);
-    const [savedEntriesError, setSavedEntriesError] = useState("");
-    const [selectedSavedEntryId, setSelectedSavedEntryId] = useState("");
     const [localSubmitTick, setLocalSubmitTick] = useState(0);
     const [machineOptions, setMachineOptions] = useState([]);
     const { varietyOptions, varietyOptionsError, loadingVarietyOptions } = useBlowroomMasterVarieties();
@@ -201,30 +195,7 @@ const BrWasteStudyEntry = forwardRef(function BrWasteStudyEntry({
 
     const [overallWaste, setOverallWaste] = useState('');
     const [remarks, setRemarks] = useState('');
-    const effectiveFetchEntriesApi = fetchEntriesApi || fetchBlowroomBrWasteApi;
     const { studyType } = formData;
-
-    const loadSavedEntries = async () => {
-        setLoadingSavedEntries(true);
-        onSavedEntriesLoadingChange?.(true);
-        try {
-            const response = await effectiveFetchEntriesApi({ page: 1, limit: 50 });
-            const rows = Array.isArray(response?.data) ? response.data : [];
-            setSavedEntries(rows);
-            setSavedEntriesError("");
-            onSavedEntriesChange?.(rows);
-            onSavedEntriesErrorChange?.("");
-        } catch (error) {
-            setSavedEntries([]);
-            const message = error.message || "Unable to load saved entries.";
-            setSavedEntriesError(message);
-            onSavedEntriesChange?.([]);
-            onSavedEntriesErrorChange?.(message);
-        } finally {
-            setLoadingSavedEntries(false);
-            onSavedEntriesLoadingChange?.(false);
-        }
-    };
 
     const mapEntryToForm = (entry) => {
         const typeRows = Array.isArray(entry?.type_rows) ? entry.type_rows : [];
@@ -232,7 +203,6 @@ const BrWasteStudyEntry = forwardRef(function BrWasteStudyEntry({
         const studyType = entry?.study_type || "";
 
         setFormData({
-            brWasteId: entryId || entry?.waste_study_id || entry?.entry_id || "",
             variety: entry?.variety || "",
             cardingProduction: entry?.carding_production_kg == null ? "" : String(entry.carding_production_kg),
             studyType,
@@ -506,10 +476,6 @@ const BrWasteStudyEntry = forwardRef(function BrWasteStudyEntry({
     };
 
     useEffect(() => {
-        loadSavedEntries();
-    }, []);
-
-    useEffect(() => {
         const loadMachines = async () => {
             if (!fetchMachineOptionsApi) return;
             try {
@@ -567,7 +533,6 @@ const BrWasteStudyEntry = forwardRef(function BrWasteStudyEntry({
     useEffect(() => {
         const shouldReset = useBlowroomRedux ? success : localSubmitTick > 0;
         if (shouldReset) {
-            loadSavedEntries();
             setFormData(initialForm);
             setType1Rows([emptyType1Row()]);
             setType2Rows([emptyType2Row()]);
@@ -575,7 +540,6 @@ const BrWasteStudyEntry = forwardRef(function BrWasteStudyEntry({
             setWasteKgRows([emptyWasteKgRow()]);
             setOverallWaste('');
             setRemarks('');
-            setSelectedSavedEntryId("");
             setWasteTypeSaveStatus({});
             wasteTypeAttemptRef.current = {};
         }
@@ -618,7 +582,6 @@ const BrWasteStudyEntry = forwardRef(function BrWasteStudyEntry({
         setWasteKgRows([emptyWasteKgRow()]);
         setOverallWaste('');
         setRemarks('');
-        setSelectedSavedEntryId("");
         setWasteTypeSaveStatus({});
         wasteTypeAttemptRef.current = {};
         if (useBlowroomRedux) {
@@ -632,7 +595,6 @@ const BrWasteStudyEntry = forwardRef(function BrWasteStudyEntry({
         ["variety","cardingProduction","studyType"].forEach((key)=>{
             if (String(formData[key] || "").trim() === "") nextErrors[key]=true;
         });
-        if (!String(formData.brWasteId || entryId || "").trim()) nextErrors.brWasteId = true;
         if (studyType === "Type 1") {
             type1Rows.forEach((row, idx)=>{
                 TYPE_1_COLUMNS.forEach((col) => {
@@ -661,7 +623,7 @@ const BrWasteStudyEntry = forwardRef(function BrWasteStudyEntry({
     const getPreviewData = () => {
         const header = [
             { label: "Date", value: date },
-            ...(showEntryId ? [{ label: "BR Waste ID", value: formData.brWasteId || entryId }] : []),
+            ...(showEntryId ? [{ label: "BR Waste ID", value: entryId }] : []),
             { label: "Variety", value: formData.variety },
             { label: "Carding Production (KGs)", value: formData.cardingProduction },
             { label: "Study Type", value: formData.studyType },
@@ -693,59 +655,10 @@ const BrWasteStudyEntry = forwardRef(function BrWasteStudyEntry({
         clear: handleClear,
         validate,
         getPreviewData,
-        loadSavedEntries,
-        selectSavedEntry: (id) => {
-            setSelectedSavedEntryId(id);
-            const selected = savedEntries.find((item) => String(item.id) === String(id));
-            if (selected) {
-                mapEntryToForm(selected);
-            }
-        },
     }));
 
     return (
         <>
-            {hideSavedEntryRow ? null : (
-                <div className={styles['mixx-row']}>
-                    <div className={styles['mixx-group']}>
-                        <label>Load Saved Entry</label>
-                        <select
-                            className={styles['mixx-input']}
-                            value={selectedSavedEntryId}
-                            onChange={(e) => {
-                                const id = e.target.value;
-                                setSelectedSavedEntryId(id);
-                                const selected = savedEntries.find((item) => String(item.id) === String(id));
-                                if (selected) {
-                                    mapEntryToForm(selected);
-                                }
-                            }}
-                            disabled={loadingSavedEntries || !savedEntries.length}
-                        >
-                            <option value="">
-                                {loadingSavedEntries ? "Loading..." : savedEntries.length ? "Select Saved Entry" : "No Saved Entries"}
-                            </option>
-                            {savedEntries.map((entry) => (
-                                <option key={entry.id} value={entry.id}>
-                                    {(entry.entry_id || entry.waste_study_id || `ID-${entry.id}`)} | {entry.study_type || "-"} | {entry.date || "-"}
-                                </option>
-                            ))}
-                        </select>
-                        {savedEntriesError ? <div className={styles['mixx-help-error']}>{savedEntriesError}</div> : null}
-                    </div>
-
-                    <div className={styles['mixx-group']}>
-                        <label>Entry ID</label>
-                        <input
-                            className={`${styles['mixx-input']} ${errors.brWasteId ? styles['mixx-error'] : ''}`}
-                            placeholder="Enter Entry ID"
-                            value={formData.brWasteId || entryId || ""}
-                            onChange={e => handleChange('brWasteId', e.target.value)}
-                        />
-                    </div>
-                </div>
-            )}
-
             <div className={styles['mixx-row']}>
                 <div className={styles['mixx-group']}>
                     <label>Entry Date</label>
