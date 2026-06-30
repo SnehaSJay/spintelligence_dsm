@@ -9,6 +9,13 @@ import { sanitizeNumericInput } from "@/utils/inputValidation";
 import styles from "./ribbonLapCVDataEntry.module.css";
 
 const defaultSampleCount = 5;
+const STATIC_RIBBON_LAP_MACHINE_OPTIONS = [
+    "Lap former",
+    "Rippon Lap",
+    "Blow Room - 1",
+    "Blow Room - 2",
+    "Blow Room - 3",
+];
 
 const createEmptySamples = (count) => Array.from({ length: count }, () => "");
 
@@ -39,7 +46,6 @@ const RibbonLapCVDataEntry = forwardRef(function RibbonLapCVDataEntry(
     const [lapWeight, setLapWeight] = useState("");
     const [machine, setMachine] = useState("");
     const [variety, setVariety] = useState("");
-    const [lapType, setLapType] = useState("");
     const [date, setDate] = useState("");
     const [stats, setStats] = useState(defaultStats);
     const [formMessage, setFormMessage] = useState("");
@@ -64,13 +70,20 @@ const RibbonLapCVDataEntry = forwardRef(function RibbonLapCVDataEntry(
                 if (active && varieties.length) setVarietyOptions(varieties);
                 if (active && machines.length) {
                     setMachineOptions(
-                        machines.map((item) => item.mc_name || item.mc_no).filter(Boolean)
+                        Array.from(
+                            new Set([
+                                ...machines.map((item) => item.mc_name || item.mc_no).filter(Boolean),
+                                ...STATIC_RIBBON_LAP_MACHINE_OPTIONS,
+                            ])
+                        )
                     );
+                } else if (active) {
+                    setMachineOptions(STATIC_RIBBON_LAP_MACHINE_OPTIONS);
                 }
             } catch (_error) {
                 if (active) {
                     setVarietyOptions(["Cotton", "Polyester", "PC Blend"]);
-                    setMachineOptions([]);
+                    setMachineOptions(STATIC_RIBBON_LAP_MACHINE_OPTIONS);
                 }
             }
         })();
@@ -108,7 +121,6 @@ const RibbonLapCVDataEntry = forwardRef(function RibbonLapCVDataEntry(
         setLapWeight("");
         setMachine("");
         setVariety("");
-        setLapType("");
         setDate(new Date().toISOString().split("T")[0]);
         setStats(defaultStats);
         setFormMessage("");
@@ -185,7 +197,7 @@ const RibbonLapCVDataEntry = forwardRef(function RibbonLapCVDataEntry(
             record_date: date,
             machine_name: machine,
             variety,
-            type: lapType,
+            type: "Ribbon Lap",
             lap_weight: lapWeight ? Number(lapWeight) : null,
             samples: samples
                 .map((value) => parseFloat(value))
@@ -203,11 +215,9 @@ const RibbonLapCVDataEntry = forwardRef(function RibbonLapCVDataEntry(
         if (!machine) nextErrors.machine = true;
         if (!variety) nextErrors.variety = true;
         if (isCVEntry) {
-            if (!lapType || !lapWeight) {
-                if (!lapType) nextErrors.lapType = true;
-                if (!lapWeight) nextErrors.lapWeight = true;
+            if (!lapWeight) {
+                nextErrors.lapWeight = true;
             }
-
             if (!stats.avg) {
                 nextErrors.stats = true;
             }
@@ -252,7 +262,6 @@ const RibbonLapCVDataEntry = forwardRef(function RibbonLapCVDataEntry(
             { label: "Variety", value: variety },
         ];
 
-        if (lapType) base.push({ label: "Lap Type", value: lapType });
         if (lapWeight) base.push({ label: "Lap Weight", value: lapWeight });
 
         const sampleItems = samples
@@ -382,27 +391,6 @@ const RibbonLapCVDataEntry = forwardRef(function RibbonLapCVDataEntry(
                                 />
                             </div>
 
-                            <div className={styles["cb-form-group"]}>
-                                <label>Type</label>
-                                <select
-                                    className={errors.lapType ? styles["input-error"] : ""}
-                                    value={lapType}
-                                    onChange={(e) => {
-                                        setLapType(e.target.value);
-                                        setErrors((prev) => {
-                                            if (!prev.lapType) return prev;
-                                            const next = { ...prev };
-                                            delete next.lapType;
-                                            return next;
-                                        });
-                                    }}
-                                >
-                                    <option value="">Select Type</option>
-                                    <option value="Ribbon Lap">Ribbon Lap</option>
-                                    <option value="Lap Former">Lap Former</option>
-                                    <option value="Blow Room">Blow Room</option>
-                                </select>
-                            </div>
                         </div>
 
                         <div className={styles["cb-row"]}>

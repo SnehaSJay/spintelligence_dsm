@@ -33,7 +33,6 @@ function CardThickPlaceEntry({
         error: null,
     });
 
-    const [idNo, setIdNo] = useState("3");
     const [date, setDate] = useState("");
     const [time, setTime] = useState("");
     const [machines, setMachines] = useState(defaultMachines);
@@ -110,7 +109,6 @@ function CardThickPlaceEntry({
     }, [dispatch]);
 
     const resetFormFields = () => {
-        setIdNo("3");
         stampNow();
         setMachineValues(createMachineValues(machines));
         setFormMessage("");
@@ -154,7 +152,6 @@ function CardThickPlaceEntry({
         const nextErrors = {};
 
         if (!selectedType) nextErrors.selectedType = true;
-        if (!String(idNo || "").trim()) nextErrors.idNo = true;
         machines.forEach((machine) => {
             if (String(machineValues[machine]?.cv1 || "").trim() === "") {
                 nextErrors[`${machine}-cv1`] = true;
@@ -192,7 +189,7 @@ function CardThickPlaceEntry({
         try {
             await dispatch(
                 submitCardingCardThickPlace({
-                    entry_id: entryId || idNo,
+                    entry_id: entryId || "",
                     entry_date: date,
                     entry_time: time,
                     entries,
@@ -212,7 +209,6 @@ function CardThickPlaceEntry({
 
     const previewItems = [
         { label: "Type", value: selectedType },
-        { label: "ID No.", value: idNo },
         { label: "Entry ID", value: entryId || "-" },
         { label: "Time", value: time },
         ...machines.flatMap((machine) => ([
@@ -243,24 +239,6 @@ function CardThickPlaceEntry({
                             </select>
                         </div>
 
-                        {showForm && (
-                            <div className={styles["card-form-group"]}>
-                                <label>ID No.</label>
-                                <input
-                                    value={idNo}
-                                    onChange={(e) => {
-                                        setIdNo(e.target.value);
-                                        setErrors((current) => {
-                                            const next = { ...current };
-                                            delete next.idNo;
-                                            return next;
-                                        });
-                                    }}
-                                    onWheel={(e) => e.currentTarget.blur()}
-                                    className={errors.idNo ? styles["field-error"] : ""}
-                                />
-                            </div>
-                        )}
                     </div>
                 )}
 
