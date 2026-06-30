@@ -10,22 +10,14 @@ import { clearCardingState, getCardingUqcEntries, submitCardingUqc } from "@/sto
 export const STATIC_SHIFT_OPTIONS = [
   { value: "General", label: "General" },
   { value: "Day", label: "Day" },
-  { value: "Halfnight", label: "Halfnight" },
-  { value: "Fullnight", label: "Fullnight" },
-];
-
-export const STATIC_DEPARTMENT_OPTIONS = [
-  { dept_code: "BR", dept_name: "Br drawing" },
-  { dept_code: "FR", dept_name: "Fr drawing" },
-  { dept_code: "CARDING", dept_name: "CARDING" },
-  { dept_code: "SX", dept_name: "Simplx" },
-  { dept_code: "CB", dept_name: "Comber" },
+  { value: "Half Night", label: "Half Night" },
+  { value: "Full Night", label: "Full Night" },
 ];
 
 export const STATIC_MC_NO_OPTIONS = [
   "CDG-01","CDG-02","CDG-03","CDG-04","CDG-05","CDG-06","CDG-07","CDG-08","CDG-09","CDG-10",
   "CDG-11","CDG-12","CDG-13","CDG-14","CDG-15","CDG-16","CDG-17","CDG-18","CDG-19","CDG-20",
-  "CDG-21","CDG-22","CDG-23","CDG-24","CDG-25","CDG-26",
+  "CDG-21","CDG-22","CDG-23","CDG-24","CDG-25","CDG-26","CDG-27",
   "SMX-01","SMX-02","SMX-03","SMX-04","SMX-05","SMX-06","SMX-07","SMX-08","SMX-09","SMX-10","SMX-11","SMX-12","SMX-13",
   "CBR-01","CBR-02","CBR-03","CBR-04","CBR-05","CBR-06",
   "FR HSR1000-1","FR HSR1000-2","FR D40","FR D50-1","FR D50-2","FR D45-1","FR D45-2","FR D45-3","FR D45-4","FR LRSB 581-1","FR LRSB 581-2","FR LDF3","FR D55-1",
@@ -39,7 +31,6 @@ function UPercentDataEntry({ types, selectedType, onTypeChange, entryId = "" }) 
     date: new Date().toISOString().split("T")[0],
     shift: "",
     variety: "",
-    department: "",
     mc_no: "",
     u_percent: "",
     cvm: "",
@@ -51,7 +42,6 @@ function UPercentDataEntry({ types, selectedType, onTypeChange, entryId = "" }) 
   const [formMessage, setFormMessage] = useState("");
   const [isError, setIsError] = useState(false);
   const [varietyOptions, setVarietyOptions] = useState([]);
-  const [departmentOptions, setDepartmentOptions] = useState(STATIC_DEPARTMENT_OPTIONS);
   const [mcNoOptions, setMcNoOptions] = useState(STATIC_MC_NO_OPTIONS);
   const [shiftOptions] = useState(STATIC_SHIFT_OPTIONS);
 
@@ -85,7 +75,6 @@ function UPercentDataEntry({ types, selectedType, onTypeChange, entryId = "" }) 
       date: new Date().toISOString().split("T")[0],
       shift: "",
       variety: "",
-      department: "",
       mc_no: "",
       u_percent: "",
       cvm: "",
@@ -106,13 +95,11 @@ function UPercentDataEntry({ types, selectedType, onTypeChange, entryId = "" }) 
     let active = true;
     (async () => {
       try {
-        const dropdownOptions = await fetchCardingUqcMasterDropdown({ department_code: "CARDING" });
+        const dropdownOptions = await fetchCardingUqcMasterDropdown();
         if (!active) return;
         const masterVarieties = dropdownOptions.varieties?.map((row) => row.variety_name).filter(Boolean) || [];
-        const masterDepartments = dropdownOptions.departments || [];
         const masterMcNos = dropdownOptions.mcNos || [];
         setVarietyOptions(masterVarieties.length ? masterVarieties : await fetchCardingUqcMasterVarieties());
-        if (masterDepartments.length) setDepartmentOptions(masterDepartments);
         if (masterMcNos.length) setMcNoOptions(masterMcNos);
       } catch (_err) {
         if (active) {
@@ -175,7 +162,6 @@ function UPercentDataEntry({ types, selectedType, onTypeChange, entryId = "" }) 
         entry_date: form.date,
         shift: form.shift,
         variety: form.variety,
-        department: form.department,
         mc_no: form.mc_no,
         u_percent: form.u_percent,
         cvm: form.cvm,
@@ -236,18 +222,6 @@ function UPercentDataEntry({ types, selectedType, onTypeChange, entryId = "" }) 
               className={errors.variety ? styles.errorField : ""}
               options={varietyOptions}
               placeholder="-- Select Variety --"
-            />
-          </div>
-
-          <div>
-            <label>Department</label>
-            <SearchableSelect
-              value={form.department}
-              onChange={(value) => handleChange("department", value)}
-              className={errors.department ? styles.errorField : ""}
-              options={departmentOptions.map((item) => item.dept_name)}
-              placeholder="Select Department"
-              ariaLabel="Department"
             />
           </div>
 

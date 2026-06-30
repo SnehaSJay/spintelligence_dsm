@@ -319,11 +319,11 @@ const BlowRoomSync = forwardRef(function BlowRoomSync(
         </div>
 
         <div className={styles.group}>
-          <label>Total Time (MM:SS)</label>
+          <label>Total Time (HH:MM)</label>
           <input
             type="time"
-            step="1"
-            value={form.totalTime}
+            step="60"
+            value={form.totalTime ? form.totalTime.slice(0, 5) : ""}
             onChange={(e) => handleFormChange("totalTime", e.target.value)}
             className={errors.totalTime ? styles.errorField : undefined}
           />

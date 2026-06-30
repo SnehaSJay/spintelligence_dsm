@@ -45,7 +45,15 @@ const normalizeNumericValue = (value) => {
     return sanitizeNumericInput(cleaned, { precision: 10, scale: 3 });
 };
 
+const normalizeHankValue = (value) => {
+    const cleaned = String(value ?? "")
+        .replace(/,/g, "")
+        .match(/-?\d+(?:\.\d+)?/)?.[0] || "";
+    return sanitizeNumericInput(cleaned, { precision: 10, scale: 4 });
+};
+
 const toNumber = (value) => Number(normalizeNumericValue(value));
+const toHankNumber = (value) => Number(normalizeHankValue(value));
 
 const isValidNumericValue = (value) => {
     const normalized = normalizeNumericValue(value);
@@ -68,6 +76,25 @@ const calculateStats = (values) => {
         range: range.toFixed(2),
         sd: sd.toFixed(2),
         cv: cv.toFixed(2),
+    };
+};
+
+const calculateHankStats = (values) => {
+    if (!values.length) return emptyStats;
+    const avg = values.reduce((sum, v) => sum + v, 0) / values.length;
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const range = max - min;
+    const variance = values.reduce((sum, v) => sum + Math.pow(v - avg, 2), 0) / values.length;
+    const sd = Math.sqrt(variance);
+    const cv = avg === 0 ? 0 : (sd / avg) * 100;
+    return {
+        avg: avg.toFixed(4),
+        max: max.toFixed(4),
+        min: min.toFixed(4),
+        range: range.toFixed(4),
+        sd: sd.toFixed(4),
+        cv: cv.toFixed(4),
     };
 };
 
@@ -205,13 +232,13 @@ function BetweenWithinCardEntry({ types, selectedType, onTypeChange, onInspectio
         [rows]
     );
     const hanks = useMemo(
-        () => rows.map((row) => toNumber(row.hank)).filter(Number.isFinite),
+        () => rows.map((row) => toHankNumber(row.hank)).filter(Number.isFinite),
         [rows]
     );
 
     useEffect(() => {
         setSampleWeightStats(sampleWeights.length ? calculateStats(sampleWeights) : emptyStats);
-        setHankStats(hanks.length ? calculateStats(hanks) : emptyStats);
+        setHankStats(hanks.length ? calculateHankStats(hanks) : emptyStats);
     }, [sampleWeights, hanks]);
 
     const handleGenerate = () => {
@@ -232,7 +259,9 @@ function BetweenWithinCardEntry({ types, selectedType, onTypeChange, onInspectio
     };
 
     const handleRowChange = (index, field, value) => {
-        const nextValue = sanitizeNumericInput(value, { precision: 10, scale: 3 });
+        const nextValue = field === "hank"
+            ? normalizeHankValue(value)
+            : sanitizeNumericInput(value, { precision: 10, scale: 3 });
         setRows((currentRows) => {
             const next = [...currentRows];
             next[index] = { ...next[index], [field]: nextValue };
@@ -298,7 +327,7 @@ function BetweenWithinCardEntry({ types, selectedType, onTypeChange, onInspectio
             inspection_date: inspectionDate,
             inspection_time: inspectionTime,
             sample_weights: activeRows.map((row) => toNumber(row.sampleWeight)),
-            hanks: activeRows.map((row) => toNumber(row.hank)),
+            hanks: activeRows.map((row) => toHankNumber(row.hank)),
         };
 
         setFormMessage("");
@@ -328,7 +357,7 @@ function BetweenWithinCardEntry({ types, selectedType, onTypeChange, onInspectio
         { label: "Number of Entries", value: entryCount },
         ...rows.slice(0, Number(entryCount) || rows.length).flatMap((row, index) => ([
             { label: `Row ${index + 1} Sample Weight`, value: row.sampleWeight },
-            { label: `Row ${index + 1} Hank`, value: row.hank },
+            { label: `Row ${index + 1} Hank`, value: normalizeHankValue(row.hank) },
         ])),
     ];
 
@@ -441,8 +470,8 @@ function BetweenWithinCardEntry({ types, selectedType, onTypeChange, onInspectio
                                 <label>Hank</label>
                                 <input
                                     type="number"
-                                    step="0.001"
-                                    value={row.hank}
+                                    step="0.0001"
+                                    value={normalizeHankValue(row.hank)}
                                     onChange={(e) => handleRowChange(index, "hank", e.target.value)}
                                     onWheel={(e) => e.currentTarget.blur()}
                                     className={errors[`row-${index}-hank`] ? "bwc-error-field" : ""}

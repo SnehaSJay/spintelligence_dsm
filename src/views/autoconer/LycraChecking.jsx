@@ -261,11 +261,22 @@ function LycraChecking({ types, selectedType, onTypeChange, onRegisterActions, e
         <div className={styles.field}>
           <label>Type</label>
           <select value={selectedType} onChange={(e) => onTypeChange(e.target.value)} style={errorStyle(errors.type)}>
-            {types.map((type) => (
-              <option key={type.id} value={type.name}>
-                {type.displayName ?? type.name}
-              </option>
-            ))}
+            {types.map((type) => {
+              const optionValue =
+                typeof type === "string"
+                  ? type
+                  : String(type?.name ?? type?.displayName ?? type?.value ?? type?.id ?? "").trim();
+              const optionLabel =
+                typeof type === "string"
+                  ? type
+                  : String(type?.displayName ?? type?.name ?? type?.label ?? type?.value ?? type?.id ?? "").trim();
+
+              return (
+                <option key={optionValue || optionLabel} value={optionValue}>
+                  {optionLabel || optionValue}
+                </option>
+              );
+            })}
           </select>
         </div>
 
@@ -288,7 +299,7 @@ function LycraChecking({ types, selectedType, onTypeChange, onRegisterActions, e
               setCountName(selected?.label ?? value);
               setCountCode(selected?.code ?? "");
             }}
-            options={countDropdownOptions.map((option) => option.label)}
+            options={countDropdownOptions}
             className={styles.select}
           />
         </div>

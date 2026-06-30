@@ -1,6 +1,10 @@
 const SCREEN_TYPE_MAP = {
+  cots: "Draw Frame Cots Data Entry",
+  uqc: "U% Data Entry",
+  "a-percent": "A%",
   header: "PP - Breaker Drawing",
   finisher: "PP - Finisher Drawing",
+  "wheel-change": "Wheel Change",
 };
 
 export async function getServerSideProps(context) {

@@ -10,7 +10,7 @@ import { fetchCardingDfkPressure, submitCardingDfkPressure } from "@/store/slice
 import styles from "./cardingdfk.module.css";
 
 const DFK_TYPE = "Card DFK Pressure Checking";
-const MACHINE_NAMES = Array.from({ length: 26 }, (_, index) => `CDG-${String(index + 1).padStart(2, "0")}`);
+const MACHINE_NAMES = Array.from({ length: 27 }, (_, index) => `CDG-${String(index + 1).padStart(2, "0")}`);
 const TABLE_COLUMNS = [
   { key: "cw", label: "DFK" },
   { key: "ccd", label: "CCD" },
