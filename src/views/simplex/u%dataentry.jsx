@@ -10,7 +10,6 @@ const initialForm = () => ({
   date: new Date().toISOString().split("T")[0],
   shift: "",
   variety: "",
-  department: "",
   mc_no: "",
   u_percent: "",
   cvm: "",
@@ -21,7 +20,6 @@ const initialForm = () => ({
 
 const defaultFieldStyle = { backgroundColor: "#f1f5f9" };
 const SHIFT_OPTIONS = ["General", "Day", "Half Night", "Full Night"];
-const DEPARTMENT_OPTIONS = [{ dept_code: "", dept_name: "FR Drawing" }];
 const MC_NO_OPTIONS = [{ mc_no: "FR DSS-1", mc_name: "FR DSS-1", value: "FR DSS-1", label: "FR DSS-1", dept_code: "", dept_name: "" }];
 const VARIETY_OPTIONS = ["WPSF 0.90"];
 
@@ -37,7 +35,6 @@ const UPercentDataEntry = forwardRef(function UPercentDataEntry(
   const [errors, setErrors] = useState({});
   const [shiftOptions, setShiftOptions] = useState(SHIFT_OPTIONS);
   const [varietyOptions, setVarietyOptions] = useState(VARIETY_OPTIONS);
-  const [departmentOptions, setDepartmentOptions] = useState(DEPARTMENT_OPTIONS);
   const [mcNoOptions, setMcNoOptions] = useState(MC_NO_OPTIONS);
 
   useEffect(() => {
@@ -48,18 +45,12 @@ const UPercentDataEntry = forwardRef(function UPercentDataEntry(
         if (!active) return;
         if (dropdown.shifts?.length) setShiftOptions(dropdown.shifts);
         if (dropdown.varietyNames?.length) setVarietyOptions(dropdown.varietyNames);
-        if (dropdown.departments?.length) {
-          setDepartmentOptions(dropdown.departments);
-        } else if (dropdown.departmentNames?.length) {
-          setDepartmentOptions(dropdown.departmentNames.map((deptName) => ({ dept_code: "", dept_name: deptName })));
-        }
         if (dropdown.mcNos?.length) setMcNoOptions(dropdown.mcNos);
       })
       .catch(() => {
         if (!active) return;
         setShiftOptions(SHIFT_OPTIONS);
         setVarietyOptions(VARIETY_OPTIONS);
-        setDepartmentOptions(DEPARTMENT_OPTIONS);
         setMcNoOptions(MC_NO_OPTIONS);
       });
 
@@ -92,7 +83,6 @@ const UPercentDataEntry = forwardRef(function UPercentDataEntry(
     if (!String(form.date || "").trim()) nextErrors.date = true;
     if (!String(form.shift || "").trim()) nextErrors.shift = true;
     if (!String(form.variety || "").trim()) nextErrors.variety = true;
-    if (!String(form.department || "").trim()) nextErrors.department = true;
     if (!String(form.mc_no || "").trim()) nextErrors.mc_no = true;
     if (!String(form.u_percent || "").trim()) nextErrors.u_percent = true;
     if (!String(form.cvm || "").trim()) nextErrors.cvm = true;
@@ -108,7 +98,6 @@ const UPercentDataEntry = forwardRef(function UPercentDataEntry(
     { label: "Entry ID", value: entryId || "#SIM-001" },
     { label: "Shift", value: form.shift },
     { label: "Variety", value: form.variety },
-    { label: "Department", value: form.department },
     { label: "MC No.", value: form.mc_no },
     { label: "U%", value: form.u_percent },
     { label: "CV in Metres", value: form.cvm },
@@ -125,7 +114,6 @@ const UPercentDataEntry = forwardRef(function UPercentDataEntry(
         entry_date: form.date,
         shift: form.shift,
         variety: form.variety,
-        department: form.department,
         mc_no: form.mc_no,
         u_percent: form.u_percent,
         cvm: form.cvm,
@@ -200,18 +188,6 @@ const UPercentDataEntry = forwardRef(function UPercentDataEntry(
             className={errors.variety ? styles.errorField : ""}
             options={varietyOptions}
             placeholder="Select"
-          />
-        </div>
-
-        <div className={styles.field}>
-          <label>Department</label>
-          <SearchableSelect
-            value={form.department}
-            onChange={(value) => handleChange("department", value)}
-            className={errors.department ? styles.errorField : ""}
-            options={departmentOptions.map((item) => item.dept_name)}
-            placeholder="Select Department"
-            ariaLabel="Department"
           />
         </div>
 
