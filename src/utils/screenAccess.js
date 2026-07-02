@@ -8,7 +8,6 @@ const normalizeScreenKey = (value) =>
     .replace(/%/g, " percent ")
     .replace(/-/g, " ")
     .replace(/_/g, " ")
-    .replace(/[^a-z0-9 ]+/g, "")
     .replace(/\s+/g, " ");
 
 const getDepartmentAccessEntry = (accessByDepartment, departmentName) => {
@@ -43,19 +42,13 @@ const findMatchingScreen = (option, screens) => {
 
   return screens.find((screen) => {
     const screenKey = normalizeScreenKey(screen?.name);
-    const compactScreenKey = screenKey.replace(/\s+/g, "");
 
-    return matchers.some((matcher) => {
-      const compactMatcher = matcher.replace(/\s+/g, "");
-      return (
+    return matchers.some(
+      (matcher) =>
         matcher === screenKey ||
         matcher.includes(screenKey) ||
-        screenKey.includes(matcher) ||
-        compactMatcher === compactScreenKey ||
-        compactMatcher.includes(compactScreenKey) ||
-        compactScreenKey.includes(compactMatcher)
-      );
-    });
+        screenKey.includes(matcher)
+    );
   });
 };
 

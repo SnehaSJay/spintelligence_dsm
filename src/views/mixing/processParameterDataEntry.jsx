@@ -15,16 +15,6 @@ import {
 } from "@/data/processParameterMasterOptions";
 import { getNextProcessParameterId, normalizeProcessParameterId } from "@/utils/processParameterId";
 
-const PROCESS_PARAMETER_SUB_DEPARTMENTS = [
-  "Mixing",
-  "Blow Room",
-  "Carding",
-  "Draw Frame",
-  "Simplex",
-  "Spinning",
-  "Autoconer",
-];
-
 const createBlankRow = (label) => ({
   label,
   lotNo: "",
@@ -84,59 +74,9 @@ const isVersionComplete = (version) => {
   return version?.status === "DONE" || rows.every(isRowComplete);
 };
 
-const getVersionSubDepartment = (version) =>
-  String(version?.data?.subDepartment || version?.data?.sub_department || "").trim();
-
-const isSubDepartmentComplete = (version, subDepartment) => {
-  const normalized = getVersionSubDepartment(version).toLowerCase();
-  if (!normalized) return isVersionComplete(version);
-  return normalized === String(subDepartment || "").trim().toLowerCase() && isVersionComplete(version);
-};
-
 const displaySavedValue = (value) => {
   const normalized = String(value ?? "").trim();
   return normalized && normalized !== "-" ? normalized : "0";
-};
-
-const formatDetailLabel = (key = "") =>
-  String(key)
-    .replace(/([a-z])([A-Z])/g, "$1 $2")
-    .replace(/[_-]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(/^\w/, (char) => char.toUpperCase());
-
-const getVersionDetailItems = (version, subDepartment) => {
-  if (!version?.data) return [];
-
-  if (subDepartment === "Mixing" && Array.isArray(version.data.rows)) {
-    return version.data.rows.map((row) => ({
-      key: row.label,
-      label: row.label,
-      value: displaySavedValue(
-        row.lotNo || row.blend || row.cutLength || row.tenacity || row.elongation || row.mergeNo
-      ),
-    }));
-  }
-
-  return Object.entries(version.data)
-    .filter(([key, value]) => {
-      if (["versionId", "paramId", "countName", "consigneeName", "creationDate", "rows", "subDepartment", "sub_department"].includes(key)) {
-        return false;
-      }
-      if (value === null || typeof value === "undefined") return false;
-      if (typeof value === "string") return String(value).trim() !== "";
-      if (typeof value === "number" || typeof value === "boolean") return true;
-      return Array.isArray(value) ? value.length > 0 : Object.keys(value || {}).length > 0;
-    })
-    .map(([key, value]) => ({
-      key,
-      label: formatDetailLabel(key),
-      value:
-        typeof value === "object"
-          ? JSON.stringify(value)
-          : displaySavedValue(value),
-    }));
 };
 
 const parseNumberValue = (value) => {
@@ -410,7 +350,6 @@ const ProcessParameterDataEntry = forwardRef(function ProcessParameterDataEntry(
   const [form, setForm] = useState(createDefaultForm);
   const [errors, setErrors] = useState({});
   const [expandedVersionId, setExpandedVersionId] = useState(null);
-  const [expandedSubDepartmentKey, setExpandedSubDepartmentKey] = useState("");
   const [loadingVersions, setLoadingVersions] = useState(false);
   const [versionsError, setVersionsError] = useState("");
   const [savedProcessParameterId, setSavedProcessParameterId] = useState("");
@@ -420,7 +359,7 @@ const ProcessParameterDataEntry = forwardRef(function ProcessParameterDataEntry(
   const loadVersions = async () => {
     setLoadingVersions(true);
     try {
-      const response = await getMixingProcessParameterEntries({ page: 1, limit: 1000 });
+      const response = await getMixingProcessParameterEntries({ page: 1, limit: 100 });
       const nextVersions = Array.isArray(response?.data)
         ? response.data.map(mapApiEntryToVersion)
         : [];
@@ -520,16 +459,11 @@ const ProcessParameterDataEntry = forwardRef(function ProcessParameterDataEntry(
     setForm({ ...cloneForm(version.data), versionId: "", paramId: nextProcessParameterId });
     if (!isVersionComplete(version)) {
       setExpandedVersionId(null);
-      setExpandedSubDepartmentKey("");
       scrollToForm();
       setErrors({});
       return;
     }
-    setExpandedVersionId((current) => {
-      const nextExpanded = current === version.id ? null : version.id;
-      if (nextExpanded !== version.id) setExpandedSubDepartmentKey("");
-      return nextExpanded;
-    });
+    setExpandedVersionId((current) => (current === version.id ? null : version.id));
     setErrors({});
   };
 
@@ -583,7 +517,6 @@ const ProcessParameterDataEntry = forwardRef(function ProcessParameterDataEntry(
     setForm(createDefaultForm());
     setErrors({});
     setSavedProcessParameterId("");
-    setExpandedSubDepartmentKey("");
   };
 
   const getPreviewData = () => [
@@ -759,172 +692,15 @@ const ProcessParameterDataEntry = forwardRef(function ProcessParameterDataEntry(
         </div>
         {savedVersionsPortal
           ? createPortal(
-              <div className="mixing-process-parameter-history flex flex-col gap-4">
-                {loadingVersions ? (
-                  <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
-                    Loading saved versions...
-                  </div>
-                ) : null}
-                {!loadingVersions && versionsError ? (
-                  <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                    {versionsError}
-                  </div>
-                ) : null}
-                {!loadingVersions && !versionsError && versions.length === 0 ? (
-                  <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
-                    No saved versions found in the database.
-                  </div>
-                ) : null}
-
-                {versions.map((version) => {
-                  const isComplete = isVersionComplete(version);
-                  const isExpanded = expandedVersionId === version.id && isComplete;
-                  const isActive = version.id === form.versionId;
-                  const nestedChildren = PROCESS_PARAMETER_SUB_DEPARTMENTS.map((subDepartment) => {
-                    const detailItems = getVersionDetailItems(version, subDepartment);
-                    const key = `${version.id}-${subDepartment}`;
-                    return {
-                      key,
-                      label: subDepartment,
-                      isExpanded: expandedSubDepartmentKey === key,
-                      complete: isSubDepartmentComplete(version, subDepartment),
-                      detailItems,
-                    };
-                  });
-
-                  return (
-                    <div
-                      key={version.id}
-                      className="overflow-hidden rounded-xl border border-slate-200 bg-white"
-                    >
-                      <div
-                        className={`grid w-full grid-cols-1 gap-3 px-4 py-3 transition-colors md:grid-cols-[120px_minmax(0,1fr)_minmax(0,1fr)_auto_auto] ${
-                          isActive ? "bg-[#f8fbff]" : "bg-white hover:bg-slate-50"
-                        }`}
-                      >
-                        <button
-                          type="button"
-                          className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-left"
-                          onClick={() => handleVersionSelect(version)}
-                        >
-                          <div className="text-[9px] font-semibold uppercase tracking-[0.08em] text-slate-500">
-                            Param ID
-                          </div>
-                          <div className="mt-1 text-[13px] font-bold text-slate-900">
-                            {displaySavedValue(version.data.paramId)}
-                          </div>
-                        </button>
-
-                        <button
-                          type="button"
-                          className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-left"
-                          onClick={() => handleVersionSelect(version)}
-                        >
-                          <div className="text-[9px] font-semibold uppercase tracking-[0.08em] text-slate-500">
-                            Consignee Name
-                          </div>
-                          <div className="mt-1 text-[13px] font-bold text-slate-900">
-                            {displaySavedValue(version.data.consigneeName)}
-                          </div>
-                        </button>
-
-                        <button
-                          type="button"
-                          className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-left"
-                          onClick={() => handleVersionSelect(version)}
-                        >
-                          <div className="text-[9px] font-semibold uppercase tracking-[0.08em] text-slate-500">
-                            Count Name
-                          </div>
-                          <div className="mt-1 text-[13px] font-bold text-slate-900">
-                            {displaySavedValue(version.data.countName)}
-                          </div>
-                        </button>
-
-                        <div className="flex items-center justify-center text-[20px]">
-                          {isComplete ? <FaCheckCircle className="text-[#3d539f]" /> : null}
-                        </div>
-
-                        <button
-                          type="button"
-                          className="flex items-center justify-center text-[20px] text-slate-500"
-                          onClick={() => handleVersionToggle(version)}
-                          aria-label={isExpanded ? "Collapse saved version details" : "Expand saved version details"}
-                        >
-                          {isExpanded ? <HiChevronUp /> : <HiChevronDown />}
-                        </button>
-                      </div>
-
-                      {isExpanded ? (
-                        <div className="border-t border-[#dbe4f0] bg-[#eef5ff] p-4">
-                          <div className="mb-3 text-[12px] font-bold uppercase tracking-[0.08em] text-slate-600">
-                            Sub Departments
-                          </div>
-                          <div className="flex flex-col gap-2">
-                            {nestedChildren.map((child) => (
-                              <div
-                                key={child.key}
-                                className="overflow-hidden rounded-lg border border-[#c8d9f0] bg-[#f8fbff]"
-                              >
-                                <button
-                                  type="button"
-                                  className={`flex w-full items-center justify-between gap-3 bg-white px-4 py-3 text-left transition-colors hover:bg-slate-50 ${
-                                    child.isExpanded ? "bg-[#eef5ff]" : ""
-                                  }`}
-                                  onClick={() =>
-                                    setExpandedSubDepartmentKey((current) =>
-                                      current === child.key ? "" : child.key
-                                    )
-                                  }
-                                >
-                                  <span className="text-[13px] font-bold text-slate-900">
-                                    {child.label}
-                                  </span>
-                                  <span className="flex items-center gap-2">
-                                    {child.complete ? (
-                                      <FaCheckCircle className="text-[#3d539f]" />
-                                    ) : null}
-                                    <span className="rounded-full bg-[#dfe9ff] px-3 py-1 text-[11px] font-bold text-[#3d539f]">
-                                      {child.complete ? "Saved" : "Pending"}
-                                    </span>
-                                  </span>
-                                </button>
-
-                                {child.isExpanded ? (
-                                  <div className="border-t border-[#dbe4f0] bg-[#eef5ff] p-4">
-                                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-                                      {child.detailItems.length > 0 ? (
-                                        child.detailItems.map((item) => (
-                                          <div
-                                            key={`${child.key}-${item.key}`}
-                                            className="rounded-lg border border-[#c8d9f0] bg-white px-3 py-2 shadow-[0_1px_2px_rgba(15,23,42,0.05)]"
-                                          >
-                                            <div className="text-[9px] font-semibold uppercase tracking-[0.08em] text-slate-500">
-                                              {item.label}
-                                            </div>
-                                            <div className="mt-1 break-words text-[13px] font-bold text-slate-900">
-                                              {item.value}
-                                            </div>
-                                          </div>
-                                        ))
-                                      ) : (
-                                        <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500 md:col-span-2 xl:col-span-4">
-                                          No saved detail values were found for this sub-department yet.
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                ) : null}
-                              </div>
-                            ))}
-                          </div>
-                          <div className="mt-3 text-[12px] text-slate-500">{version.label}</div>
-                        </div>
-                      ) : null}
-                    </div>
-                  );
-                })}
-              </div>,
+              <SavedVersionsSection
+                versions={versions}
+                form={form}
+                expandedVersionId={expandedVersionId}
+                onVersionSelect={handleVersionSelect}
+                onVersionToggle={handleVersionToggle}
+                loading={loadingVersions}
+                errorMessage={versionsError}
+              />,
               savedVersionsPortal
             )
           : null}
