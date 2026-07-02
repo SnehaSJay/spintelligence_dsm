@@ -20,15 +20,6 @@ import { createThresholdViolationTickets } from "@/utils/thresholdTicketing";
 import { getNextProcessParameterId, normalizeProcessParameterId } from "@/utils/processParameterId";
 import styles from "@/styles/AutoconerProcessParameter.module.css";
 
-const PROCESS_PARAMETER_SUB_DEPARTMENTS = [
-  "Mixing",
-  "Blow Room",
-  "Carding",
-  "Draw Frame",
-  "Simplex",
-  "Spinning",
-  "Autoconer",
-];
 
 const createDefaultForm = (selectedType = "Process Parameter") => ({
   versionId: "",
@@ -177,9 +168,6 @@ const isVersionComplete = (version) =>
     String(version?.data?.[field] || "").trim()
   );
 
-const getVersionSubDepartment = (version) =>
-  String(version?.data?.subDepartment || version?.data?.sub_department || "").trim();
-
 const buildPayload = (form, entryId = "") => ({
   scope: "process-parameter",
   count_name: form.countName,
@@ -229,7 +217,6 @@ const ProcessParameter = forwardRef(function ProcessParameter(
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   const [savedProcessParameterId, setSavedProcessParameterId] = useState("");
-  const [expandedSubDepartmentKey, setExpandedSubDepartmentKey] = useState("");
   const { countOptions: masterCountOptions, countOptionsError, loadingCountOptions } = useAutoconerCountOptions("process-parameter");
   const [masterConsigneeOptions, setMasterConsigneeOptions] = useState([]);
 
@@ -368,14 +355,9 @@ const ProcessParameter = forwardRef(function ProcessParameter(
     handleVersionSelect(version);
     if (!isVersionComplete(version)) {
       setExpandedVersionId(null);
-      setExpandedSubDepartmentKey("");
       return;
     }
-    setExpandedVersionId((current) => {
-      const nextExpanded = current === version.id ? null : version.id;
-      if (nextExpanded !== version.id) setExpandedSubDepartmentKey("");
-      return nextExpanded;
-    });
+    setExpandedVersionId((current) => (current === version.id ? null : version.id));
   };
 
   const validate = () => {
@@ -449,7 +431,6 @@ const ProcessParameter = forwardRef(function ProcessParameter(
     setErrors({});
     setSubmitError("");
     setSavedProcessParameterId("");
-    setExpandedSubDepartmentKey("");
   };
 
   useImperativeHandle(ref, () => ({
@@ -478,17 +459,6 @@ const ProcessParameter = forwardRef(function ProcessParameter(
         const isComplete = isVersionComplete(version);
         const isExpanded = expandedVersionId === version.id && isComplete;
         const isActive = version.id === form.versionId;
-        const versionSubDepartment = getVersionSubDepartment(version);
-        const nestedChildren = PROCESS_PARAMETER_SUB_DEPARTMENTS.map((subDepartment) => ({
-          key: `${version.id}-${subDepartment}`,
-          label: subDepartment,
-          isExpanded:
-            expandedVersionId === version.id &&
-            expandedSubDepartmentKey === `${version.id}-${subDepartment}`,
-          hasData:
-            !versionSubDepartment ||
-            versionSubDepartment.toLowerCase() === subDepartment.toLowerCase(),
-        }));
 
         return (
           <div key={version.id} className={styles.versionCard}>
@@ -520,53 +490,6 @@ const ProcessParameter = forwardRef(function ProcessParameter(
               >
                 {isExpanded ? <HiChevronUp /> : <HiChevronDown />}
               </button>
-            </div>
-
-            <div className={styles.subDepartmentWrap}>
-              <div className={styles.subDepartmentTitle}>Sub Departments</div>
-              <div className={styles.subDepartmentList}>
-                {nestedChildren.map((child) => (
-                  <div key={child.key} className={styles.subDepartmentCard}>
-                    <button
-                      type="button"
-                      className={`${styles.subDepartmentHeader} ${
-                        child.isExpanded ? styles.subDepartmentHeaderActive : ""
-                      }`}
-                      onClick={() =>
-                        setExpandedSubDepartmentKey((current) =>
-                          current === child.key ? "" : child.key
-                        )
-                      }
-                    >
-                      <span className={styles.subDepartmentName}>{child.label}</span>
-                      <span className={styles.subDepartmentBadge}>
-                        {child.hasData ? "Saved" : "No data"}
-                      </span>
-                    </button>
-
-                    {child.isExpanded ? (
-                      <div className={styles.subDepartmentBody}>
-                        {child.hasData ? (
-                          <div className={styles.savedFieldsGrid}>
-                            {fieldDefs.map((field) => (
-                              <div key={`${child.key}-${field.key}`} className={styles.savedFieldCard}>
-                                <div className={styles.cellLabel}>{field.label}</div>
-                                <div className={styles.savedValue}>
-                                  {displaySavedValue(version.data[field.key])}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className={styles.infoBox}>
-                            No sub-department specific data is stored for this PP ID yet.
-                          </div>
-                        )}
-                      </div>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
             </div>
 
             {isExpanded ? (
