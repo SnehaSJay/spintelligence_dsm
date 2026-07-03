@@ -26,21 +26,22 @@ import { recordSubmittedNotebook } from "@/utils/submittedNotebookRecorder";
 import useDatabaseEntryId from "@/hooks/useDatabaseEntryId";
 import styles from "../styles/spinning.module.css";
 
+const COUNT_CHANGE_BASE_ROWS = [
+    { reading_value: "5", count: "10.23", cv_percent: "11.46", strength: "250", mean: "279.67", cv_percent_2: "13.42", csp: "2861.02" },
+    { reading_value: "6", count: "10.23", cv_percent: "11.46", strength: "250", mean: "279.67", cv_percent_2: "13.42", csp: "2861.02" },
+    { reading_value: "6.6", count: "10.23", cv_percent: "11.46", strength: "268", mean: "279.67", cv_percent_2: "13.42", csp: "2861.02" },
+    { reading_value: "6.7", count: "10.23", cv_percent: "11.46", strength: "270", mean: "279.67", cv_percent_2: "13.42", csp: "2861.02" },
+    { reading_value: "6.8", count: "10.23", cv_percent: "11.46", strength: "290", mean: "279.67", cv_percent_2: "13.42", csp: "2861.02" },
+    { reading_value: "6.9", count: "10.23", cv_percent: "11.46", strength: "350", mean: "279.67", cv_percent_2: "13.42", csp: "2861.02" },
+];
+
 const createCountChangeRows = (readingCount) => {
     const total = Math.max(Number.parseInt(readingCount, 10) || 0, 0);
     return Array.from({ length: total }, (_, index) => ({
         reading_no: index + 1,
-        reading_value: "",
-        count: "",
-        cv_percent: "",
-        strength: "",
-        mean: "",
-        cv_percent_2: "",
-        csp: "",
+        ...COUNT_CHANGE_BASE_ROWS[index % COUNT_CHANGE_BASE_ROWS.length],
     }));
 };
-
-const COUNT_CHANGE_MODES = ["Count", "CSV"];
 
 const SHIFT_OPTIONS = ["1", "2", "3"];
 const RING_FRAME_CHECKERS = [];
@@ -982,11 +983,10 @@ function SpinningDepartment() {
                         [field]: value,
                         ...(nextCountValue !== null ? { count: nextCountValue } : {}),
                     }
-                    : row
+                : row
             )
         );
     };
-
     const handleRingFrameChange = (rowIndex, field, value) => {
         setRingFrameRows((currentRows) =>
             currentRows.map((row, index) =>
@@ -1170,12 +1170,12 @@ function SpinningDepartment() {
                                     <div className={styles["sp-form-group"]}>
                                         <label className={styles.countTypeSpacer}>&nbsp;</label>
                                         <div className={`${styles.segmentedControl} ${styles.countChangeSegmented} ${errors.countChangeMode ? styles["segmented-error"] : ""}`} role="group" aria-label="Count change type">
-                                        {COUNT_CHANGE_MODES.map((mode) => (
-                                            <button key={mode} type="button" className={`${styles.segmentButton} ${countChangeMode === mode ? styles.segmentButtonActive : ""}`} onClick={() => { setCountChangeMode(mode); clearFieldError("countChangeMode"); }}>
-                                                {mode}
-                                            </button>
-                                        ))}
-                                    </div>
+                                            {["Count", "CSP"].map((mode) => (
+                                                <button key={mode} type="button" className={`${styles.segmentButton} ${countChangeMode === mode ? styles.segmentButtonActive : ""}`} onClick={() => { setCountChangeMode(mode); clearFieldError("countChangeMode"); }}>
+                                                    {mode}
+                                                </button>
+                                            ))}
+                                        </div>
                                     </div>
                                 </div>
 
@@ -1280,13 +1280,7 @@ function SpinningDepartment() {
                                                         <span className={styles.countChangeCellText}>{renderCountChangeCell(row.csp, "")}</span>
                                                     </td>
                                                 </tr>
-                                            )) : (
-                                                <tr>
-                                                    <td colSpan="8" className={styles.countChangeEmptyState}>
-                                                        Enter the number of readings to generate the table.
-                                                    </td>
-                                                </tr>
-                                            )}
+                                            )) : null}
                                         </tbody>
                                     </table>
                                 </div>

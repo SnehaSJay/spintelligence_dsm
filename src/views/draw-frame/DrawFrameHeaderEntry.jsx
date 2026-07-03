@@ -26,6 +26,7 @@ import styles from "@/styles/draw-frame.module.css";
 import { sanitizeNumericInput } from "@/utils/inputValidation";
 import { createThresholdViolationTickets } from "@/utils/thresholdTicketing";
 import { normalizeProcessParameterId } from "@/utils/processParameterId";
+import { registerProcessParameterId } from "@/utils/processParameterRegistry";
 
 const today = new Date().toISOString().split("T")[0];
 
@@ -224,17 +225,18 @@ function normalizeBreakerEntries(payload) {
   const rows = Array.isArray(payload) ? payload : Array.isArray(payload?.data) ? payload.data : [];
   return rows.map((entry, index) => ({
     id: String(entry?.ins_id || entry?.id || index),
-    paramId: normalizeProcessParameterId(
-      entry?.entry_id || entry?.process_parameter_id || entry?.param_id || entry?.parameter_id || entry?.ins_id || entry?.id
-    ) || String(entry?.entry_id || entry?.process_parameter_id || entry?.param_id || entry?.parameter_id || entry?.ins_id || entry?.id || "-").trim(),
+    paramId:
+      normalizeProcessParameterId(
+        entry?.entry_id || entry?.process_parameter_id || entry?.param_id || entry?.parameter_id
+      ) || "",
     countName: entry?.count_name || "",
     consigneeName: entry?.consignee_name || "",
     creationDate: entry?.creation_date || "",
     data: {
       versionId: String(entry?.ins_id || entry?.id || index),
       paramId: normalizeProcessParameterId(
-        entry?.entry_id || entry?.process_parameter_id || entry?.param_id || entry?.parameter_id || entry?.ins_id || entry?.id
-      ) || String(entry?.entry_id || entry?.process_parameter_id || entry?.param_id || entry?.parameter_id || entry?.ins_id || entry?.id || "").trim(),
+        entry?.entry_id || entry?.process_parameter_id || entry?.param_id || entry?.parameter_id
+      ) || "",
       type: "PP - Breaker Drawing",
       countName: entry?.count_name || "",
       consigneeName: entry?.consignee_name || "",
@@ -269,17 +271,18 @@ function normalizeFinisherEntries(payload) {
   const rows = Array.isArray(payload) ? payload : Array.isArray(payload?.data) ? payload.data : [];
   return rows.map((entry, index) => ({
     id: String(entry?.id || index),
-    paramId: normalizeProcessParameterId(
-      entry?.entry_id || entry?.process_parameter_id || entry?.param_id || entry?.id
-    ) || String(entry?.entry_id || entry?.process_parameter_id || entry?.param_id || entry?.id || "-").trim(),
+    paramId:
+      normalizeProcessParameterId(
+        entry?.entry_id || entry?.process_parameter_id || entry?.param_id
+      ) || "",
     countName: entry?.count_name || "",
     consigneeName: entry?.consignee_name || "",
     creationDate: entry?.creation_date || "",
     data: {
       versionId: String(entry?.id || index),
       paramId: normalizeProcessParameterId(
-        entry?.entry_id || entry?.process_parameter_id || entry?.param_id || entry?.id
-      ) || String(entry?.entry_id || entry?.process_parameter_id || entry?.param_id || entry?.id || "").trim(),
+        entry?.entry_id || entry?.process_parameter_id || entry?.param_id
+      ) || "",
       type: "PP - Finisher Drawing",
       countName: entry?.count_name || "",
       consigneeName: entry?.consignee_name || "",
@@ -345,7 +348,7 @@ function getEntrySortValue(entry) {
   return 0;
 }
 
-function DrawFrameHeaderEntry({ entryId = "", typeOptions, selectedType, onTypeChange }) {
+function DrawFrameHeaderEntry({ entryId = "", typeOptions, selectedType, onTypeChange, onSubmitSuccess }) {
   const router = useRouter();
   const activeType = TYPE_CONFIG[selectedType] ? selectedType : "PP - Breaker Drawing";
   const activeConfig = TYPE_CONFIG[activeType];
@@ -523,11 +526,12 @@ function DrawFrameHeaderEntry({ entryId = "", typeOptions, selectedType, onTypeC
       const selectedExistingEntry = recentEntries.find(
         (entry) => String(entry.id) === String(form.versionId)
       );
+      let submitResult = null;
 
       if (selectedExistingEntry) {
-        await activeConfig.updateEntry(selectedExistingEntry.id, payload);
+        submitResult = await activeConfig.updateEntry(selectedExistingEntry.id, payload);
       } else {
-        await activeConfig.submitEntry(payload);
+        submitResult = await activeConfig.submitEntry(payload);
       }
 
       try {
@@ -547,7 +551,9 @@ function DrawFrameHeaderEntry({ entryId = "", typeOptions, selectedType, onTypeC
         console.error("Threshold ticket generation failed:", ticketError);
       }
 
+      registerProcessParameterId(submitResult, activeType);
       await loadEntries(activeType);
+      onSubmitSuccess?.(submitResult);
       setShowPreview(false);
       setShowSuccess(true);
     } catch (error) {

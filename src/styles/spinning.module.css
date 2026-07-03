@@ -300,17 +300,15 @@
 .countChangeTable {
   width: 100%;
   border-collapse: collapse;
-  min-width: 1080px;
-  table-layout: fixed;
+  min-width: 760px;
 }
 
 .countChangeTable th,
 .countChangeTable td {
-  padding: 12px 8px;
+  padding: 14px 8px;
   border-bottom: 1px solid #d8dee8;
   text-align: left;
   white-space: nowrap;
-  vertical-align: middle;
 }
 
 .countChangeTable th {

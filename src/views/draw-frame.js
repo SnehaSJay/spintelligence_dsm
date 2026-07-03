@@ -76,8 +76,9 @@ const DRAW_FRAME_ENTRY_ID_CONFIG = {
   "Yarn CV% Calculation Form": { prefix: "YCV" },
   "Draw Frame Cots Data Entry": { prefix: "DRC", width: 4, routePath: "/drawframe/cots" },
   "U% Data Entry": { prefix: "DUP", width: 4, routePath: "/drawframe/uqc" },
-  "PP - Breaker Drawing": { prefix: "PP", width: 4, routePath: "/drawframe/drawframe_qc_header" },
-  "PP - Finisher Drawing": { prefix: "PP", width: 4, routePath: "/drawframe/finisher_drawing_inspection" },
+  // Keep breaker and finisher on separate sequence scopes so they do not share storage identity.
+  "PP - Breaker Drawing": { prefix: "PP", width: 4, routePath: "/drawframe/header?scope=breaker" },
+  "PP - Finisher Drawing": { prefix: "PP", width: 4, routePath: "/drawframe/finisher?scope=finisher" },
   "A%": { prefix: "DAP", width: 4, routePath: "/drawframe/a-percent" },
   "Wheel Change": { prefix: "DWC", width: 4, routePath: "/drawframe/wheel-change" },
 };
@@ -654,18 +655,13 @@ function DrawFrame() {
   const user = useSelector((state) => state.auth?.user);
   const accessByDepartment = useSelector((state) => state.auth?.accessByDepartment);
   const requestedType = Array.isArray(router.query.type) ? router.query.type[0] : router.query.type;
-  const isProcessParameterRequest = ["process parameter", "pp - breaker drawing", "pp - finisher drawing"].includes(
-    normalizeTypeName(requestedType)
-  );
   const fullTypeOptions = filterOptionsByDepartmentAccess(
     primaryTypeOptions,
     accessByDepartment,
     user,
     "Draw Frame"
   );
-  const typeOptions = isProcessParameterRequest
-    ? fullTypeOptions.filter((option) => option.name === "PP - Breaker Drawing" || option.name === "PP - Finisher Drawing")
-    : fullTypeOptions.filter((option) => option.name !== "PP - Breaker Drawing" && option.name !== "PP - Finisher Drawing");
+  const typeOptions = fullTypeOptions;
   const { actionLoading, actionSuccess, cotsEntries, uqcEntries, listLoading, error } = useSelector(
     (state) =>
       state.drawFrame ?? {
