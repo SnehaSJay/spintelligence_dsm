@@ -1,23 +1,7 @@
-const parseParamId = (value) => {
-  const normalized = String(value ?? "").trim();
-  if (!normalized) return null;
+export const normalizeProcessParameterId = (value) => String(value ?? "").trim();
 
-  const match = normalized.match(/^([A-Za-z]+)[-\s_]?(\d+)$/);
-  if (!match) return null;
+export const coerceProcessParameterId = (value) => String(value ?? "").trim();
 
-  return {
-    prefix: match[1].toUpperCase(),
-    number: Number(match[2]),
-    width: match[2].length,
-  };
-};
-
-export const normalizeProcessParameterId = (value, fallbackPrefix = "PP", fallbackWidth = 4) => {
-  const parsed = parseParamId(value);
-  if (!parsed) return "";
-  return `${parsed.prefix || fallbackPrefix}-${String(parsed.number).padStart(parsed.width || fallbackWidth, "0")}`;
-};
-
-export const getInitialProcessParameterId = (fallbackPrefix = "PP", fallbackWidth = 4) =>
-  `${String(fallbackPrefix).toUpperCase()}-${String(1).padStart(fallbackWidth, "0")}`;
+export const reserveGlobalProcessParameterId = async (fallbackPrefix = "PP", fallbackWidth = 4) =>
+  `${String(fallbackPrefix || "PP").trim().toUpperCase()}-${String(1).padStart(Number(fallbackWidth) || 4, "0")}`;
 

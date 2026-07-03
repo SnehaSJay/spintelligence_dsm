@@ -13,11 +13,7 @@ import AutoconerProcessParameter from "@/views/autoconer/ProcessParameter";
 import AutoconerQ2 from "@/views/autoconer/AutoconerQ2";
 import AutoconerQ3 from "@/views/autoconer/AutoconerQ3";
 import { hasSubDepartmentAccess } from "@/utils/accessControl";
-import {
-  registerProcessParameterId,
-  readProcessParameterRegistry,
-  writeProcessParameterRegistry,
-} from "@/utils/processParameterRegistry";
+import { readProcessParameterRegistry } from "@/utils/processParameterRegistry";
 import styles from "@/styles/processParameterPage.module.css";
 
 const updateExistingColumns = [
@@ -145,7 +141,6 @@ const DEPARTMENT_TYPE_OPTION_OBJECTS = {
 
 const getDepartmentFormProps = (department, selectedTypeName, typeOptions) => {
   const baseProps = {
-    entryId: "Generated on Save",
     selectedTypeName,
     selectedType: selectedTypeName,
     onTypeChange: () => {},
@@ -195,7 +190,6 @@ export default function ProcessParameterPage() {
   const [completedCells, setCompletedCells] = useState({});
   const [dynamicRows, setDynamicRows] = useState([]);
   const componentRef = useRef(null);
-  const lastSubmittedEntryIdRef = useRef("");
 
   const visibleSubDepartments = useMemo(
     () => subDepartments.filter((item) => hasSubDepartmentAccess(accessByDepartment, item.value, user)),
@@ -237,15 +231,7 @@ export default function ProcessParameterPage() {
 
         const rows = masters
           .map((master) => {
-            const id = normalizeRegistryId(
-              master?.entry_id ||
-              master?.entryId ||
-              master?.process_parameter_id ||
-              master?.processParameterId ||
-              master?.param_id ||
-              master?.paramId ||
-              master?.id
-            );
+            const id = normalizeRegistryId(master?.entry_id || master?.entryId || master?.id);
             const rowsPayload = Array.isArray(master?.entries)
               ? master.entries
               : Array.isArray(master?.rows)
@@ -271,7 +257,6 @@ export default function ProcessParameterPage() {
   };
 
   useEffect(() => {
-    writeProcessParameterRegistry([]);
     loadRegistryRows().then(setDynamicRows);
   }, []);
 
@@ -508,23 +493,13 @@ export default function ProcessParameterPage() {
                   key={`${selectedSubDepartment}-${selectedTypeName}-${selectedEntryId || "new"}`}
                   ref={componentRef}
                   onSubmitSuccess={(response) => {
-                    const nextEntryId = String(
-                      response?.entry_id ||
-                        response?.param_id ||
-                        response?.process_parameter_id ||
-                        response?.id ||
-                        selectedEntryId ||
-                        ""
-                    ).trim();
+                    const nextEntryId = String(response?.entry_id || response?.entryId || response?.id || selectedEntryId || "").trim();
 
                     if (nextEntryId) {
-                      lastSubmittedEntryIdRef.current = nextEntryId;
-                      setSelectedEntryId(nextEntryId);
                       refreshRegistryRows();
                     }
                   }}
                   {...getDepartmentFormProps(selectedSubDepartment, selectedTypeName, typeOptions)}
-                  entryId={selectedEntryId || "Generated on Save"}
                   onTypeChange={
                     selectedSubDepartment === "Draw Frame"
                       ? (nextType) => setDrawFrameType(nextType)
@@ -546,29 +521,11 @@ export default function ProcessParameterPage() {
                     onSave={async () => {
                       const valid = componentRef.current?.validate?.();
                       if (valid === false) return;
-                      lastSubmittedEntryIdRef.current = "";
                       const result = await componentRef.current?.submit?.();
-                      const submittedEntryId =
-                        String(
-                          result?.entry_id ||
-                            result?.param_id ||
-                            result?.process_parameter_id ||
-                            result?.id ||
-                            lastSubmittedEntryIdRef.current ||
-                            selectedEntryId ||
-                            ""
-                        ).trim();
-                      if (submittedEntryId) {
-                        setSelectedEntryId(submittedEntryId);
-                      }
-                      const batchDisplayId = registerProcessParameterId(
-                        { id: submittedEntryId },
-                        selectedSubDepartment,
-                        { mode: activeTab === "new" ? "create" : "update" }
-                      );
                       refreshRegistryRows();
+                      const batchDisplayId = String(result?.entry_id || result?.entryId || result?.id || selectedEntryId || "").trim();
                       const colIndex = getColumnIndexForDepartment();
-                      if ((result !== false || submittedEntryId) && batchDisplayId && colIndex > 0) {
+                      if ((result !== false || batchDisplayId) && batchDisplayId && colIndex > 0) {
                         upsertRowStatus(batchDisplayId, colIndex - 1, true);
                       }
                     }}
