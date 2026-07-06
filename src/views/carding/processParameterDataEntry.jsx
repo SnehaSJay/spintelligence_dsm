@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
+import { forwardRef, Fragment, useEffect, useImperativeHandle, useState } from "react";
 import { createPortal } from "react-dom";
 import { FaCheckCircle } from "react-icons/fa";
 import { HiChevronDown, HiChevronUp } from "react-icons/hi2";
@@ -59,17 +59,17 @@ const fieldDefs = [
   { key: "cylinderSpeed", label: "Cylinder Speed" },
   { key: "flatsSpeed", label: "Flats Speed" },
   { key: "deliverySpeed", label: "Delivery Speed" },
-  { key: "draftSpeed", label: "Draft Speed" },
+  { key: "draftSpeed", label: "Draft" },
   { key: "tensionDraft", label: "Tension Draft" },
   { key: "deliveryHank", label: "Delivery Hank" },
-  { key: "setting", label: "Setting" },
+  { key: "setting", label: "Setting", section: "Setting (Feed roll lickerin - SFD)" },
   { key: "feedRollToLickerin", label: "Feed Roll to Lickerin" },
   { key: "lickerinToCylinder", label: "Lickerin to Cylinder" },
   { key: "cylinderToFlats", label: "Cylinder to Flats" },
   { key: "cylinderToDoffer", label: "Cylinder to Doffer" },
   { key: "sfl", label: "SFL" },
   { key: "sfd", label: "SFD" },
-  { key: "lickerin", label: "Lickerin" },
+  { key: "lickerin", label: "Lickerin", section: "Wire Speck (Lickerin - Flats)" },
   { key: "cylinder", label: "Cylinder" },
   { key: "doffer", label: "Doffer" },
   { key: "flats", label: "Flats" },
@@ -415,12 +415,21 @@ const CardingProcessParameterDataEntry = forwardRef(function CardingProcessParam
   };
 
   const findLatestVersionByCountName = (countName) => {
-    const normalized = String(countName || "").trim().toLowerCase();
+    const normalizeCountName = (value) => String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+    const normalized = normalizeCountName(countName);
     if (!normalized) return null;
     return (
       versions
-        .filter((version) => String(version.data.countName || "").trim().toLowerCase() === normalized)
-        .sort((a, b) => new Date(b.data.creationDate || 0) - new Date(a.data.creationDate || 0))[0] || null
+        .filter((version) => normalizeCountName(version.data.countName) === normalized)
+        .sort((a, b) => {
+          const aValue = getVersionSortValue(a);
+          const bValue = getVersionSortValue(b);
+          if (typeof aValue === "number" && typeof bValue === "number") return bValue - aValue;
+          return String(bValue).localeCompare(String(aValue), undefined, {
+            numeric: true,
+            sensitivity: "base",
+          });
+        })[0] || null
     );
   };
 
@@ -637,15 +646,22 @@ const CardingProcessParameterDataEntry = forwardRef(function CardingProcessParam
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-6">
             {fieldDefs.map((field) => (
-              <div key={field.key} className="flex flex-col gap-1.5">
-                <label className="text-[13px] font-semibold text-slate-700">{field.label}</label>
-                <input
-                  type="text"
-                  className={`${topFieldClass}${errors[field.key] ? " border-red-500 bg-red-50" : ""}`}
-                  value={form[field.key]}
-                  onChange={(event) => handleFieldChange(field.key, event.target.value)}
-                />
-              </div>
+              <Fragment key={field.key}>
+                {field.section ? (
+                  <div className="col-span-full mt-2 text-[13px] font-bold uppercase tracking-wide text-slate-600">
+                    {field.section}
+                  </div>
+                ) : null}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[13px] font-semibold text-slate-700">{field.label}</label>
+                  <input
+                    type="text"
+                    className={`${topFieldClass}${errors[field.key] ? " border-red-500 bg-red-50" : ""}`}
+                    value={form[field.key]}
+                    onChange={(event) => handleFieldChange(field.key, event.target.value)}
+                  />
+                </div>
+              </Fragment>
             ))}
           </div>
         </div>

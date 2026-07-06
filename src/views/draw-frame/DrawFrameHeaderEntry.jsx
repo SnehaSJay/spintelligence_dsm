@@ -54,7 +54,7 @@ const TYPE_CONFIG = {
       { key: "make", label: "Make", required: true },
       { key: "noOfEnds", label: "No. of Ends", required: true },
       { key: "bottomRollSetting", label: "Bottom Roll Setting", required: true },
-      { key: "breakerDraft", label: "Breaker's Draft", required: true },
+      { key: "breakerDraft", label: "Break Draft", required: true },
       { key: "totalDraft", label: "Total Draft", required: true },
       { key: "hank", label: "Hank", required: true },
     ],
@@ -139,7 +139,7 @@ const TYPE_CONFIG = {
       { key: "deliveryHank", label: "Delivery hank", required: true },
       { key: "deliverySpeed", label: "Delivery Speed", required: true },
       { key: "pressureBar", label: "Pressure Bar", required: true },
-      { key: "scanningRollsSize", label: "Scanning Rolls Size", required: true },
+      { key: "scanningRollsSize", label: "Scanning Roll Size", required: true },
     ],
     createForm: (selectedType) => ({
       versionId: "",
@@ -244,7 +244,7 @@ function normalizeBreakerEntries(payload) {
       { label: "Make", value: entry?.make },
       { label: "No. of Ends", value: entry?.no_of_ends },
       { label: "Bottom Roll Setting", value: entry?.bottom_roll_setting },
-      { label: "Breaker's Draft", value: entry?.breaker_draft },
+      { label: "Break Draft", value: entry?.breaker_draft },
       { label: "Total Draft", value: entry?.total_draft },
       { label: "Hank", value: entry?.hank },
       { label: "Web Tension Draft", value: entry?.web_tension_draft },
@@ -297,7 +297,7 @@ function normalizeFinisherEntries(payload) {
       { label: "Delivery hank", value: entry?.delivery_hank },
       { label: "Delivery Speed", value: entry?.delivery_speed },
       { label: "Pressure Bar", value: entry?.pressure_bar },
-      { label: "Scanning Rolls Size", value: entry?.scanning_rolls_size },
+      { label: "Scanning Roll Size", value: entry?.scanning_rolls_size },
     ],
   }));
 }
@@ -455,12 +455,29 @@ function DrawFrameHeaderEntry({ entryId = "", nextEntryIdPreview = "", typeOptio
   };
 
   const findLatestEntryByCountName = (countName) => {
-    const normalized = String(countName || "").trim().toLowerCase();
+    const normalizeCountName = (value) => String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+    const normalized = normalizeCountName(countName);
     if (!normalized) return null;
     return (
       recentEntries
-        .filter((entry) => String(entry.data.countName || "").trim().toLowerCase() === normalized)
-        .sort((a, b) => new Date(b.data.creationDate || 0) - new Date(a.data.creationDate || 0))[0] || null
+        .filter((entry) => normalizeCountName(entry.data.countName) === normalized)
+        .sort((a, b) => {
+          const sortValue = (e) => {
+            const paramId = String(e?.paramId || "").trim();
+            const numericParamId = Number(paramId);
+            if (paramId && Number.isFinite(numericParamId)) return numericParamId;
+            if (paramId) return paramId.toLowerCase();
+            const numericId = Number(e?.id);
+            return Number.isFinite(numericId) ? numericId : String(e?.id || "").toLowerCase();
+          };
+          const aValue = sortValue(a);
+          const bValue = sortValue(b);
+          if (typeof aValue === "number" && typeof bValue === "number") return bValue - aValue;
+          return String(bValue).localeCompare(String(aValue), undefined, {
+            numeric: true,
+            sensitivity: "base",
+          });
+        })[0] || null
     );
   };
 

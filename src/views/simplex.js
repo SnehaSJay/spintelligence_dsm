@@ -37,7 +37,7 @@ const SIMPLEX_ENTRY_ID_CONFIG = {
   "SMXCots Change Data Entry": { prefix: "SCC", width: 4, routePath: "/simplex/SMXCotsChange" },
   "SMX Breaks Study Report": { prefix: "SBS", width: 4, routePath: "/simplex/study" },
   "U% Data Entry": { prefix: "SUP", width: 4, routePath: "/simplex/uqc" },
-  "Wheel Change": { prefix: "SWC", width: 4, routePath: "/simplex/wheel-change" },
+  "Wheel Change": { prefix: "SWC", width: 4, routePath: "/simplex/wheel-change", fetchPath: "/simplex/notebook" },
   "Stretch %": { prefix: "STP", width: 4, routePath: "/simplex/stretch-percent" },
   "Wrapping Simplex Notebook": { prefix: "WSX" },
 };
