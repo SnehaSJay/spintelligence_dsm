@@ -17,8 +17,8 @@ const STATIC_RF_NO_OPTIONS = ["1", "2", "3", "8", "9", "10", "11", "12", "13", "
 const STATIC_TYPE_1_DROPDOWN_OPTIONS = {
   rh: ["40", "41", "42", "43", "44", "45", "46", "47", "48", "49", "50", "51", "52", "53", "54", "55", "56", "57", "58", "59", "60", "61", "62", "63", "64", "65", "66", "67", "68"],
   bd: ["1.92", "1.87", "1.83", "1.79", "1.75", "1.71", "1.67", "1.63", "1.60", "1.57", "1.54", "1.51", "1.48", "1.45", "1.42", "1.40", "1.37", "1.35", "1.32", "1.30", "1.28", "1.26", "1.24", "1.22", "1.20", "1.18", "1.16", "1.15", "1.13"],
-  dca: ["43"],
-  dcb: ["127"],
+  dca: ["43", "53", "67", "35", "82"],
+  dcb: ["127", "117", "103", "135", "88"],
   dpc: ["132", "133", "134", "135"],
   dc: [
     "30", "31", "32", "33", "34", "35", "36", "37", "38", "39", "40", "41", "42", "43", "44", "45", "46", "47", "48", "49", "50", "51", "52", "53", "54", "55", "56", "57", "58", "59", "60", "61", "62", "63", "64", "65", "66", "67", "68", "69", "70",
@@ -110,11 +110,49 @@ const TYPE_1_TPI_OPTIONS = {
   ],
 };
 const TYPE_1_TCW_OPTIONS = ["36/88", "47/77", "53/71", "65/59"];
+const TYPE_1_DCA_TO_DCB = {
+  "43": "127",
+  "53": "117",
+  "67": "103",
+  "35": "135",
+  "82": "88",
+};
+const isType1FrameNumberThree = (machineNumber) => {
+  const numeric = Number.parseInt(String(machineNumber ?? "").replace(/\D/g, ""), 10);
+  return numeric === 3;
+};
 const getType1MachineSpecificOptions = (rowKey, machineNumber = "") => {
   if (rowKey === "tdv") return TYPE_1_TCW_OPTIONS;
   if (rowKey === "tm") return TYPE_1_TW_OPTIONS;
-  if (rowKey === "tciTm") return TYPE_1_TPI_OPTIONS[String(machineNumber).trim() === "3" ? "3" : "default"] || TYPE_1_TPI_OPTIONS.default;
+  if (rowKey === "tciTm") return TYPE_1_TPI_OPTIONS[isType1FrameNumberThree(machineNumber) ? "default" : "3"] || TYPE_1_TPI_OPTIONS.default;
   return [];
+};
+const getType1TpiTm = ({ tcw, tw, machineNumber }) => {
+  const tcwIndex = TYPE_1_TCW_OPTIONS.indexOf(String(tcw ?? "").trim());
+  const twValue = Number.parseFloat(String(tw ?? "").trim());
+  if (tcwIndex === -1 || !Number.isFinite(twValue)) return "";
+  const twIndex = Math.round(twValue) - 30;
+  if (twIndex < 0 || twIndex >= TYPE_1_TW_OPTIONS.length) return "";
+  const group = TYPE_1_TPI_OPTIONS[isType1FrameNumberThree(machineNumber) ? "default" : "3"] || TYPE_1_TPI_OPTIONS.default;
+  return group[tcwIndex * TYPE_1_TW_OPTIONS.length + twIndex] || "";
+};
+const TYPE_1_TOTAL_DRAFT_CONSTANT = 4.6875;
+const computeType1TotalDraft = ({ dca, dcb, dfc, dc }) => {
+  const dcaValue = Number.parseFloat(String(dca ?? "").trim());
+  const dcbValue = Number.parseFloat(String(dcb ?? "").trim());
+  const dfcValue = Number.parseFloat(String(dfc ?? "").trim());
+  const dcValue = Number.parseFloat(String(dc ?? "").trim());
+  if (
+    !Number.isFinite(dcaValue) ||
+    !Number.isFinite(dcbValue) ||
+    !Number.isFinite(dfcValue) ||
+    !Number.isFinite(dcValue) ||
+    dcaValue === 0 ||
+    dcValue === 0
+  ) {
+    return "";
+  }
+  return String((TYPE_1_TOTAL_DRAFT_CONSTANT * (dcbValue / dcaValue) * (dfcValue / dcValue)).toFixed(2));
 };
 
 const TYPE_1_PARAMETER_ROWS = [
@@ -126,23 +164,23 @@ const TYPE_1_PARAMETER_ROWS = [
   { key: "offsetDia", label: "Offset On/Off" },
   { key: "gapsCourseCondition", label: "Cop or Cone Condition" },
   { key: "diameterDoffSpeed", label: "Product Qty (Kgs)" },
-  { key: "rovingHank", label: "Raving Hank" },
+  { key: "rovingHank", label: "Roving Hank" },
   { key: "rh", label: "BDW", inputType: "select" },
-  { key: "bd", label: "BD", darkInput: true, inputType: "select" },
+  { key: "bd", label: "BD", darkInput: true, inputType: "select", computed: true },
   { key: "dca", label: "DCA", inputType: "select" },
-  { key: "dcb", label: "DCB", darkInput: true, inputType: "select" },
+  { key: "dcb", label: "DCB", darkInput: true, inputType: "select", computed: true },
   { key: "dpc", label: "DFC", inputType: "select" },
   { key: "dc", label: "DC", inputType: "select" },
   { key: "tdv", label: "TCW", inputType: "select" },
   { key: "tm", label: "TW", placeholder: "Select Value", inputType: "select" },
-  { key: "tciTm", label: "TPI/TM", darkInput: true, inputType: "select" },
+  { key: "tciTm", label: "TPI/TM", darkInput: true, inputType: "select", computed: true },
   { key: "travellerDia", label: "Travellers No." },
   { key: "spacer", label: "Spacer" },
   { key: "capWeight", label: "Cop Weight (Grms)" },
   { key: "spindleMotorRpm", label: "Speed Initial (RPM)" },
   { key: "empaleeColour", label: "Speed Max (RPM)" },
   { key: "traveller", label: "Empties Colour" },
-  { key: "totalDraft", label: "Total Draft", darkInput: true, inputType: "select" },
+  { key: "totalDraft", label: "Total Draft", darkInput: true, computed: true },
 ];
 
 const TYPE_2_PARAMETER_ROWS = [
@@ -164,7 +202,9 @@ const TYPE_2_PARAMETER_ROWS = [
   { key: "f", label: "D", inputType: "select" },
   { key: "c", label: "C", darkInput: true, inputType: "select", computed: true },
   { key: "tpiTm", label: "TPI/TM", darkInput: true, computed: true },
-  { key: "windingHp", label: "Winding - E/F" },
+  { key: "windingE", label: "Winding E" },
+  { key: "windingF", label: "Winding F" },
+  { key: "windingLengthMeters", label: "Winding length in meters" },
   { key: "rollerMoved", label: "Ratchet Wheel" },
   { key: "traveller", label: "Travellers No." },
   { key: "taper", label: "Spacer" },
@@ -291,7 +331,9 @@ const WHEEL_CHANGE_FIELD_MAP = {
       f: "d",
       c: "c",
       tpiTm: "tpi_tpm",
-      windingHp: "winding_kf",
+      windingE: "winding_e",
+      windingF: "winding_f",
+      windingLengthMeters: "winding_length_meters",
       rollerMoved: "ratchet_wheel",
       traveller: "travelers_no",
       taper: "spacer",
@@ -365,7 +407,9 @@ const WHEEL_CHANGE_NUMERIC_FIELDS = {
     "a",
     "c",
     "tpi_tpm",
-    "winding_kf",
+    "winding_e",
+    "winding_f",
+    "winding_length_meters",
     "speed_spindle",
     "speed_main",
     "total_draft",
@@ -619,7 +663,7 @@ const normalizeDropdownOptions = (rows) =>
   );
 const normalizeWheelChangeRecordValue = (value) =>
   value === undefined || value === null ? "" : String(value).trim();
-const buildWheelChangeValuesFromRecord = (record = {}, wheelChangeType = "") => {
+const buildWheelChangeValuesFromRecord = (record = {}, wheelChangeType = "", machineNumber = "") => {
   const typeConfig = WHEEL_CHANGE_FIELD_MAP[wheelChangeType];
   const rows = typeConfig?.rows || {};
   const values = ALL_WHEEL_CHANGE_PARAMETER_ROWS.reduce((values, row) => {
@@ -641,7 +685,9 @@ const buildWheelChangeValuesFromRecord = (record = {}, wheelChangeType = "") => 
     };
   }, {});
 
-  return wheelChangeType === "Type 2" ? buildType2DerivedValues(values) : values;
+  if (wheelChangeType === "Type 2") return buildType2DerivedValues(values);
+  if (wheelChangeType === "Type 1") return buildType1DerivedValues(values, machineNumber);
+  return values;
 };
 const parseNumericValue = (value) => {
   const parsed = Number.parseFloat(String(value ?? "").trim());
@@ -710,6 +756,52 @@ const buildType2DerivedValues = (values = {}) => {
   nextValues.totalDraft = {
     existing: computeType2TotalDraft({ brw: existingBrw, cp: existingCp }),
     proposed: computeType2TotalDraft({ brw: proposedBrw, cp: proposedCp }),
+  };
+
+  return nextValues;
+};
+
+const buildType1DerivedValues = (values = {}, machineNumber = "") => {
+  const nextValues = { ...values };
+
+  const existingBdw = getTextValue(nextValues.rh?.existing);
+  const proposedBdw = getTextValue(nextValues.rh?.proposed);
+  nextValues.bd = {
+    existing: TYPE_2_BDW_TO_BD[existingBdw] || getTextValue(nextValues.bd?.existing),
+    proposed: TYPE_2_BDW_TO_BD[proposedBdw] || getTextValue(nextValues.bd?.proposed),
+  };
+
+  const existingDca = getTextValue(nextValues.dca?.existing);
+  const proposedDca = getTextValue(nextValues.dca?.proposed);
+  nextValues.dcb = {
+    existing: TYPE_1_DCA_TO_DCB[existingDca] || getTextValue(nextValues.dcb?.existing),
+    proposed: TYPE_1_DCA_TO_DCB[proposedDca] || getTextValue(nextValues.dcb?.proposed),
+  };
+
+  nextValues.tciTm = {
+    existing:
+      getType1TpiTm({ tcw: nextValues.tdv?.existing, tw: nextValues.tm?.existing, machineNumber }) ||
+      getTextValue(nextValues.tciTm?.existing),
+    proposed:
+      getType1TpiTm({ tcw: nextValues.tdv?.proposed, tw: nextValues.tm?.proposed, machineNumber }) ||
+      getTextValue(nextValues.tciTm?.proposed),
+  };
+
+  nextValues.totalDraft = {
+    existing:
+      computeType1TotalDraft({
+        dca: existingDca,
+        dcb: nextValues.dcb.existing,
+        dfc: getTextValue(nextValues.dpc?.existing),
+        dc: getTextValue(nextValues.dc?.existing),
+      }) || getTextValue(nextValues.totalDraft?.existing),
+    proposed:
+      computeType1TotalDraft({
+        dca: proposedDca,
+        dcb: nextValues.dcb.proposed,
+        dfc: getTextValue(nextValues.dpc?.proposed),
+        dc: getTextValue(nextValues.dc?.proposed),
+      }) || getTextValue(nextValues.totalDraft?.proposed),
   };
 
   return nextValues;
@@ -846,6 +938,10 @@ const WheelChange = forwardRef(function WheelChange(
         return buildType2DerivedValues(nextValues);
       }
 
+      if (wheelChangeType === "Type 1") {
+        return buildType1DerivedValues(nextValues, machineNumber);
+      }
+
       return nextValues;
     });
   };
@@ -950,7 +1046,7 @@ const WheelChange = forwardRef(function WheelChange(
             ""
         ));
         setValues((current) => {
-          const nextValues = buildWheelChangeValuesFromRecord(latestRecord, wheelChangeType);
+          const nextValues = buildWheelChangeValuesFromRecord(latestRecord, wheelChangeType, machineNumber);
           return {
             ...nextValues,
             countForm: {
@@ -992,8 +1088,10 @@ const WheelChange = forwardRef(function WheelChange(
     activeRows.forEach((row) => {
       const rowValues = values[row.key] || {};
       const rowErrors = {};
-      if (!hasTextValue(rowValues.existing)) rowErrors.existing = true;
-      if (!hasTextValue(rowValues.proposed)) rowErrors.proposed = true;
+      if (!row.computed) {
+        if (!hasTextValue(rowValues.existing)) rowErrors.existing = true;
+        if (!hasTextValue(rowValues.proposed)) rowErrors.proposed = true;
+      }
 
       if (getParameterInputType(row) === "number") {
         if (hasTextValue(rowValues.existing) && parseNumericValue(rowValues.existing) === null) {

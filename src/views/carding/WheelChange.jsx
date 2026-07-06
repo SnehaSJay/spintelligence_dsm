@@ -23,8 +23,8 @@ const parameterRows = [
   { key: "blendPercent", field: "blend_percent", label: "Blend %" },
   { key: "doffHank", field: "del_hank", label: "Del-Hank", numeric: true },
   { key: "feedWeight", field: "feed_weight", label: "Feed Weight", numeric: true },
-  { key: "speed", field: "speed", label: "Speed", numeric: true },
   { key: "lickerInSpeed1", field: "licker_in_speed_1", label: "Licker-in Speed 1", numeric: true },
+  { key: "lickerInSpeed2", field: "licker_in_speed_2", label: "Licker-in Speed 2", numeric: true },
   { key: "cylinderSpeed", field: "cylinder_speed", label: "Cylinder Speed", numeric: true },
   { key: "flatsSpeed", field: "flats_speed_mm_min", label: "Flats Speed in mm/min", numeric: true },
   { key: "feedPlateToLickerIn", field: "feed_plate_to_licker_in", label: "Feed Plate to Licker-in", numeric: true },
@@ -48,6 +48,11 @@ const hasValue = (value) => String(value ?? "").trim() !== "";
 const trimValue = (value) => String(value ?? "").trim();
 const isNumericValue = (value) => hasValue(value) && Number.isFinite(Number(value));
 const getPayloadValue = (_row, value) => trimValue(value);
+
+const normalizeCdgProposedList = (value) => {
+  if (Array.isArray(value)) return value.map(trimValue).filter(hasValue);
+  return hasValue(value) ? [trimValue(value)] : [];
+};
 
 const extractLatestEntry = (payload) => {
   const rows = Array.isArray(payload?.data)
@@ -73,7 +78,9 @@ function CardingWheelChange({ types = [], selectedType = "WheelChange", onTypeCh
   const router = useRouter();
   const [entryDate, setEntryDate] = useState(getTodayDate);
   const [cdoNo, setCdoNo] = useState("");
-  const [proposedCdgNo, setProposedCdgNo] = useState("");
+  const [proposedCdgNos, setProposedCdgNos] = useState([]);
+  const [isCdgProposedOpen, setIsCdgProposedOpen] = useState(false);
+  const cdgProposedRef = useRef(null);
   const [values, setValues] = useState(createValues);
   const [remarks, setRemarks] = useState("");
   const [errors, setErrors] = useState({});
@@ -101,8 +108,9 @@ function CardingWheelChange({ types = [], selectedType = "WheelChange", onTypeCh
     const latest = extractLatestEntry(payload);
     if (!latest) return null;
 
-    setCdoNo(trimValue(latest.cdg_no_proposed ?? latest.cdo_no ?? ""));
-    setProposedCdgNo("");
+    const previousProposedCdgList = normalizeCdgProposedList(latest.cdg_no_proposed);
+    setCdoNo(previousProposedCdgList[0] || trimValue(latest.cdo_no ?? ""));
+    setProposedCdgNos([]);
     setValues(buildExistingValuesFromEntry(latest));
     setRemarks("");
     setErrors({});
@@ -145,6 +153,17 @@ function CardingWheelChange({ types = [], selectedType = "WheelChange", onTypeCh
   }, []);
 
   useEffect(() => {
+    if (!isCdgProposedOpen) return undefined;
+    const handleOutsideClick = (event) => {
+      if (!cdgProposedRef.current?.contains(event.target)) {
+        setIsCdgProposedOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, [isCdgProposedOpen]);
+
+  useEffect(() => {
     if (!selectedMixing) {
       lastLoadedMixingRef.current = "";
       return;
@@ -169,15 +188,15 @@ function CardingWheelChange({ types = [], selectedType = "WheelChange", onTypeCh
     () => [
       { label: "Type", value: selectedType || "WheelChange" },
       { label: "Entry ID", value: entryId || "-" },
-      { label: "CDG No.", value: cdoNo || "-" },
-      { label: "CDG No. (Proposed)", value: proposedCdgNo || "-" },
+      { label: "CDG No. (Existing)", value: cdoNo || "-" },
+      { label: "CDG No. (Proposed)", value: proposedCdgNos.length ? proposedCdgNos.join(", ") : "-" },
       ...parameterRows.flatMap((row) => [
         { label: `${row.label} - Existing`, value: values[row.key]?.existing || "-" },
         { label: `${row.label} - Proposed`, value: values[row.key]?.proposed || "-" },
       ]),
       { label: "Remarks", value: remarks || "-" },
     ],
-    [cdoNo, entryId, proposedCdgNo, remarks, selectedType, values]
+    [cdoNo, entryId, proposedCdgNos, remarks, selectedType, values]
   );
 
   const clearError = (field) => {
@@ -224,7 +243,7 @@ function CardingWheelChange({ types = [], selectedType = "WheelChange", onTypeCh
     if (!selectedType) nextErrors.selectedType = true;
     if (!hasValue(entryDate)) nextErrors.entryDate = true;
     if (!hasValue(cdoNo)) nextErrors.cdoNo = true;
-    if (!hasValue(proposedCdgNo)) nextErrors.proposedCdgNo = true;
+    if (!proposedCdgNos.length) nextErrors.proposedCdgNo = true;
 
     const valueErrors = {};
     parameterRows.forEach((row) => {
@@ -256,7 +275,7 @@ function CardingWheelChange({ types = [], selectedType = "WheelChange", onTypeCh
       type: CHANGE_CONTROL_TYPE,
       entry_date: entryDate || getTodayDate(),
       cdo_no: cdoNo,
-      cdg_no_proposed: proposedCdgNo,
+      cdg_no_proposed: proposedCdgNos,
       ...parameterPayload,
       remarks: trimValue(remarks),
     };
@@ -265,7 +284,8 @@ function CardingWheelChange({ types = [], selectedType = "WheelChange", onTypeCh
   const handleClear = () => {
     setEntryDate(getTodayDate());
     setCdoNo("");
-    setProposedCdgNo("");
+    setProposedCdgNos([]);
+    setIsCdgProposedOpen(false);
     setValues((current) =>
       parameterRows.reduce((record, row) => {
         record[row.key] = {
@@ -386,7 +406,7 @@ function CardingWheelChange({ types = [], selectedType = "WheelChange", onTypeCh
 
         <div className={`${styles.row} ${styles.twoColumnRow}`}>
           <div className={styles.field}>
-            <label>CDG No.</label>
+            <label>CDG No. (Existing)</label>
             <SearchableSelect
               className={`${styles.topInput} ${errors.cdoNo ? styles.errorInput : ""}`}
               value={cdoNo}
@@ -396,23 +416,73 @@ function CardingWheelChange({ types = [], selectedType = "WheelChange", onTypeCh
               }}
               options={cdgOptions}
               placeholder="Select"
-              ariaLabel="CDG No."
+              ariaLabel="CDG No. (Existing)"
             />
           </div>
 
-          <div className={styles.field}>
+          <div className={styles.field} ref={cdgProposedRef} style={{ position: "relative" }}>
             <label>CDG No. (Proposed)</label>
-            <SearchableSelect
+            <button
+              type="button"
               className={`${styles.topInput} ${errors.proposedCdgNo ? styles.errorInput : ""}`}
-              value={proposedCdgNo}
-              onChange={(value) => {
-                setProposedCdgNo(value);
-                clearError("proposedCdgNo");
-              }}
-              options={cdgOptions}
-              placeholder="Select"
-              ariaLabel="CDG No. Proposed"
-            />
+              style={{ textAlign: "left", cursor: "pointer" }}
+              onClick={() => setIsCdgProposedOpen((current) => !current)}
+              aria-haspopup="listbox"
+              aria-expanded={isCdgProposedOpen}
+            >
+              {proposedCdgNos.length ? proposedCdgNos.join(", ") : "Select"}
+            </button>
+            {isCdgProposedOpen ? (
+              <div
+                role="listbox"
+                aria-label="CDG No. (Proposed)"
+                style={{
+                  position: "absolute",
+                  top: "100%",
+                  left: 0,
+                  right: 0,
+                  zIndex: 50,
+                  marginTop: "0.25rem",
+                  maxHeight: "16rem",
+                  overflowY: "auto",
+                  borderRadius: "0.5rem",
+                  border: "1px solid #dbe4f0",
+                  background: "#fff",
+                  boxShadow: "0 4px 12px rgba(15,23,42,0.12)",
+                }}
+              >
+                {cdgOptions.map((option) => {
+                  const checked = proposedCdgNos.includes(option);
+                  return (
+                    <label
+                      key={option}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.5rem",
+                        padding: "0.5rem 0.75rem",
+                        fontSize: "12px",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => {
+                          setProposedCdgNos((current) =>
+                            current.includes(option)
+                              ? current.filter((value) => value !== option)
+                              : [...current, option]
+                          );
+                          clearError("proposedCdgNo");
+                        }}
+                      />
+                      {option}
+                    </label>
+                  );
+                })}
+              </div>
+            ) : null}
           </div>
         </div>
 

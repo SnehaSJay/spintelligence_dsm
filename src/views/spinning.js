@@ -390,8 +390,6 @@ function SpinningDepartment() {
     const clearFormValues = useCallback(() => {
         childRef.current?.clear?.();
         setSelectedMachine("");
-        setEmployeeSearch("");
-        setShowEmployeeList(false);
         setDisplaySpeed("");
         setSpindleSpeed("");
         setCountChangeMode("");
@@ -509,7 +507,7 @@ function SpinningDepartment() {
 
         let isMounted = true;
         Promise.allSettled([
-            fetchSpinningCountChangeRfNos(),
+            fetchSpinningMachineNumberOptions({ screen: "master", department: "Spinning" }),
             fetchSpinningCountChangeDropdown(),
         ]).then(([rfResult, countNameResult]) => {
             if (!isMounted) return;

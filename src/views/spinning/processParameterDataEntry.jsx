@@ -45,6 +45,8 @@ const createDefaultForm = () => ({
   slubMax: "",
   thicknessMin: "",
   thicknessMax: "",
+  ramp: "",
+  offset: "",
   lycraDraft: "",
   lycraPercent: "",
 });
@@ -95,6 +97,8 @@ const isVersionComplete = (version) =>
     "slubMax",
     "thicknessMin",
     "thicknessMax",
+    "ramp",
+    "offset",
     "lycraDraft",
     "lycraPercent",
   ].every((field) => String(version?.data?.[field] || "").trim());
@@ -155,6 +159,8 @@ const mapApiEntryToVersion = (entry) => {
         entry?.thickness_max === null || typeof entry?.thickness_max === "undefined"
           ? ""
           : String(entry.thickness_max),
+      ramp: entry?.ramp || "",
+      offset: entry?.offset || "",
       lycraDraft:
         entry?.lycra_draft === null || typeof entry?.lycra_draft === "undefined"
           ? ""
@@ -226,7 +232,7 @@ const fieldDefs = [
   { key: "make", label: "Make" },
   { key: "denier", label: "Denier" },
   { key: "mergeNo", label: "Mergen Number" },
-  { key: "slubPartcyCode", label: "Slub Partcy Code" },
+  { key: "slubPartcyCode", label: "Slub Partcy Code", section: "Slub Specification (Slub - Thickness Max)" },
   { key: "slubMtr", label: "Slub / Mtr" },
   { key: "pauseMin", label: "Pause Min" },
   { key: "pauseMax", label: "Pause Max" },
@@ -234,6 +240,8 @@ const fieldDefs = [
   { key: "slubMax", label: "Slub Max" },
   { key: "thicknessMin", label: "Thickness Min" },
   { key: "thicknessMax", label: "Thickness Max" },
+  { key: "ramp", label: "Ramp" },
+  { key: "offset", label: "Offset", inputType: "onOff" },
   { key: "lycraDraft", label: "Lycra Draft" },
   { key: "lycraPercent", label: "Lycra %" },
 ];
@@ -456,12 +464,29 @@ const SpinningProcessParameterDataEntry = forwardRef(function SpinningProcessPar
   };
 
   const findLatestVersionByCountName = (countName) => {
-    const normalized = String(countName || "").trim().toLowerCase();
+    const normalizeCountName = (value) => String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+    const normalized = normalizeCountName(countName);
     if (!normalized) return null;
     return (
       versions
-        .filter((version) => String(version.data.countName || "").trim().toLowerCase() === normalized)
-        .sort((a, b) => new Date(b.data.creationDate || 0) - new Date(a.data.creationDate || 0))[0] || null
+        .filter((version) => normalizeCountName(version.data.countName) === normalized)
+        .sort((a, b) => {
+          const sortValue = (v) => {
+            const paramId = String(v?.data?.paramId || "").trim();
+            const numericParamId = Number(paramId);
+            if (paramId && Number.isFinite(numericParamId)) return numericParamId;
+            if (paramId) return paramId.toLowerCase();
+            const numericId = Number(v?.id);
+            return Number.isFinite(numericId) ? numericId : String(v?.id || "").toLowerCase();
+          };
+          const aValue = sortValue(a);
+          const bValue = sortValue(b);
+          if (typeof aValue === "number" && typeof bValue === "number") return bValue - aValue;
+          return String(bValue).localeCompare(String(aValue), undefined, {
+            numeric: true,
+            sensitivity: "base",
+          });
+        })[0] || null
     );
   };
 

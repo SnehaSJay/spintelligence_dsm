@@ -1,5 +1,6 @@
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { MdEditNote } from "react-icons/md";
+import { HiChevronDown, HiChevronUp } from "react-icons/hi2";
 import InputScreenUploadButton from "@/components/InputScreenUploadButton";
 import SearchableSelect from "@/components/SearchableSelect";
 import { createSmxMachineOptions } from "@/views/simplex/smxMachineNames";
@@ -20,15 +21,15 @@ const rowGroups = {
     { key: "cp", label: "CP", select: true },
     { key: "smxid", label: "SMXID", select: true },
     { key: "breakDraft", label: "Break Draft (CP)", select: true },
-    { key: "totalDraft", label: "Total Draft", dark: true },
-    { key: "breakDraftValue", label: "Break Draft", dark: true },
+    { key: "totalDraft", label: "Total Draft", dark: true, readOnly: true },
+    { key: "breakDraftValue", label: "Break Draft", dark: true, readOnly: true },
     { key: "md1", label: "Front Roller Dia" },
     { key: "md2", label: "TW", select: true },
     { key: "tw0", label: "TCW (0)", select: true },
     { key: "tw1", label: "TCW (1)", select: true },
-    { key: "tf", label: "TF", dark: true },
-    { key: "tm", label: "TM", dark: true },
-    { key: "lm", label: "LM", select: true },
+    { key: "tf", label: "TPI", dark: true, readOnly: true },
+    { key: "tm", label: "TM", dark: true, readOnly: true },
+    { key: "lm", label: "LW", select: true },
     { key: "lcw0", label: "LCW (1)", select: true },
     { key: "lcw1", label: "LCW (0)", select: true },
     { key: "bottomRollerSetting", label: "Bottom Roller Setting", dark: true },      
@@ -38,7 +39,7 @@ const rowGroups = {
     { key: "spacer", label: "Spacer", dark: true },
     { key: "tension", label: "Tension", select: true },
     { key: "creelDraftChange", label: "Creel Draft Change (WE)", select: true },
-    { key: "creelDraft", label: "Creel Draft", dark: true },
+    { key: "creelDraft", label: "Creel Draft", dark: true, readOnly: true },
     { key: "bobbinColour", label: "Bobbin Colour", dark: true },
   ],
   "Type 1 - SB20": [
@@ -92,6 +93,38 @@ const normalizeRows = (rows = []) => {
   });
 };
 
+const extractSequence = (value) => {
+  const match = String(value ?? "").trim().match(/(\d+)(?!.*\d)/);
+  return match ? Number(match[1]) || 0 : 0;
+};
+
+const mapApiEntryToVersion = (entry) => {
+  const normalizedDate = String(entry?.entry_date || "").split("T")[0];
+  const paramRows = Array.isArray(entry?.parameter_rows)
+    ? entry.parameter_rows
+    : Array.isArray(entry?.parameters)
+      ? entry.parameters
+      : Array.isArray(entry?.rows)
+        ? entry.rows
+        : [];
+  const mixingRow = paramRows.find((row) =>
+    String(row?.key ?? row?.label ?? "").trim().toLowerCase().includes("mixing")
+  );
+
+  return {
+    id: String(entry?.entry_id ?? entry?.id ?? Date.now()),
+    label: normalizedDate,
+    data: {
+      entryId: String(entry?.entry_id || ""),
+      date: normalizedDate || today,
+      smxNo: String(entry?.sap_no || ""),
+      smxNoProposed: String(entry?.proposed_sap_no || ""),
+      mixing: String(mixingRow?.existing || mixingRow?.proposed || ""),
+      rows: normalizeRows(paramRows),
+    },
+  };
+};
+
 const extractLatestNotebookEntry = (payload) => {
   const rows = Array.isArray(payload?.data)
     ? payload.data
@@ -113,6 +146,53 @@ const computeType1Sb20TotalDraft = ({ nw1, nw2 }) => {
   const nw2Value = parseNumericValue(nw2);
   if (nw1Value === null || nw2Value === null || nw1Value === 0) return "";
   return String((3.993 * (nw2Value / nw1Value)).toFixed(2));
+};
+
+const computeSimplexLrsbTpi = ({ tw, tcwh, tcwg, frontRollerDia }) => {
+  const twValue = parseNumericValue(tw);
+  const tcwhValue = parseNumericValue(tcwh);
+  const tcwgValue = parseNumericValue(tcwg);
+  const frontRollerDiaValue = parseNumericValue(frontRollerDia);
+  if (
+    twValue === null ||
+    tcwhValue === null ||
+    tcwgValue === null ||
+    frontRollerDiaValue === null ||
+    tcwgValue === 0 ||
+    frontRollerDiaValue === 0
+  ) {
+    return "";
+  }
+  const numerator = 51 * 36 * twValue * tcwhValue * 67 * 25.4;
+  const denominator = 40 * 38 * 102 * tcwgValue * 26.3 * 3.14 * frontRollerDiaValue;
+  if (denominator === 0) return "";
+  return String((numerator / denominator).toFixed(2));
+};
+
+const computeSimplexLrsbTm = ({ tpi, delHank }) => {
+  const tpiValue = parseNumericValue(tpi);
+  const delHankValue = parseNumericValue(delHank);
+  if (tpiValue === null || delHankValue === null || delHankValue <= 0) return "";
+  return String((tpiValue / Math.sqrt(delHankValue)).toFixed(2));
+};
+
+const computeSimplexLrsbBreakDraftValue = ({ breakDraftCp }) => {
+  const breakDraftCpValue = parseNumericValue(breakDraftCp);
+  if (breakDraftCpValue === null || breakDraftCpValue === 0) return "";
+  return String((66.7 / breakDraftCpValue).toFixed(2));
+};
+
+const computeSimplexLrsbCreelDraft = ({ creelDraftChange }) => {
+  const creelDraftChangeValue = parseNumericValue(creelDraftChange);
+  if (creelDraftChangeValue === null) return "";
+  return String((0.0245 * creelDraftChangeValue).toFixed(4));
+};
+
+const computeSimplexLrsbTotalDraft = ({ breakDraftCp, cp }) => {
+  const breakDraftCpValue = parseNumericValue(breakDraftCp);
+  const cpValue = parseNumericValue(cp);
+  if (breakDraftCpValue === null || cpValue === null || breakDraftCpValue === 0 || cpValue === 0) return "";
+  return String((29968 / breakDraftCpValue / cpValue).toFixed(2));
 };
 
 const SIMPLEX_WHEEL_CHANGE_SELECT_OPTIONS = {
@@ -296,6 +376,10 @@ const WheelChange = forwardRef(function WheelChange(
   const [machineOptions, setMachineOptions] = useState([]);
   const [mixingOptions, setMixingOptions] = useState([]);
   const [submitError, setSubmitError] = useState("");
+  const [versions, setVersions] = useState([]);
+  const [loadingVersions, setLoadingVersions] = useState(false);
+  const [expandedVersionId, setExpandedVersionId] = useState(null);
+  const skipMixingRefreshRef = useRef(false);
 
   const findLatestEntryForMixing = (entries = [], mixing = "") => {
     const normalizedMixing = String(mixing || "").trim().toLowerCase();
@@ -432,6 +516,7 @@ const WheelChange = forwardRef(function WheelChange(
           proposed: "",
         }))
       );
+      loadVersions();
       return true;
     } catch (error) {
       setSubmitError(error?.message || "Unable to submit simplex notebook entry.");
@@ -460,6 +545,10 @@ const WheelChange = forwardRef(function WheelChange(
     let cancelled = false;
 
     const refreshByMixing = async () => {
+      if (skipMixingRefreshRef.current) {
+        skipMixingRefreshRef.current = false;
+        return;
+      }
       if (!selectedMixing) return;
       try {
         const payload = await fetchSimplexWheelChangeNotebookEntries({ page: 1, limit: 100 });
@@ -476,7 +565,14 @@ const WheelChange = forwardRef(function WheelChange(
               : latest.rows && typeof latest.rows === "object"
                 ? latest.rows
                 : [];
-        setRows(normalizeRows(savedRows));
+        setRows((current) => {
+          const currentMixing = current.find((item) => item.key === "mixing");
+          return normalizeRows(savedRows).map((item) =>
+            item.key === "mixing" && currentMixing
+              ? { ...item, existing: currentMixing.existing, proposed: currentMixing.proposed }
+              : item
+          );
+        });
       } catch {
         // Keep current values when a mixing-specific history row isn't available.
       }
@@ -488,6 +584,49 @@ const WheelChange = forwardRef(function WheelChange(
     };
   }, [selectedMixing]);
 
+  const loadVersions = async () => {
+    setLoadingVersions(true);
+    try {
+      const payload = await fetchSimplexWheelChangeNotebookEntries({ page: 1, limit: 200 });
+      const list = Array.isArray(payload?.data)
+        ? payload.data
+        : Array.isArray(payload?.rows)
+          ? payload.rows
+          : Array.isArray(payload)
+            ? payload
+            : [];
+      const nextVersions = list
+        .map(mapApiEntryToVersion)
+        .sort((a, b) => extractSequence(b.id) - extractSequence(a.id));
+      setVersions(nextVersions);
+    } catch {
+      setVersions([]);
+    } finally {
+      setLoadingVersions(false);
+    }
+  };
+
+  useEffect(() => {
+    loadVersions();
+  }, []);
+
+  const handleVersionSelect = (version) => {
+    skipMixingRefreshRef.current = true;
+    setForm((current) => ({
+      ...current,
+      entryId: version.data.entryId,
+      date: version.data.date,
+      smxNo: version.data.smxNo,
+      smxNoProposed: version.data.smxNoProposed,
+    }));
+    setRows(version.data.rows);
+    setExpandedVersionId(version.id);
+  };
+
+  const handleVersionToggle = (version) => {
+    setExpandedVersionId((current) => (current === version.id ? null : version.id));
+  };
+
   useEffect(() => {
     if (selectedRows !== rowGroups["Type 1 - SB20"]) return;
 
@@ -495,27 +634,62 @@ const WheelChange = forwardRef(function WheelChange(
     const nw2Value = rows.find((item) => item.key === "nw2")?.proposed || rows.find((item) => item.key === "nw2")?.existing || "";
     const totalDraftValue = computeType1Sb20TotalDraft({ nw1: nw1Value, nw2: nw2Value });
 
-    setRows((current) =>
-      current.map((item) => {
-        if (item.key === "totalDraft") {
-          return {
-            ...item,
-            existing: totalDraftValue,
-            proposed: totalDraftValue,
-          };
-        }
+    setRows((current) => {
+      const computedByKey = { totalDraft: totalDraftValue, draftConstant: "3.993" };
 
-        if (item.key === "draftConstant") {
-          return {
-            ...item,
-            existing: "3.993",
-            proposed: "3.993",
-          };
-        }
+      const isUnchanged = current.every((item) => {
+        if (!(item.key in computedByKey)) return true;
+        const computed = computedByKey[item.key];
+        return (item.existing || "") === computed && (item.proposed || "") === computed;
+      });
+      if (isUnchanged) return current;
 
-        return item;
-      })
-    );
+      return current.map((item) =>
+        item.key in computedByKey
+          ? { ...item, existing: computedByKey[item.key], proposed: computedByKey[item.key] }
+          : item
+      );
+    });
+  }, [rows, selectedRows]);
+
+  useEffect(() => {
+    if (selectedRows !== rowGroups["Type 1 (LRSB)"]) return;
+
+    const getValue = (key) => rows.find((item) => item.key === key)?.proposed || rows.find((item) => item.key === key)?.existing || "";
+
+    const tpiValue = computeSimplexLrsbTpi({
+      tw: getValue("md2"),
+      tcwh: getValue("tw1"),
+      tcwg: getValue("tw0"),
+      frontRollerDia: getValue("md1"),
+    });
+    const tmValue = computeSimplexLrsbTm({ tpi: tpiValue, delHank: getValue("delHank") });
+    const breakDraftValueResult = computeSimplexLrsbBreakDraftValue({ breakDraftCp: getValue("breakDraft") });
+    const creelDraftValue = computeSimplexLrsbCreelDraft({ creelDraftChange: getValue("creelDraftChange") });
+    const totalDraftValue = computeSimplexLrsbTotalDraft({ breakDraftCp: getValue("breakDraft"), cp: getValue("cp") });
+
+    setRows((current) => {
+      const computedByKey = {
+        tf: tpiValue,
+        tm: tmValue,
+        breakDraftValue: breakDraftValueResult,
+        creelDraft: creelDraftValue,
+        totalDraft: totalDraftValue,
+      };
+
+      const isUnchanged = current.every((item) => {
+        if (!(item.key in computedByKey)) return true;
+        const computed = computedByKey[item.key];
+        return (item.existing || "") === computed && (item.proposed || "") === computed;
+      });
+      if (isUnchanged) return current;
+
+      return current.map((item) =>
+        item.key in computedByKey
+          ? { ...item, existing: computedByKey[item.key], proposed: computedByKey[item.key] }
+          : item
+      );
+    });
   }, [rows, selectedRows]);
 
   const renderField = (row, valueKey) => {
@@ -678,6 +852,96 @@ const WheelChange = forwardRef(function WheelChange(
           </table>
         </div>
         {submitError ? <p className="mt-3 text-[14px] text-red-600">{submitError}</p> : null}
+
+        <div className="mt-8">
+          <h4 className="mb-3 text-[15px] font-bold text-slate-900">Saved Entries</h4>
+          {loadingVersions ? (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+              Loading saved entries...
+            </div>
+          ) : null}
+          {!loadingVersions && versions.length === 0 ? (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+              No saved entries found.
+            </div>
+          ) : null}
+          <div className="flex flex-col gap-3">
+            {versions.map((version) => {
+              const isExpanded = expandedVersionId === version.id;
+              const isActive = version.data.entryId === form.entryId;
+              return (
+                <div key={version.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                  <div
+                    className={`grid w-full grid-cols-1 gap-3 px-4 py-3 transition-colors md:grid-cols-[120px_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] ${
+                      isActive ? "bg-[#f8fbff]" : "bg-white hover:bg-slate-50"
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-left"
+                      onClick={() => handleVersionSelect(version)}
+                    >
+                      <div className="text-[9px] font-semibold uppercase tracking-[0.08em] text-slate-500">Entry ID</div>
+                      <div className="mt-1 text-[13px] font-bold text-slate-900">{version.data.entryId || "-"}</div>
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-left"
+                      onClick={() => handleVersionSelect(version)}
+                    >
+                      <div className="text-[9px] font-semibold uppercase tracking-[0.08em] text-slate-500">Date</div>
+                      <div className="mt-1 text-[13px] font-bold text-slate-900">{version.data.date || "-"}</div>
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-left"
+                      onClick={() => handleVersionSelect(version)}
+                    >
+                      <div className="text-[9px] font-semibold uppercase tracking-[0.08em] text-slate-500">Mixing / Process</div>
+                      <div className="mt-1 text-[13px] font-bold text-slate-900">{version.data.mixing || "-"}</div>
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-left"
+                      onClick={() => handleVersionSelect(version)}
+                    >
+                      <div className="text-[9px] font-semibold uppercase tracking-[0.08em] text-slate-500">SMX No.</div>
+                      <div className="mt-1 text-[13px] font-bold text-slate-900">{version.data.smxNo || "-"}</div>
+                    </button>
+                    <button
+                      type="button"
+                      className="flex items-center justify-center text-[20px] text-slate-500"
+                      onClick={() => handleVersionToggle(version)}
+                      aria-label={isExpanded ? "Collapse saved entry details" : "Expand saved entry details"}
+                    >
+                      {isExpanded ? <HiChevronUp /> : <HiChevronDown />}
+                    </button>
+                  </div>
+
+                  {isExpanded ? (
+                    <div className="border-t border-[#dbe4f0] bg-[#eef5ff] p-4">
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                        {rowGroups["Type 1 (LRSB)"].map((field) => (
+                          <div
+                            key={`${version.id}-${field.key}`}
+                            className="rounded-lg border border-[#c8d9f0] bg-white px-3 py-2 shadow-[0_1px_2px_rgba(15,23,42,0.05)]"
+                          >
+                            <div className="text-[9px] font-semibold uppercase tracking-[0.08em] text-slate-500">
+                              {field.label}
+                            </div>
+                            <div className="mt-1 text-[13px] font-bold text-slate-900">
+                              {version.data.rows.find((r) => r.key === field.key)?.existing || "-"}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </div>
     </div>
   );

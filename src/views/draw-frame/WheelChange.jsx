@@ -330,6 +330,9 @@ const DRAW_FRAME_LRSB_SILVER_FUNNEL_OPTIONS = ["6", "7", "8", "9", "10"];
 const DRAW_FRAME_LRSB_WEB_GUIDE_TUBE_OPTIONS = ["8", "10"];
 const DRAW_FRAME_LRSB_INSERT_BORE_DIA_OPTIONS = ["8", "10"];
 const DRAW_FRAME_TRUMPET_OPTIONS = ["3.8", "4.2", "4.6", "5"];
+const DRAW_FRAME_BREAKER_TRUMPET_OPTIONS = ["3.8", "4.2"];
+const DRAW_FRAME_TD7_TRUMPET_OPTIONS = ["3.8", "4.2"];
+const DRAW_FRAME_TD9_TRUMPET_OPTIONS = ["3.8", "4.2"];
 const DRAW_FRAME_D40_NW_OPTIONS = [
   "30",
   "35",
@@ -506,38 +509,38 @@ const DRAW_FRAME_LDF3S_BOTTOM_ROLLER_BACK_OPTIONS = [
 const DRAW_FRAME_LDF3S_SCANNING_ROLLER_OPTIONS = ["5", "7", "9"];
 const DRAW_FRAME_LDF3S_TRUMPET_OPTIONS = ["3.8", "4.2", "4.6", "5", "5.5"];
 const DRAW_FRAME_TD7_TOTAL_DRAFT_OPTIONS = [
-  { value: "4", label: "4" },
+  { value: "4.0", label: "4.0" },
   { value: "4.2", label: "4.2" },
   { value: "4.3", label: "4.3" },
   { value: "4.4", label: "4.4" },
   { value: "4.6", label: "4.6" },
   { value: "4.7", label: "4.7" },
   { value: "4.8", label: "4.8" },
-  { value: "5", label: "5" },
+  { value: "5.0", label: "5.0" },
   { value: "5.1", label: "5.1" },
   { value: "5.3", label: "5.3" },
   { value: "5.5", label: "5.5" },
   { value: "5.6", label: "5.6" },
   { value: "5.7", label: "5.7" },
   { value: "5.9", label: "5.9" },
-  { value: "6", label: "6" },
+  { value: "6.0", label: "6.0" },
   { value: "6.2", label: "6.2" },
   { value: "6.4", label: "6.4" },
   { value: "6.6", label: "6.6" },
   { value: "6.8", label: "6.8" },
-  { value: "7", label: "7" },
+  { value: "7.0", label: "7.0" },
   { value: "7.2", label: "7.2" },
   { value: "7.4", label: "7.4" },
   { value: "7.6", label: "7.6" },
   { value: "7.8", label: "7.8" },
-  { value: "8", label: "8" },
+  { value: "8.0", label: "8.0" },
   { value: "8.3", label: "8.3" },
   { value: "8.5", label: "8.5" },
   { value: "8.8", label: "8.8" },
-  { value: "9", label: "9" },
+  { value: "9.0", label: "9.0" },
   { value: "9.3", label: "9.3" },
   { value: "9.6", label: "9.6" },
-  { value: "10", label: "10" },
+  { value: "10.0", label: "10.0" },
 ];
 const TD7_TOTAL_DRAFT_TO_G1_G2_MAP = {
   "4": "43/40",
@@ -741,6 +744,19 @@ const DRAW_FRAME_TD7_BDCP_OPTIONS = [
   { value: "1.588 / 17", label: "1.588 / 17" },
   { value: "1.688 / 16", label: "1.688 / 16" },
 ];
+const DRAW_FRAME_TD9_BDCP_OPTIONS = [
+  { value: "1.038 / 26", label: "1.038 / 26" },
+  { value: "1.080 / 25", label: "1.080 / 25" },
+  { value: "1.125 / 24", label: "1.125 / 24" },
+  { value: "1.174 / 23", label: "1.174 / 23" },
+  { value: "1.227 / 22", label: "1.227 / 22" },
+  { value: "1.286 / 21", label: "1.286 / 21" },
+  { value: "1.350 / 20", label: "1.350 / 20" },
+  { value: "1.421 / 19", label: "1.421 / 19" },
+  { value: "1.500 / 18", label: "1.500 / 18" },
+  { value: "1.588 / 17", label: "1.588 / 17" },
+  { value: "1.688 / 16", label: "1.688 / 16" },
+];
 const DRAW_FRAME_TD9_WEB_TENSION_OPTIONS = [
   { value: "87 / 0.99", label: "87 / 0.99" },
   { value: "86.5 / 0.995", label: "86.5 / 0.995" },
@@ -806,7 +822,89 @@ const DRAW_FRAME_TD7_BOTTOM_ROLLER_FRONT_OPTIONS = [
   { value: "59.3 / 22.5", label: "59.3 / 22.5" },
   { value: "59.8 / 23", label: "59.8 / 23" },
 ];
+const DRAW_FRAME_TD9_BOTTOM_ROLLER_FRONT_OPTIONS = [
+  { value: "37.8 / 1.5", label: "37.8 / 1.5" },
+  { value: "38.4 / 2", label: "38.4 / 2" },
+  { value: "38.9 / 2.5", label: "38.9 / 2.5" },
+  { value: "39.4 / 3", label: "39.4 / 3" },
+  { value: "39.9 / 3.5", label: "39.9 / 3.5" },
+  { value: "40.4 / 4", label: "40.4 / 4" },
+  { value: "40.9 / 4.5", label: "40.9 / 4.5" },
+  { value: "41.4 / 5", label: "41.4 / 5" },
+  { value: "42 / 5.5", label: "42 / 5.5" },
+  { value: "42.5 / 6", label: "42.5 / 6" },
+  { value: "43 / 6.5", label: "43 / 6.5" },
+  { value: "43.5 / 7", label: "43.5 / 7" },
+  { value: "44 / 7.5", label: "44 / 7.5" },
+  { value: "44.5 / 8", label: "44.5 / 8" },
+  { value: "45 / 8.5", label: "45 / 8.5" },
+  { value: "45.5 / 9", label: "45.5 / 9" },
+  { value: "46 / 9.5", label: "46 / 9.5" },
+  { value: "46.6 / 10", label: "46.6 / 10" },
+  { value: "47.1 / 10.5", label: "47.1 / 10.5" },
+  { value: "47.6 / 11", label: "47.6 / 11" },
+  { value: "48.1 / 11.5", label: "48.1 / 11.5" },
+  { value: "48.6 / 12", label: "48.6 / 12" },
+  { value: "49.1 / 12.5", label: "49.1 / 12.5" },
+  { value: "49.6 / 13", label: "49.6 / 13" },
+  { value: "50.1 / 13.5", label: "50.1 / 13.5" },
+  { value: "50.6 / 14", label: "50.6 / 14" },
+  { value: "51.1 / 14.5", label: "51.1 / 14.5" },
+  { value: "51.6 / 15", label: "51.6 / 15" },
+  { value: "52.2 / 15.5", label: "52.2 / 15.5" },
+  { value: "52.7 / 16", label: "52.7 / 16" },
+  { value: "53.2 / 16.5", label: "53.2 / 16.5" },
+  { value: "53.7 / 17", label: "53.7 / 17" },
+  { value: "54.2 / 17.5", label: "54.2 / 17.5" },
+  { value: "54.7 / 18", label: "54.7 / 18" },
+  { value: "55.2 / 18.5", label: "55.2 / 18.5" },
+  { value: "55.7 / 19", label: "55.7 / 19" },
+  { value: "56.2 / 19.5", label: "56.2 / 19.5" },
+  { value: "56.7 / 20", label: "56.7 / 20" },
+  { value: "57.2 / 20.5", label: "57.2 / 20.5" },
+  { value: "57.7 / 21", label: "57.7 / 21" },
+  { value: "58.2 / 21.5", label: "58.2 / 21.5" },
+  { value: "58.8 / 22", label: "58.8 / 22" },
+  { value: "59.3 / 22.5", label: "59.3 / 22.5" },
+  { value: "59.8 / 23", label: "59.8 / 23" },
+];
 const DRAW_FRAME_TD7_BOTTOM_ROLLER_BACK_OPTIONS = [
+  { value: "44.5 / 6.5", label: "44.5 / 6.5" },
+  { value: "45 / 7", label: "45 / 7" },
+  { value: "45.5 / 7.5", label: "45.5 / 7.5" },
+  { value: "46 / 8", label: "46 / 8" },
+  { value: "46.5 / 8.5", label: "46.5 / 8.5" },
+  { value: "47 / 9", label: "47 / 9" },
+  { value: "47.5 / 9.5", label: "47.5 / 9.5" },
+  { value: "48 / 10", label: "48 / 10" },
+  { value: "48.5 / 10.5", label: "48.5 / 10.5" },
+  { value: "49 / 11", label: "49 / 11" },
+  { value: "49.5 / 11.5", label: "49.5 / 11.5" },
+  { value: "50 / 12", label: "50 / 12" },
+  { value: "50.5 / 12.5", label: "50.5 / 12.5" },
+  { value: "51 / 13", label: "51 / 13" },
+  { value: "51.5 / 13.5", label: "51.5 / 13.5" },
+  { value: "52 / 14", label: "52 / 14" },
+  { value: "52.5 / 14.5", label: "52.5 / 14.5" },
+  { value: "53 / 15", label: "53 / 15" },
+  { value: "53.5 / 15.5", label: "53.5 / 15.5" },
+  { value: "54 / 16", label: "54 / 16" },
+  { value: "54.5 / 16.5", label: "54.5 / 16.5" },
+  { value: "55 / 17", label: "55 / 17" },
+  { value: "55.5 / 17.5", label: "55.5 / 17.5" },
+  { value: "56 / 18", label: "56 / 18" },
+  { value: "56.5 / 18.5", label: "56.5 / 18.5" },
+  { value: "57 / 19", label: "57 / 19" },
+  { value: "57.5 / 19.5", label: "57.5 / 19.5" },
+  { value: "58 / 20", label: "58 / 20" },
+  { value: "58.5 / 20.5", label: "58.5 / 20.5" },
+  { value: "59 / 21", label: "59 / 21" },
+  { value: "59.5 / 21.5", label: "59.5 / 21.5" },
+  { value: "60 / 22", label: "60 / 22" },
+  { value: "60.5 / 22.5", label: "60.5 / 22.5" },
+  { value: "61 / 23", label: "61 / 23" },
+];
+const DRAW_FRAME_TD9_BOTTOM_ROLLER_BACK_OPTIONS = [
   { value: "44.5 / 6.5", label: "44.5 / 6.5" },
   { value: "45 / 7", label: "45 / 7" },
   { value: "45.5 / 7.5", label: "45.5 / 7.5" },
@@ -909,7 +1007,7 @@ const DRAW_FRAME_SELECT_OPTIONS = {
   creelTension: DRAW_FRAME_W1VWZ_OPTIONS,
   feedTension: DRAW_FRAME_W8DR_OPTIONS,
   webTension: DRAW_FRAME_W3DR_OPTIONS,
-  trumpet: DRAW_FRAME_TRUMPET_OPTIONS,
+  trumpet: DRAW_FRAME_BREAKER_TRUMPET_OPTIONS,
   bottomRollerFront: DRAW_FRAME_BOTTOM_ROLLER_FRONT_OPTIONS,
   bottomRollerBack: DRAW_FRAME_BOTTOM_ROLLER_BACK_OPTIONS,
   g1G2: ["G1/G2", "G1", "G2"],
@@ -964,13 +1062,15 @@ const getSelectOptions = (rowKey, wheelChangeType = "") => {
       case "g1G2":
         return isTd9 ? DRAW_FRAME_TD9_G1_G2_OPTIONS : DRAW_FRAME_TD7_G1_G2_OPTIONS;
       case "bdcp":
-        return DRAW_FRAME_TD7_BDCP_OPTIONS;
+        return isTd9 ? DRAW_FRAME_TD9_BDCP_OPTIONS : DRAW_FRAME_TD7_BDCP_OPTIONS;
       case "webTension":
         return isTd9 ? DRAW_FRAME_TD9_WEB_TENSION_OPTIONS : DRAW_FRAME_TD7_WEB_TENSION_OPTIONS;
       case "bottomRollerFront":
-        return DRAW_FRAME_TD7_BOTTOM_ROLLER_FRONT_OPTIONS;
+        return isTd9 ? DRAW_FRAME_TD9_BOTTOM_ROLLER_FRONT_OPTIONS : DRAW_FRAME_TD7_BOTTOM_ROLLER_FRONT_OPTIONS;
       case "bottomRollerBack":
-        return DRAW_FRAME_TD7_BOTTOM_ROLLER_BACK_OPTIONS;
+        return isTd9 ? DRAW_FRAME_TD9_BOTTOM_ROLLER_BACK_OPTIONS : DRAW_FRAME_TD7_BOTTOM_ROLLER_BACK_OPTIONS;
+      case "trumpet":
+        return isTd9 ? DRAW_FRAME_TD9_TRUMPET_OPTIONS : DRAW_FRAME_TD7_TRUMPET_OPTIONS;
       default:
         return DRAW_FRAME_SELECT_OPTIONS[rowKey] || [];
     }
@@ -1494,6 +1594,37 @@ const DrawFrameWheelChange = forwardRef(function DrawFrameWheelChange(
   useEffect(() => {
     if (!TD7_LIKE_WHEEL_CHANGE_TYPES.includes(wheelChangeType)) return;
 
+    setValues((current) => {
+      const nextValues = {
+        ...current,
+        totalDraftFormula: {
+          existing: computeType4Ldf3sTotalDraft({
+            deliveryHank: current.delHank?.existing,
+            feedHank: current.feedHank?.existing,
+            noOfEnds: current.noOfEnds?.existing,
+          }),
+          proposed: computeType4Ldf3sTotalDraft({
+            deliveryHank: current.delHank?.proposed,
+            feedHank: current.feedHank?.proposed,
+            noOfEnds: current.noOfEnds?.proposed,
+          }),
+        },
+      };
+
+      if (
+        current.totalDraftFormula?.existing === nextValues.totalDraftFormula.existing &&
+        current.totalDraftFormula?.proposed === nextValues.totalDraftFormula.proposed
+      ) {
+        return current;
+      }
+
+      return nextValues;
+    });
+  }, [wheelChangeType, values.delHank?.existing, values.delHank?.proposed, values.feedHank?.existing, values.feedHank?.proposed, values.noOfEnds?.existing, values.noOfEnds?.proposed]);
+
+  useEffect(() => {
+    if (!TD7_LIKE_WHEEL_CHANGE_TYPES.includes(wheelChangeType)) return;
+
     const draftValue = values.totalDraftGear?.existing || values.totalDraftGear?.proposed || "";
     const autoG1G2 = getTd7G1G2ForTotalDraft(draftValue, wheelChangeType);
     if (!autoG1G2) return;
@@ -1806,6 +1937,7 @@ const DrawFrameWheelChange = forwardRef(function DrawFrameWheelChange(
         className={className}
         value={value}
         onChange={handleNumericValueChange(row.key, column)}
+        readOnly={row.darkInput}
       />
     );
   };
@@ -1867,6 +1999,10 @@ const DrawFrameWheelChange = forwardRef(function DrawFrameWheelChange(
               disabled={!lineType}
               onChange={(event) => {
                 const nextWheelChangeType = event.target.value;
+                if (nextWheelChangeType !== wheelChangeType) {
+                  setValues(createValues());
+                  setErrors({});
+                }
                 setWheelChangeType(nextWheelChangeType);
                 clearFieldError("wheelChangeType");
               }}
