@@ -508,7 +508,7 @@ function CardingWheelChange({ types = [], selectedType = "WheelChange", onTypeCh
         </div>
 
         <div className={styles.remarksRow}>
-          <label>Remarks</label>
+          <label>Remarks (optional)</label>
           <textarea value={remarks} onChange={(event) => setRemarks(event.target.value)} />
         </div>
 

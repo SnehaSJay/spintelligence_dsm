@@ -147,7 +147,7 @@ const displaySavedValue = (value) => {
 };
 
 const ProcessParameter = forwardRef(function ProcessParameter(
-  { entryId = "", nextEntryIdPreview = "", selectedTypeName = "Process Parameter", onTypeChange, typeOptions = [], savedVersionsTargetId = "" },
+  { entryId = "", nextEntryIdPreview = "", selectedTypeName = "Process Parameter", onTypeChange, typeOptions = [], savedVersionsTargetId = "", lockedCountName = "" },
   ref
 ) {
   const [versions, setVersions] = useState([]);
@@ -183,7 +183,16 @@ const ProcessParameter = forwardRef(function ProcessParameter(
   );
 
   const loadVersions = async () => {
-    const response = await fetchBlowroomProcessParametersApi({ page: 1, limit: 200 });
+    let response;
+    try {
+      response = await fetchBlowroomProcessParametersApi({ page: 1, limit: 200 });
+    } catch {
+      setVersions([]);
+      setForm({ ...createDefaultForm(selectedTypeName), paramId: entryId || "" });
+      setExpandedVersionId(null);
+      setSavedProcessParameterId(entryId || "");
+      return;
+    }
     const rows = Array.isArray(response?.data) ? response.data : [];
     const nextVersions = rows
       .map(mapApiEntryToVersion)
@@ -246,6 +255,13 @@ const ProcessParameter = forwardRef(function ProcessParameter(
       type: selectedTypeName || "Process Parameter",
     }));
   }, [selectedTypeName]);
+
+  useEffect(() => {
+    if (!lockedCountName) return;
+    setForm((current) =>
+      current.countName === lockedCountName ? current : { ...current, countName: lockedCountName }
+    );
+  }, [lockedCountName, versions]);
 
   const clearError = (field) => {
     setErrors((current) => {
@@ -393,7 +409,7 @@ const ProcessParameter = forwardRef(function ProcessParameter(
         : await saveBlowroomProcessParameterApi(payload);
 
       const nextParamId = resolveProcessParameterDisplayId(response, form.paramId || entryId || savedProcessParameterId);
-      registerProcessParameterId(response, "Blowroom");
+      registerProcessParameterId(response, "Blowroom", form.countName);
       setSavedProcessParameterId(nextParamId);
 
       await loadVersions();
@@ -509,6 +525,7 @@ const ProcessParameter = forwardRef(function ProcessParameter(
               options={countOptions}
               placeholder="Search or select count name"
               ariaLabel="Count Name"
+              disabled={Boolean(lockedCountName)}
             />
           </div>
 

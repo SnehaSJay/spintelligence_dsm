@@ -1034,7 +1034,7 @@ const BrWasteStudyEntry = forwardRef(function BrWasteStudyEntry({
 
                     <div className={styles['mixx-row']}>
                         <div className={styles['mixx-group']}>
-                            <label>Remarks</label>
+                            <label>Remarks (optional)</label>
                             <textarea
                                 className={`${styles['mixx-input']} ${styles['mixx-textarea']}`}
                                 placeholder="Type Remarks..."

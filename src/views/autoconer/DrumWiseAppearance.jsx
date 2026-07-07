@@ -163,7 +163,6 @@ function DrumWiseAppearance({
       nextErrors.drumTo = true;
       nextErrors.rows = true;
     }
-    if (!String(remarks || "").trim()) nextErrors.remarks = true;
     if (!rows.length) nextErrors.rows = true;
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
@@ -369,7 +368,7 @@ function DrumWiseAppearance({
       </div>
 
       <div className={styles.remarksBlock}>
-        <label>Remarks</label>
+        <label>Remarks (optional)</label>
         <textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} style={errorStyle(errors.remarks)} />
       </div>
     </div>

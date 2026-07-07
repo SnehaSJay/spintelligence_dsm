@@ -10,6 +10,7 @@ import {
     FiCheck,
     FiChevronDown,
     FiChevronLeft,
+    FiClipboard,
     FiClock,
     FiFileText,
     FiGrid,
@@ -54,6 +55,7 @@ const sidebarLinks = [
     { href: "/", label: "Dashboard", icon: FiHome },
     { href: "/departments", label: "Department", icon: FiGrid },
     { href: "/departments/quality-control", label: "Sub-department", icon: FiGrid, section: "departments" },
+    { href: "/process-parameter", label: "Process Parameter", icon: FiClipboard },
     { href: "/usermanagement", label: "User Management", icon: FiUsers, admin: true },
     { href: "/rolespermission", label: "Roles & Permissions", icon: FiShield, admin: true },
     { href: "/statistics-analysis", label: "Analytics Hub", icon: FiCalendar, section: "calendars" },
@@ -74,16 +76,6 @@ const departmentLinks = [
     { href: "/spinning", label: "Spinning", department: "Spinning" },
     { href: "/autoconer", label: "Autoconer", department: "Autoconer" },
     { href: "/departments/quality-control/wrapping", label: "Wrapping", department: "Wrapping" },
-];
-
-const processParameterLinks = [
-    { href: "/mixing?type=Process%20Parameter", label: "Mixing", department: "Mixing", path: "/mixing" },
-    { href: "/blowroom?type=Process%20Parameter", label: "Blow Room", department: "Blow Room", path: "/blowroom" },
-    { href: "/carding?type=Process%20Parameter", label: "Carding", department: "Carding", path: "/carding" },
-    { href: "/draw-frame?type=PP%20-%20Breaker%20Drawing", label: "Draw Frame", department: "Draw Frame", path: "/draw-frame" },
-    { href: "/simplex?type=Process%20Parameter", label: "Simplex", department: "Simplex", path: "/simplex" },
-    { href: "/spinning?type=Process%20Parameter", label: "Spinning", department: "Spinning", path: "/spinning" },
-    { href: "/autoconer?type=Process%20Parameter", label: "Autoconer", department: "Autoconer", path: "/autoconer" },
 ];
 
 const settingsLinks = [
@@ -206,9 +198,6 @@ const Header = ({ navLinks = defaultNavLinks }) => {
         return hasDashboardNav || hasDepartmentNav || visibleHrefSet.has(link.href) || hasFullAccess;
     });
     const visibleDepartmentLinks = departmentLinks.filter((link) =>
-        hasSubDepartmentAccess(accessByDepartment, link.department, user)
-    );
-    const visibleProcessParameterLinks = processParameterLinks.filter((link) =>
         hasSubDepartmentAccess(accessByDepartment, link.department, user)
     );
     const visibleTicketingLinks = hasFullAccess
@@ -647,14 +636,6 @@ const Header = ({ navLinks = defaultNavLinks }) => {
                                                 {departmentLink.label}
                                             </Link>
                                         ))}
-                                        {visibleProcessParameterLinks.length ? (
-                                            <Link
-                                                href="/process-parameter"
-                                                className={`${styles["side-subnav-link"]} ${isActiveLink("/process-parameter") ? styles["side-subnav-active"] : ""}`}
-                                            >
-                                                Process Parameter
-                                            </Link>
-                                        ) : null}
                                     </div>
                                 </div>
                             );

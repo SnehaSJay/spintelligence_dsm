@@ -345,7 +345,7 @@ function getEntrySortValue(entry) {
 }
 
 const DrawFrameHeaderEntry = forwardRef(function DrawFrameHeaderEntry(
-  { entryId = "", nextEntryIdPreview = "", typeOptions, selectedType, onTypeChange, onSubmitSuccess },
+  { entryId = "", nextEntryIdPreview = "", typeOptions, selectedType, onTypeChange, onSubmitSuccess, lockedCountName = "" },
   ref
 ) {
   const router = useRouter();
@@ -402,6 +402,13 @@ const DrawFrameHeaderEntry = forwardRef(function DrawFrameHeaderEntry(
   useEffect(() => {
     loadEntries(activeType);
   }, [activeType]);
+
+  useEffect(() => {
+    if (!lockedCountName) return;
+    setForm((current) =>
+      current.countName === lockedCountName ? current : { ...current, countName: lockedCountName }
+    );
+  }, [lockedCountName, recentEntries]);
 
   useEffect(() => {
     if (!recentEntries.length) {
@@ -575,7 +582,7 @@ const DrawFrameHeaderEntry = forwardRef(function DrawFrameHeaderEntry(
         param_id: paramId,
       });
 
-      registerProcessParameterId(savedEntry, activeType);
+      registerProcessParameterId(savedEntry, activeType, form.countName);
       setForm((current) => ({
         ...current,
         paramId: resolveProcessParameterDisplayId(savedEntry, current.paramId || entryId),
@@ -652,6 +659,7 @@ const DrawFrameHeaderEntry = forwardRef(function DrawFrameHeaderEntry(
             options={countNameOptions}
             placeholder={field.placeholder}
             ariaLabel={field.label}
+            disabled={Boolean(lockedCountName)}
           />
         </div>
       );

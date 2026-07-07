@@ -265,6 +265,7 @@ const AutoconerQ2 = forwardRef(function AutoconerQ2(
     savedVersionsTargetId = "",
     entryId = "",
     nextEntryIdPreview = "",
+    lockedCountName = "",
   },
   ref
 ) {
@@ -287,7 +288,16 @@ const AutoconerQ2 = forwardRef(function AutoconerQ2(
   );
 
   const loadVersions = async () => {
-    const response = await fetchAutoconerQ2Entries({ page: 1, limit: 200 });
+    let response;
+    try {
+      response = await fetchAutoconerQ2Entries({ page: 1, limit: 200 });
+    } catch {
+      setVersions([]);
+      setForm({ ...createDefaultForm(selectedType), paramId: entryId || "" });
+      setExpandedVersionId(null);
+      setSavedProcessParameterId(entryId || "");
+      return;
+    }
     const rows = Array.isArray(response?.data) ? response.data : [];
     const nextVersions = rows
       .map(mapApiEntryToVersion)
@@ -344,6 +354,13 @@ const AutoconerQ2 = forwardRef(function AutoconerQ2(
       type: selectedType || "PP - Autoconer Q2",
     }));
   }, [selectedType]);
+
+  useEffect(() => {
+    if (!lockedCountName) return;
+    setForm((current) =>
+      current.countName === lockedCountName ? current : { ...current, countName: lockedCountName }
+    );
+  }, [lockedCountName, versions]);
 
   const clearError = (field) => {
     setErrors((current) => {
@@ -469,7 +486,7 @@ const AutoconerQ2 = forwardRef(function AutoconerQ2(
 
       const nextParamId = resolveProcessParameterDisplayId(response, form.paramId || entryId);
       setForm((current) => ({ ...current, paramId: nextParamId }));
-      registerProcessParameterId(response, "Autoconer");
+      registerProcessParameterId(response, "Autoconer", form.countName);
 
       await loadVersions();
       return true;
@@ -594,6 +611,7 @@ const AutoconerQ2 = forwardRef(function AutoconerQ2(
               options={countOptions}
               placeholder="Search or select count name"
               ariaLabel="Count Name"
+              disabled={Boolean(lockedCountName)}
             />
           </div>
 

@@ -90,7 +90,6 @@ const UqcEntryForm = forwardRef(function UqcEntryForm(
     if (form.cvm === "") nextErrors.cvm = true;
     if (form.cvm_1m === "") nextErrors.cvm_1m = true;
     if (form.cvm_3m === "") nextErrors.cvm_3m = true;
-    if (!form.remarks.trim()) nextErrors.remarks = true;
 
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
@@ -294,7 +293,7 @@ const UqcEntryForm = forwardRef(function UqcEntryForm(
         </div>
 
         <div className="col-span-3 flex flex-col gap-1.5 min-w-0">
-          <label className="text-[14px] font-semibold text-slate-700">Remarks</label>
+          <label className="text-[14px] font-semibold text-slate-700">Remarks (optional)</label>
           <textarea
             className={`${textareaClass}${errorClass(errors.remarks)}`}
             value={form.remarks}
