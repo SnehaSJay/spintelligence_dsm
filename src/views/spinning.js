@@ -330,6 +330,7 @@ function SpinningDepartment() {
     const [errors, setErrors] = useState({});
     const [showPreview, setShowPreview] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
+    const [confirmedEntryId, setConfirmedEntryId] = useState("");
     const [previewItems, setPreviewItems] = useState([]);
     const [validationMessage, setValidationMessage] = useState("");
     const [cotsMachineOptions, setCotsMachineOptions] = useState([]);
@@ -1035,11 +1036,20 @@ function SpinningDepartment() {
         setShowPreview(false);
         const result = await dispatch(submitSpinningRecord({ type: checkingType, payload }));
         if (submitSpinningRecord.fulfilled.match(result)) {
+            // The backend assigns its own entry_id for some screens (e.g. Wheel
+            // Change Type 4 — see SW4-NNNN in its create response) rather than
+            // using the locally-reserved placeholder, so prefer whatever the
+            // response actually returned.
+            const responseData = result.payload?.data ?? result.payload;
+            const realEntryId = String(
+                responseData?.entry_id ?? responseData?.entryId ?? entryId ?? ""
+            ).trim();
+            setConfirmedEntryId(realEntryId);
             await recordSubmittedNotebook({
                 department: "Quality Control",
                 subDepartment: "Spinning",
                 notebookName: checkingType,
-                entryId,
+                entryId: realEntryId || entryId,
                 previewItems,
                 user,
                 extra: {
@@ -1708,8 +1718,10 @@ function SpinningDepartment() {
 
             <SuccessModal
                 open={showSuccess}
+                message={confirmedEntryId ? `Data Submitted (Entry ID: ${confirmedEntryId})` : undefined}
                 onClose={() => {
                     setShowSuccess(false);
+                    setConfirmedEntryId("");
                     successHandledRef.current = false;
                     handleClearForm();
                 }}

@@ -15,6 +15,7 @@ import { hasSubDepartmentAccess } from "@/utils/accessControl";
 import { normalizeProcessParameterId, resolveProcessParameterDisplayId } from "@/utils/processParameterId";
 import { readProcessParameterRegistry, removeProcessParameterId } from "@/utils/processParameterRegistry";
 import { loadLocalEntries, removeLocalEntriesByParamId } from "@/utils/localProcessParameterStore";
+import { recordSubmittedNotebook } from "@/utils/submittedNotebookRecorder";
 import { getMixingProcessParameterEntries } from "@/apis/mixing";
 import { fetchBlowroomProcessParametersApi } from "@/apis/blowroom";
 import { getCardingProcessParameterEntries } from "@/apis/carding";
@@ -24,6 +25,12 @@ import {
   fetchAutoconerQ2Entries,
   fetchAutoconerQ3Entries,
 } from "@/apis/autoconer";
+import SearchableSelect from "@/components/SearchableSelect";
+import {
+  buildProcessParameterOptions,
+  PROCESS_PARAMETER_CONSIGNEE_OPTIONS,
+  PROCESS_PARAMETER_COUNT_OPTIONS,
+} from "@/data/processParameterMasterOptions";
 import styles from "@/styles/processParameterPage.module.css";
 
 const updateExistingColumns = [
@@ -80,72 +87,98 @@ const isCanonicalPpId = (value) => /^PP-\d+$/i.test(String(value || "").trim());
 const getEntryRows = (response) =>
   Array.isArray(response?.data) ? response.data : Array.isArray(response) ? response : [];
 
+// Shared across every source: the PP data-entry forms all submit these three fields under
+// the same generic names regardless of department, so one extractor works for all of them.
+const getEntryDetails = (entry) => ({
+  consigneeName: entry?.consignee_name ?? entry?.consigneeName ?? "",
+  countName: entry?.count_name ?? entry?.countName ?? "",
+  creationDate: entry?.creation_date ?? entry?.creationDate ?? entry?.created_at ?? entry?.createdAt ?? "",
+});
+
+const buildFilterParams = (filters) => ({
+  ...(filters?.consigneeFilter ? { consignee_name: filters.consigneeFilter } : {}),
+  ...(filters?.countFilter ? { count_name: filters.countFilter } : {}),
+  ...(filters?.dateFrom ? { date_from: filters.dateFrom } : {}),
+  ...(filters?.dateTo ? { date_to: filters.dateTo } : {}),
+});
+
 // Each source's `getId` mirrors the entry_id extraction used by that department's own
 // ProcessParameterDataEntry view, so remote completion state lines up with what those pages show.
 // Draw Frame Breaker/Finisher and Spinning don't hit the backend yet — they save to the
-// browser's local store (see localProcessParameterStore), so their source reads from there too.
+// browser's local store (see localProcessParameterStore), so their source reads from there too
+// (and filter query params are meaningless for them since there's no server round-trip).
 const REMOTE_STATUS_SOURCES = [
   {
     index: 0,
-    fetch: () => getMixingProcessParameterEntries({ page: 1, limit: 200 }),
+    fetch: (filters) => getMixingProcessParameterEntries({ page: 1, limit: 200, ...buildFilterParams(filters) }),
     getId: (entry) => entry?.entry_id ?? entry?.param_id,
     isDone: (entry) => (entry?.status || "DONE") === "DONE",
+    getDetails: getEntryDetails,
   },
   {
     index: 1,
-    fetch: () => fetchBlowroomProcessParametersApi({ page: 1, limit: 200 }),
+    fetch: (filters) => fetchBlowroomProcessParametersApi({ page: 1, limit: 200, ...buildFilterParams(filters) }),
     getId: (entry) =>
       entry?.display_entry_id ?? entry?.process_parameter_id ?? entry?.parameter_id ?? entry?.param_id ?? entry?.br_code,
     isDone: () => true,
+    getDetails: getEntryDetails,
   },
   {
     index: 2,
-    fetch: () => getCardingProcessParameterEntries({ page: 1, limit: 200 }),
+    fetch: (filters) => getCardingProcessParameterEntries({ page: 1, limit: 200, ...buildFilterParams(filters) }),
     getId: (entry) =>
       entry?.entry_id ?? entry?.param_id ?? entry?.qc_code ?? entry?.qc_id ?? entry?.process_parameter_id ?? entry?.id,
     isDone: () => true,
+    getDetails: getEntryDetails,
   },
   {
     index: 3,
     fetch: () => Promise.resolve({ data: loadLocalEntries("draw-frame-breaker") }),
     getId: (entry) => entry?.param_id ?? entry?.entry_id,
     isDone: () => true,
+    getDetails: getEntryDetails,
   },
   {
     index: 4,
     fetch: () => Promise.resolve({ data: loadLocalEntries("draw-frame-finisher") }),
     getId: (entry) => entry?.param_id ?? entry?.entry_id,
     isDone: () => true,
+    getDetails: getEntryDetails,
   },
   {
     index: 5,
-    fetch: () => fetchSimplexProcessParameterEntries({ page: 1, limit: 200 }),
+    fetch: (filters) => fetchSimplexProcessParameterEntries({ page: 1, limit: 200, ...buildFilterParams(filters) }),
     getId: (entry) => entry?.entry_id ?? entry?.process_parameter_id ?? entry?.param_id,
     isDone: () => true,
+    getDetails: getEntryDetails,
   },
   {
     index: 6,
     fetch: () => Promise.resolve({ data: loadLocalEntries("spinning") }),
     getId: (entry) => entry?.param_id ?? entry?.entry_id,
     isDone: (entry) => (entry?.status || "DONE") === "DONE",
+    getDetails: getEntryDetails,
   },
   {
     index: 7,
-    fetch: () => fetchAutoconerProcessParameters({ page: 1, limit: 200 }),
+    fetch: (filters) => fetchAutoconerProcessParameters({ page: 1, limit: 200, ...buildFilterParams(filters) }),
     getId: (entry) => entry?.entry_id ?? entry?.ins_code ?? entry?.param_id,
     isDone: () => true,
+    getDetails: getEntryDetails,
   },
   {
     index: 8,
-    fetch: () => fetchAutoconerQ2Entries({ page: 1, limit: 200 }),
+    fetch: (filters) => fetchAutoconerQ2Entries({ page: 1, limit: 200, ...buildFilterParams(filters) }),
     getId: (entry) => entry?.entry_id ?? entry?.ins_code,
     isDone: () => true,
+    getDetails: getEntryDetails,
   },
   {
     index: 9,
-    fetch: () => fetchAutoconerQ3Entries({ page: 1, limit: 200 }),
+    fetch: (filters) => fetchAutoconerQ3Entries({ page: 1, limit: 200, ...buildFilterParams(filters) }),
     getId: (entry) => entry?.entry_id ?? entry?.ins_code,
     isDone: () => true,
+    getDetails: getEntryDetails,
   },
 ];
 
@@ -253,6 +286,11 @@ export default function ProcessParameterPage() {
   const [completedCells, setCompletedCells] = useState({});
   const [dynamicRows, setDynamicRows] = useState([]);
   const [remoteStatusMap, setRemoteStatusMap] = useState({});
+  const [remoteEntryDetailsMap, setRemoteEntryDetailsMap] = useState({});
+  const [consigneeFilter, setConsigneeFilter] = useState("");
+  const [countFilter, setCountFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const componentRef = useRef(null);
 
   const visibleSubDepartments = useMemo(
@@ -278,9 +316,13 @@ export default function ProcessParameterPage() {
   }, []);
 
   const loadRemoteStatuses = async () => {
-    const results = await Promise.allSettled(REMOTE_STATUS_SOURCES.map((source) => source.fetch()));
+    const filters = { consigneeFilter, countFilter, dateFrom, dateTo };
+    const results = await Promise.allSettled(
+      REMOTE_STATUS_SOURCES.map((source) => source.fetch(filters))
+    );
 
     const map = {};
+    const detailsMap = {};
     results.forEach((result, sourceIndex) => {
       if (result.status !== "fulfilled") return;
       const source = REMOTE_STATUS_SOURCES[sourceIndex];
@@ -289,15 +331,31 @@ export default function ProcessParameterPage() {
         if (!normalizedId || !isCanonicalPpId(normalizedId) || !source.isDone(entry)) return;
         if (!map[normalizedId]) map[normalizedId] = createBlankStatusRow().statuses.slice();
         map[normalizedId][source.index] = true;
+
+        if (!detailsMap[normalizedId]) {
+          const details = source.getDetails?.(entry) || {};
+          if (details.consigneeName || details.countName || details.creationDate) {
+            detailsMap[normalizedId] = details;
+          }
+        }
       });
     });
 
     setRemoteStatusMap(map);
+    setRemoteEntryDetailsMap(detailsMap);
   };
 
   useEffect(() => {
     loadRemoteStatuses();
   }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      loadRemoteStatuses();
+    }, 400);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [consigneeFilter, countFilter, dateFrom, dateTo]);
 
   useEffect(() => {
     const handleStorageChange = () => {
@@ -342,6 +400,15 @@ export default function ProcessParameterPage() {
   const showListCard = activeTab === "existing";
   const [searchTerm, setSearchTerm] = useState("");
 
+  const consigneeFilterOptions = useMemo(
+    () => buildProcessParameterOptions(PROCESS_PARAMETER_CONSIGNEE_OPTIONS, [], consigneeFilter),
+    [consigneeFilter]
+  );
+  const countFilterOptions = useMemo(
+    () => buildProcessParameterOptions(PROCESS_PARAMETER_COUNT_OPTIONS, [], countFilter),
+    [countFilter]
+  );
+
   const mergedRows = useMemo(() => {
     const byId = new Map();
     dynamicRows.forEach((row) => byId.set(row.id, row));
@@ -365,9 +432,35 @@ export default function ProcessParameterPage() {
     return `PP-${String(highestSequence + 1).padStart(4, "0")}`;
   }, [mergedRows]);
 
-  const filteredRows = mergedRows.filter((row) =>
-    String(row.id).toLowerCase().includes(String(searchTerm).toLowerCase())
-  );
+  const filteredRows = mergedRows.filter((row) => {
+    if (!String(row.id).toLowerCase().includes(String(searchTerm).toLowerCase())) return false;
+
+    const details = remoteEntryDetailsMap[row.id];
+
+    if (consigneeFilter) {
+      if (!details?.consigneeName?.toLowerCase().includes(consigneeFilter.toLowerCase())) return false;
+    }
+
+    if (countFilter) {
+      if (!details?.countName?.toLowerCase().includes(countFilter.toLowerCase())) return false;
+    }
+
+    if (dateFrom || dateTo) {
+      const rowDate = details?.creationDate ? new Date(details.creationDate) : null;
+      if (!rowDate || Number.isNaN(rowDate.getTime())) return false;
+      if (dateFrom && rowDate < new Date(dateFrom)) return false;
+      if (dateTo && rowDate > new Date(`${dateTo}T23:59:59.999`)) return false;
+    }
+
+    return true;
+  });
+
+  const handleClearFilters = () => {
+    setConsigneeFilter("");
+    setCountFilter("");
+    setDateFrom("");
+    setDateTo("");
+  };
   const getRowStatuses = (rowId) => {
     const base =
       mergedRows.find((row) => row.id === rowId)?.statuses || createBlankStatusRow().statuses;
@@ -591,6 +684,60 @@ export default function ProcessParameterPage() {
                 />
               </div>
 
+              <div className={styles.filterRow}>
+                <label className={styles.filterField}>
+                  <span>Consignee Name</span>
+                  <SearchableSelect
+                    className={styles.filterInput}
+                    value={consigneeFilter}
+                    onChange={setConsigneeFilter}
+                    options={consigneeFilterOptions}
+                    placeholder="Search or select consignee name"
+                    ariaLabel="Filter by Consignee Name"
+                  />
+                </label>
+
+                <label className={styles.filterField}>
+                  <span>Count Name</span>
+                  <SearchableSelect
+                    className={styles.filterInput}
+                    value={countFilter}
+                    onChange={setCountFilter}
+                    options={countFilterOptions}
+                    placeholder="Search or select count name"
+                    ariaLabel="Filter by Count Name"
+                  />
+                </label>
+
+                <label className={styles.filterField}>
+                  <span>Date From</span>
+                  <input
+                    type="date"
+                    className={styles.filterInput}
+                    value={dateFrom}
+                    onChange={(event) => setDateFrom(event.target.value)}
+                  />
+                </label>
+
+                <label className={styles.filterField}>
+                  <span>Date To</span>
+                  <input
+                    type="date"
+                    className={styles.filterInput}
+                    value={dateTo}
+                    onChange={(event) => setDateTo(event.target.value)}
+                  />
+                </label>
+
+                <button
+                  type="button"
+                  className={styles.clearFiltersButton}
+                  onClick={handleClearFilters}
+                >
+                  Clear Filters
+                </button>
+              </div>
+
               <div className={styles.matrixWrap}>
                 <table className={styles.matrixTable}>
                   <thead>
@@ -697,6 +844,7 @@ export default function ProcessParameterPage() {
                   }}
                   entryId={selectedEntryId}
                   nextEntryIdPreview={nextAvailableId}
+                  user={user}
                   {...getDepartmentFormProps(selectedSubDepartment, selectedTypeName, typeOptions)}
                   onTypeChange={
                     selectedSubDepartment === "Draw Frame"
@@ -719,14 +867,34 @@ export default function ProcessParameterPage() {
                     onSave={async () => {
                       const valid = componentRef.current?.validate?.();
                       if (valid === false) return;
+                      const previewItems = componentRef.current?.getPreviewData?.() || [];
                       const result = await componentRef.current?.submit?.();
                       refreshRegistryRows();
                       const batchDisplayId = resolveProcessParameterDisplayId(result, selectedEntryId);
                       if (batchDisplayId && !selectedEntryId) setSelectedEntryId(batchDisplayId);
 
                       const colIndex = getColumnIndexForDepartment();
-                      if ((result !== false || batchDisplayId) && batchDisplayId && colIndex > 0) {
+                      const isSuccess = result !== false || batchDisplayId;
+                      if (isSuccess && batchDisplayId && colIndex > 0) {
                         upsertRowStatus(batchDisplayId, colIndex - 1, true);
+                      }
+
+                      if (isSuccess) {
+                        try {
+                          await recordSubmittedNotebook({
+                            department: "Quality Control",
+                            subDepartment: selectedSubDepartment,
+                            notebookName: selectedTypeName,
+                            entryId: batchDisplayId || selectedEntryId,
+                            previewItems,
+                            user,
+                          });
+                        } catch (error) {
+                          console.warn(
+                            "Process parameter submitted notebook record failed:",
+                            error?.response?.data || error?.message || error
+                          );
+                        }
                       }
                     }}
                     saveLabel="Save Record"

@@ -24,6 +24,7 @@ import {
 } from "@/utils/processParameterId";
 import { registerProcessParameterId } from "@/utils/processParameterRegistry";
 import { loadLocalEntries, saveLocalEntry } from "@/utils/localProcessParameterStore";
+import { recordSubmittedNotebook } from "@/utils/submittedNotebookRecorder";
 
 const today = new Date().toISOString().split("T")[0];
 
@@ -344,7 +345,7 @@ function getEntrySortValue(entry) {
   return 0;
 }
 
-function DrawFrameHeaderEntry({ entryId = "", nextEntryIdPreview = "", typeOptions, selectedType, onTypeChange, onSubmitSuccess }) {
+function DrawFrameHeaderEntry({ entryId = "", nextEntryIdPreview = "", typeOptions, selectedType, onTypeChange, onSubmitSuccess, user }) {
   const router = useRouter();
   const activeType = TYPE_CONFIG[selectedType] ? selectedType : "PP - Breaker Drawing";
   const activeConfig = TYPE_CONFIG[activeType];
@@ -566,11 +567,29 @@ function DrawFrameHeaderEntry({ entryId = "", nextEntryIdPreview = "", typeOptio
       });
 
       registerProcessParameterId(savedEntry, activeType);
+      const displayEntryId = resolveProcessParameterDisplayId(savedEntry, form.paramId || entryId);
       setForm((current) => ({
         ...current,
-        paramId: resolveProcessParameterDisplayId(savedEntry, current.paramId || entryId),
+        paramId: displayEntryId,
       }));
       loadEntries(activeType);
+
+      try {
+        await recordSubmittedNotebook({
+          department: "Quality Control",
+          subDepartment: "Draw Frame",
+          notebookName: activeType,
+          entryId: displayEntryId,
+          previewItems,
+          user,
+        });
+      } catch (recordError) {
+        console.warn(
+          "Draw frame submitted notebook record failed:",
+          recordError?.response?.data || recordError?.message || recordError
+        );
+      }
+
       onSubmitSuccess?.(savedEntry);
       setShowPreview(false);
       setShowSuccess(true);
