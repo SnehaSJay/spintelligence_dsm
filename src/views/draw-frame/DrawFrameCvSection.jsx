@@ -42,7 +42,7 @@ function DrawFrameCvSection({
       </div>
 
       <div className={`${styles.field} ${styles.fieldWide}`}>
-        <label className={styles.label}>Remarks</label>
+        <label className={styles.label}>Remarks (optional)</label>
         <textarea
           rows={4}
           value={form.remarks}

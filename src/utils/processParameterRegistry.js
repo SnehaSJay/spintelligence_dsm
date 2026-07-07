@@ -25,6 +25,7 @@ const safeWrite = (value) => {
 const normalizeRow = (row) => ({
   displayId: String(row?.displayId || row?.entryId || row?.id || "").trim(),
   statuses: Array.isArray(row?.statuses) ? row.statuses.slice(0, 10) : [],
+  countName: String(row?.countName || "").trim(),
 });
 
 export const readProcessParameterRegistry = () => safeRead().map(normalizeRow).filter((row) => row.displayId);
@@ -37,17 +38,31 @@ export const writeProcessParameterRegistry = (rows = []) => {
   return normalized;
 };
 
-export const registerProcessParameterId = (response, _department = "") => {
+// A PP id's count name is fixed by whichever sub-department entry set it first — every
+// other sub-department under the same PP id must reuse it (consignee name stays independent).
+export const registerProcessParameterId = (response, _department = "", countName = "") => {
   const displayId = resolveProcessParameterDisplayId(response);
   if (!displayId) return "";
 
   const current = readProcessParameterRegistry();
   const existingIndex = current.findIndex((row) => row.displayId === displayId);
-  const nextRow = { displayId, statuses: current[existingIndex]?.statuses || [] };
+  const existingCountName = current[existingIndex]?.countName || "";
+  const nextRow = {
+    displayId,
+    statuses: current[existingIndex]?.statuses || [],
+    countName: existingCountName || String(countName || "").trim(),
+  };
   if (existingIndex >= 0) current[existingIndex] = nextRow;
   else current.unshift(nextRow);
   writeProcessParameterRegistry(current);
   return displayId;
+};
+
+export const getProcessParameterCountName = (displayId) => {
+  const normalized = String(displayId || "").trim();
+  if (!normalized) return "";
+  const row = readProcessParameterRegistry().find((item) => item.displayId === normalized);
+  return row?.countName || "";
 };
 
 export const removeProcessParameterId = (displayId) => {

@@ -162,6 +162,7 @@ function UPercentDataEntry({ types, selectedType, onTypeChange, entryId = "" }) 
     if (!String(selectedType || "").trim()) nextErrors.selectedType = true;
 
     Object.entries(form).forEach(([field, value]) => {
+      if (field === "remarks") return;
       if (!String(value || "").trim()) {
         nextErrors[field] = true;
       }
@@ -280,7 +281,7 @@ function UPercentDataEntry({ types, selectedType, onTypeChange, entryId = "" }) 
           </div>
 
           <div className={styles.fullWidth}>
-            <label>Remarks</label>
+            <label>Remarks (optional)</label>
             <textarea
               rows={3}
               value={form.remarks}

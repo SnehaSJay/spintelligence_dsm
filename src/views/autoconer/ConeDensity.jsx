@@ -252,7 +252,7 @@ const ConeDensity = forwardRef(function ConeDensity(
     { label: "Tensioner RPM", field: "tensionerRpm", type: "text" },
     { label: "Tensioner Force", field: "tensionerForce", type: "text" },
     { label: "N Cradle Pressure", field: "nCradlePressure", type: "text", span: 1 },
-    { label: "Remarks", field: "remarks", type: "textarea", span: 4 },
+    { label: "Remarks (optional)", field: "remarks", type: "textarea", span: 4 },
   ];
 
   const handleFormChange = (field, value) => {
@@ -296,6 +296,7 @@ const ConeDensity = forwardRef(function ConeDensity(
   const validate = () => {
     const nextErrors = {};
     Object.entries(form).forEach(([key, value]) => {
+      if (key === "remarks") return;
       if (String(value).trim() === "") nextErrors[key] = true;
     });
     if (!isValidDrumRange(form.drumFrom, form.drumTo)) {

@@ -89,6 +89,7 @@ function UPercentDataEntry() {
   const validateForm = () => {
     const nextErrors = {};
     Object.entries(form).forEach(([key, value]) => {
+      if (key === "remarks") return;
       if (!String(value || "").trim()) nextErrors[key] = true;
     });
     setErrors(nextErrors);
@@ -205,7 +206,7 @@ function UPercentDataEntry() {
         </div>
 
           <div className={styles.fullWidth}>
-          <label>Remarks</label>
+          <label>Remarks (optional)</label>
           <textarea
             rows={3}
             value={form.remarks}

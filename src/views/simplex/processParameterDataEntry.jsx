@@ -286,7 +286,7 @@ const SavedVersionsSection = ({
 );
 
 const SimplexProcessParameterDataEntry = forwardRef(function SimplexProcessParameterDataEntry(
-  { selectedTypeName = "Process Parameter", onTypeChange, typeOptions = [], entryId = "", nextEntryIdPreview = "", tablePortalTargetId = "" },
+  { selectedTypeName = "Process Parameter", onTypeChange, typeOptions = [], entryId = "", nextEntryIdPreview = "", tablePortalTargetId = "", lockedCountName = "" },
   ref
 ) {
   const [versions, setVersions] = useState([]);
@@ -322,7 +322,16 @@ const SimplexProcessParameterDataEntry = forwardRef(function SimplexProcessParam
   );
 
   const loadVersions = async () => {
-    const response = await fetchSimplexProcessParameterEntries({ page: 1, limit: 200 });
+    let response;
+    try {
+      response = await fetchSimplexProcessParameterEntries({ page: 1, limit: 200 });
+    } catch {
+      setVersions([]);
+      setForm({ ...createDefaultForm(), paramId: entryId || "" });
+      setExpandedVersionId(null);
+      setSavedProcessParameterId(entryId || "");
+      return;
+    }
     const rows = Array.isArray(response?.data) ? response.data : [];
     const nextVersions = rows.map(mapApiEntryToVersion);
 
@@ -364,6 +373,13 @@ const SimplexProcessParameterDataEntry = forwardRef(function SimplexProcessParam
       setSavedProcessParameterId(entryId);
     }
   }, [entryId]);
+
+  useEffect(() => {
+    if (!lockedCountName) return;
+    setForm((current) =>
+      current.countName === lockedCountName ? current : { ...current, countName: lockedCountName }
+    );
+  }, [lockedCountName, versions]);
 
   useEffect(() => {
     if (entryId) return;
@@ -526,7 +542,7 @@ const SimplexProcessParameterDataEntry = forwardRef(function SimplexProcessParam
         : await submitSimplexProcessParameterEntry(payload);
 
       const nextParamId = resolveProcessParameterDisplayId(response, form.paramId || entryId || savedProcessParameterId);
-      registerProcessParameterId(response, "Simplex");
+      registerProcessParameterId(response, "Simplex", form.countName);
       setSavedProcessParameterId(nextParamId);
 
       await loadVersions();
@@ -586,6 +602,7 @@ const SimplexProcessParameterDataEntry = forwardRef(function SimplexProcessParam
               options={countOptions}
               placeholder="Search or select count name"
               ariaLabel="Count Name"
+              disabled={Boolean(lockedCountName)}
             />
           </div>
 

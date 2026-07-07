@@ -144,7 +144,6 @@ const UPercentDataEntry = forwardRef(function UPercentDataEntry(
     if (!String(form.cvm || "").trim()) nextErrors.cvm = true;
     if (!String(form.im_cvm || "").trim()) nextErrors.im_cvm = true;
     if (!String(form.m3_cvm || "").trim()) nextErrors.m3_cvm = true;
-    if (!String(form.remarks || "").trim()) nextErrors.remarks = true;
 
     setErrors(nextErrors);
     setFormMessage(Object.keys(nextErrors).length ? "Please fill all required fields before saving." : "");
@@ -305,7 +304,7 @@ const UPercentDataEntry = forwardRef(function UPercentDataEntry(
         </div>
 
         <div className={styles.fullWidth}>
-          <label>Remarks</label>
+          <label>Remarks (optional)</label>
           <textarea
             rows={3}
             value={form.remarks}
