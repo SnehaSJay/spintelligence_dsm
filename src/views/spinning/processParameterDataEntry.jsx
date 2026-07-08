@@ -455,6 +455,7 @@ const SpinningProcessParameterDataEntry = forwardRef(function SpinningProcessPar
     nextEntryIdPreview = "",
     standaloneSection = false,
     savedVersionsTargetId = "",
+    lockedCountName = "",
   },
   ref
 ) {
@@ -523,6 +524,13 @@ const SpinningProcessParameterDataEntry = forwardRef(function SpinningProcessPar
       setSavedProcessParameterId(entryId);
     }
   }, [entryId]);
+
+  useEffect(() => {
+    if (!lockedCountName) return;
+    setForm((current) =>
+      current.countName === lockedCountName ? current : { ...current, countName: lockedCountName }
+    );
+  }, [lockedCountName, versions]);
 
   useEffect(() => {
     if (!standaloneSection || !savedVersionsTargetId) {
@@ -662,7 +670,7 @@ const SpinningProcessParameterDataEntry = forwardRef(function SpinningProcessPar
       param_id: paramId,
     });
     setSavedProcessParameterId(resolveProcessParameterDisplayId(savedEntry, paramId));
-    registerProcessParameterId(savedEntry, "Spinning");
+    registerProcessParameterId(savedEntry, "Spinning", form.countName);
 
     loadVersions();
     onSubmitSuccess?.();
@@ -721,6 +729,7 @@ const SpinningProcessParameterDataEntry = forwardRef(function SpinningProcessPar
             options={countOptions}
             placeholder="Search or select count name"
             ariaLabel="Count Name"
+            disabled={Boolean(lockedCountName)}
           />
         </div>
 

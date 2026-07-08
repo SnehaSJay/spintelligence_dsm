@@ -49,16 +49,6 @@ const primaryTypeOptions = [
   { id: 1, name: "1 Yard / Half Yard CV Entry", aliases: ["1 Yard / Half Yard CV Entry"] },
   { id: 2, name: "Draw Frame Cots Data Entry", aliases: ["Draw Frame Cots Data Entry", "Drawframe Cots Data Entry"] },
   { id: 3, name: "U% Data Entry", aliases: ["U% Data Entry", "U Percent Data Entry", "U% Checking"] },
-  {
-    id: 4,
-    name: "PP - Breaker Drawing",
-    aliases: ["PP - Breaker Drawing", "Process Parameter", "Draw Frame QC Header Entry", "Drawframe Header Entry"],
-  },
-  {
-    id: 5,
-    name: "PP - Finisher Drawing",
-    aliases: ["PP - Finisher Drawing", "Finisher Drawing"],
-  },
   { id: 6, name: "A%", aliases: ["A%", "A Percent", "A% Data Entry"] },
   { id: 7, name: "Wheel Change", aliases: ["Wheel Change", "WHEEL CHANGE"] },
 ];
@@ -1358,8 +1348,8 @@ function DrawFrame() {
         items.push({ label: "Cot Change", value: m.cotChange || "-" });
         items.push({ label: "Stripper Waste", value: m.stripperWaste || "-" });
         if (form.processType === "Finisher") {
-          items.push({ label: "Auto Leveller Status", value: m.autoLevel || "-" });
-          items.push({ label: "Silver Monitor", value: m.silverMon || "-" });
+          items.push({ label: "Auto Leveller", value: m.autoLevel || "-" });
+          items.push({ label: "Sliver Monitor", value: m.silverMon || "-" });
           items.push({ label: "Mass Thick Place", value: m.massThick || "-" });
           items.push({ label: "Scanning Roller Area", value: m.scanningR || "-" });
         }
@@ -1657,6 +1647,7 @@ function DrawFrame() {
             typeOptions={typeOptions}
             selectedType={form.type}
             onTypeChange={(value) => handleFormChange("type", value)}
+            user={user}
           />
         ) : isWheelChangeEntry ? (
           <div className={`${styles.card} ${styles.inspectionCard}`}>
@@ -1910,7 +1901,7 @@ function DrawFrame() {
                 </div>
 
                 <div className={`${uPercentStyles.field} ${uPercentStyles.fullWidth} ${uPercentStyles.remarksWide}`}>
-                  <label>Remarks</label>
+                  <label>Remarks (optional)</label>
                   <textarea
                     rows={3}
                     value={uPercentForm.remarks}
@@ -1993,7 +1984,7 @@ function DrawFrame() {
                   </div>
 
                   <div className={`${styles.field} ${styles.fieldWide}`}>
-                    <label className={styles.label}>Remarks</label>
+                    <label className={styles.label}>Remarks (optional)</label>
                     <textarea
                       rows={4}
                       value={form.remarks}
@@ -2041,7 +2032,7 @@ function DrawFrame() {
                       </div>
 
                       <div className={styles.machineGrid}>
-                        <div className={styles.field}>
+                        <div className={`${styles.field} ${errors.machines?.[index]?.fanWaste ? styles.inputError : ""}`}>
                           <label className={styles.label}>Fan Waste</label>
                           <div className={styles.radioGroup}>
                             {cleanUncleanOptions.map((option) => (
@@ -2059,7 +2050,7 @@ function DrawFrame() {
                           </div>
                         </div>
 
-                        <div className={styles.field}>
+                        <div className={`${styles.field} ${errors.machines?.[index]?.cotChange ? styles.inputError : ""}`}>
                           <label className={styles.label}>Cot Change</label>
                           <div className={styles.radioGroup}>
                             {yesNoOptions.map((option) => (
@@ -2077,7 +2068,7 @@ function DrawFrame() {
                           </div>
                         </div>
 
-                        <div className={styles.field}>
+                        <div className={`${styles.field} ${errors.machines?.[index]?.stripperWaste ? styles.inputError : ""}`}>
                           <label className={styles.label}>Stripper Waste</label>
                           <div className={styles.radioGroup}>
                             {cleanUncleanOptions.map((option) => (
@@ -2097,8 +2088,8 @@ function DrawFrame() {
 
                         {form.processType === "Finisher" ? (
                           <>
-                            <div className={styles.field}>
-                              <label className={styles.label}>Auto Leveller Status</label>
+                            <div className={`${styles.field} ${errors.machines?.[index]?.autoLevel ? styles.inputError : ""}`}>
+                              <label className={styles.label}>Auto Leveller</label>
                               <div className={styles.radioGroup}>
                                 {onOffOptions.map((option) => (
                                   <label key={option} className={styles.radioOption}>
@@ -2115,8 +2106,8 @@ function DrawFrame() {
                               </div>
                             </div>
 
-                            <div className={styles.field}>
-                              <label className={styles.label}>Silver Monitor</label>
+                            <div className={`${styles.field} ${errors.machines?.[index]?.silverMon ? styles.inputError : ""}`}>
+                              <label className={styles.label}>Sliver Monitor</label>
                               <div className={styles.radioGroup}>
                                 {onOffOptions.map((option) => (
                                   <label key={option} className={styles.radioOption}>
@@ -2147,7 +2138,7 @@ function DrawFrame() {
                               />
                             </div>
 
-                            <div className={styles.field}>
+                            <div className={`${styles.field} ${errors.machines?.[index]?.scanningR ? styles.inputError : ""}`}>
                               <label className={styles.label}>Scanning Roller Area</label>
                               <div className={styles.radioGroup}>
                                 {cleanUncleanOptions.map((option) => (

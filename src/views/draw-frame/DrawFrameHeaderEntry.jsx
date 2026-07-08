@@ -24,6 +24,7 @@ import {
 } from "@/utils/processParameterId";
 import { registerProcessParameterId } from "@/utils/processParameterRegistry";
 import { loadLocalEntries, saveLocalEntry } from "@/utils/localProcessParameterStore";
+import { recordSubmittedNotebook } from "@/utils/submittedNotebookRecorder";
 
 const today = new Date().toISOString().split("T")[0];
 
@@ -345,7 +346,7 @@ function getEntrySortValue(entry) {
 }
 
 const DrawFrameHeaderEntry = forwardRef(function DrawFrameHeaderEntry(
-  { entryId = "", nextEntryIdPreview = "", typeOptions, selectedType, onTypeChange, onSubmitSuccess },
+  { entryId = "", nextEntryIdPreview = "", typeOptions, selectedType, onTypeChange, onSubmitSuccess, lockedCountName = "" },
   ref
 ) {
   const router = useRouter();
@@ -402,6 +403,13 @@ const DrawFrameHeaderEntry = forwardRef(function DrawFrameHeaderEntry(
   useEffect(() => {
     loadEntries(activeType);
   }, [activeType]);
+
+  useEffect(() => {
+    if (!lockedCountName) return;
+    setForm((current) =>
+      current.countName === lockedCountName ? current : { ...current, countName: lockedCountName }
+    );
+  }, [lockedCountName, recentEntries]);
 
   useEffect(() => {
     if (!recentEntries.length) {
@@ -575,12 +583,29 @@ const DrawFrameHeaderEntry = forwardRef(function DrawFrameHeaderEntry(
         param_id: paramId,
       });
 
-      registerProcessParameterId(savedEntry, activeType);
+      registerProcessParameterId(savedEntry, activeType, form.countName);
       setForm((current) => ({
         ...current,
-        paramId: resolveProcessParameterDisplayId(savedEntry, current.paramId || entryId),
+        paramId: displayEntryId,
       }));
       loadEntries(activeType);
+
+      try {
+        await recordSubmittedNotebook({
+          department: "Quality Control",
+          subDepartment: "Draw Frame",
+          notebookName: activeType,
+          entryId: displayEntryId,
+          previewItems,
+          user,
+        });
+      } catch (recordError) {
+        console.warn(
+          "Draw frame submitted notebook record failed:",
+          recordError?.response?.data || recordError?.message || recordError
+        );
+      }
+
       onSubmitSuccess?.(savedEntry);
       setShowPreview(false);
       setShowSuccess(true);
@@ -652,6 +677,7 @@ const DrawFrameHeaderEntry = forwardRef(function DrawFrameHeaderEntry(
             options={countNameOptions}
             placeholder={field.placeholder}
             ariaLabel={field.label}
+            disabled={Boolean(lockedCountName)}
           />
         </div>
       );

@@ -206,7 +206,7 @@ function UPercentDataEntry() {
         </div>
 
           <div className={styles.fullWidth}>
-          <label>Remarks</label>
+          <label>Remarks (optional)</label>
           <textarea
             rows={3}
             value={form.remarks}

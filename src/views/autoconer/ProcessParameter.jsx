@@ -209,6 +209,7 @@ const ProcessParameter = forwardRef(function ProcessParameter(
     savedVersionsTargetId = "",
     entryId = "",
     nextEntryIdPreview = "",
+    lockedCountName = "",
   },
   ref
 ) {
@@ -232,7 +233,16 @@ const ProcessParameter = forwardRef(function ProcessParameter(
   );
 
   const loadVersions = async () => {
-    const response = await fetchAutoconerProcessParameters({ page: 1, limit: 200 });
+    let response;
+    try {
+      response = await fetchAutoconerProcessParameters({ page: 1, limit: 200 });
+    } catch {
+      setVersions([]);
+      setForm({ ...createDefaultForm(safeSelectedType), paramId: entryId || "" });
+      setExpandedVersionId(null);
+      setSavedProcessParameterId(entryId || "");
+      return;
+    }
     const rows = Array.isArray(response?.data) ? response.data : [];
     const nextVersions = rows
       .map(mapApiEntryToVersion)
@@ -301,6 +311,13 @@ const ProcessParameter = forwardRef(function ProcessParameter(
       paramId: entryId,
     }));
   }, [entryId]);
+
+  useEffect(() => {
+    if (!lockedCountName) return;
+    setForm((current) =>
+      current.countName === lockedCountName ? current : { ...current, countName: lockedCountName }
+    );
+  }, [lockedCountName, versions]);
 
   const clearError = (field) => {
     setErrors((current) => {
@@ -426,7 +443,7 @@ const ProcessParameter = forwardRef(function ProcessParameter(
         ...current,
         paramId: nextParamId,
       }));
-      registerProcessParameterId(response, "Autoconer");
+      registerProcessParameterId(response, "Autoconer", form.countName);
 
       await loadVersions();
       return true;
@@ -551,6 +568,7 @@ const ProcessParameter = forwardRef(function ProcessParameter(
               options={countOptions}
               placeholder="Search or select count name"
               ariaLabel="Count Name"
+              disabled={Boolean(lockedCountName)}
             />
           </div>
 

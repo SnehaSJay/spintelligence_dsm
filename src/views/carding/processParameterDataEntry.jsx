@@ -350,6 +350,7 @@ const CardingProcessParameterDataEntry = forwardRef(function CardingProcessParam
     selectedType,
     onTypeChange,
     savedVersionsTargetId = "",
+    lockedCountName = "",
   },
   ref
 ) {
@@ -379,7 +380,16 @@ const CardingProcessParameterDataEntry = forwardRef(function CardingProcessParam
   );
 
   const loadVersions = async () => {
-    const response = await getCardingProcessParameterEntries({ page: 1, limit: 200 });
+    let response;
+    try {
+      response = await getCardingProcessParameterEntries({ page: 1, limit: 200 });
+    } catch {
+      setVersions([]);
+      setForm({ ...createDefaultForm(), paramId: entryId || "" });
+      setExpandedVersionId(null);
+      setSavedProcessParameterId(entryId || "");
+      return;
+    }
     const rows = Array.isArray(response?.data) ? response.data : [];
     const nextVersions = rows
       .map(mapApiEntryToVersion)
@@ -435,6 +445,13 @@ const CardingProcessParameterDataEntry = forwardRef(function CardingProcessParam
       setSavedProcessParameterId(entryId);
     }
   }, [entryId]);
+
+  useEffect(() => {
+    if (!lockedCountName) return;
+    setForm((current) =>
+      current.countName === lockedCountName ? current : { ...current, countName: lockedCountName }
+    );
+  }, [lockedCountName, versions]);
 
   useEffect(() => {
     if (entryId) return;
@@ -606,7 +623,7 @@ const CardingProcessParameterDataEntry = forwardRef(function CardingProcessParam
         : await submitCardingProcessParameterEntry(payload);
 
       const nextParamId = resolveProcessParameterDisplayId(response, form.paramId || entryId || savedProcessParameterId);
-      registerProcessParameterId(response, "Carding");
+      registerProcessParameterId(response, "Carding", form.countName);
       setSavedProcessParameterId(nextParamId);
 
       await loadVersions();
@@ -669,6 +686,7 @@ const CardingProcessParameterDataEntry = forwardRef(function CardingProcessParam
                 options={countOptions}
                 placeholder="Search or select count name"
                 ariaLabel="Count Name"
+                disabled={Boolean(lockedCountName)}
               />
             </div>
 

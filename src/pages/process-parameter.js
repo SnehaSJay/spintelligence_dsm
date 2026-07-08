@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSelector } from "react-redux";
-import { MdPrint, MdSearch } from "react-icons/md";
+import { MdCalendarToday, MdClose, MdPrint, MdSearch } from "react-icons/md";
 
 import Footer from "@/components/Footer";
 import CombinedProcessParameterPreview from "@/components/CombinedProcessParameterPreview";
@@ -15,8 +15,14 @@ import AutoconerQ2 from "@/views/autoconer/AutoconerQ2";
 import AutoconerQ3 from "@/views/autoconer/AutoconerQ3";
 import { hasSubDepartmentAccess } from "@/utils/accessControl";
 import { normalizeProcessParameterId, resolveProcessParameterDisplayId } from "@/utils/processParameterId";
-import { readProcessParameterRegistry } from "@/utils/processParameterRegistry";
+import { getProcessParameterCountName, readProcessParameterRegistry } from "@/utils/processParameterRegistry";
 import { loadLocalEntries } from "@/utils/localProcessParameterStore";
+import useMixingCountOptions from "@/hooks/useMixingCountOptions";
+import {
+  buildProcessParameterOptions,
+  PROCESS_PARAMETER_COUNT_OPTIONS,
+  PROCESS_PARAMETER_CONSIGNEE_OPTIONS,
+} from "@/data/processParameterMasterOptions";
 import { getMixingProcessParameterEntries } from "@/apis/mixing";
 import { fetchBlowroomProcessParametersApi } from "@/apis/blowroom";
 import { getCardingProcessParameterEntries } from "@/apis/carding";
@@ -26,6 +32,12 @@ import {
   fetchAutoconerQ2Entries,
   fetchAutoconerQ3Entries,
 } from "@/apis/autoconer";
+import SearchableSelect from "@/components/SearchableSelect";
+import {
+  buildProcessParameterOptions,
+  PROCESS_PARAMETER_CONSIGNEE_OPTIONS,
+  PROCESS_PARAMETER_COUNT_OPTIONS,
+} from "@/data/processParameterMasterOptions";
 import styles from "@/styles/processParameterPage.module.css";
 
 const updateExistingColumns = [
@@ -33,8 +45,8 @@ const updateExistingColumns = [
   "Mixing",
   "Blow Room",
   "Carding",
-  "Draw Frame Breaker",
-  "Draw Frame Finisher",
+  "DF Breaker",
+  "DF Finisher",
   "Simplex",
   "Spinning",
   "Autoconer PP",
@@ -53,8 +65,8 @@ const COLUMN_TO_DEPARTMENT = {
   "Mixing": "Mixing",
   "Blow Room": "Blow Room",
   "Carding": "Carding",
-  "Draw Frame Breaker": "Draw Frame",
-  "Draw Frame Finisher": "Draw Frame",
+  "DF Breaker": "Draw Frame",
+  "DF Finisher": "Draw Frame",
   "Simplex": "Simplex",
   "Spinning": "Spinning",
   "Autoconer PP": "Autoconer",
@@ -64,8 +76,8 @@ const COLUMN_TO_DEPARTMENT = {
 
 const subDepartments = [
   { label: "Mixing", value: "Mixing" },
-  { label: "Carding", value: "Carding" },
   { label: "Blow Room", value: "Blow Room" },
+  { label: "Carding", value: "Carding" },
   { label: "Draw Frame", value: "Draw Frame" },
   { label: "Simplex", value: "Simplex" },
   { label: "Spinning", value: "Spinning" },
@@ -82,72 +94,98 @@ const isCanonicalPpId = (value) => /^PP-\d+$/i.test(String(value || "").trim());
 const getEntryRows = (response) =>
   Array.isArray(response?.data) ? response.data : Array.isArray(response) ? response : [];
 
+// Shared across every source: the PP data-entry forms all submit these three fields under
+// the same generic names regardless of department, so one extractor works for all of them.
+const getEntryDetails = (entry) => ({
+  consigneeName: entry?.consignee_name ?? entry?.consigneeName ?? "",
+  countName: entry?.count_name ?? entry?.countName ?? "",
+  creationDate: entry?.creation_date ?? entry?.creationDate ?? entry?.created_at ?? entry?.createdAt ?? "",
+});
+
+const buildFilterParams = (filters) => ({
+  ...(filters?.consigneeFilter ? { consignee_name: filters.consigneeFilter } : {}),
+  ...(filters?.countFilter ? { count_name: filters.countFilter } : {}),
+  ...(filters?.dateFrom ? { date_from: filters.dateFrom } : {}),
+  ...(filters?.dateTo ? { date_to: filters.dateTo } : {}),
+});
+
 // Each source's `getId` mirrors the entry_id extraction used by that department's own
 // ProcessParameterDataEntry view, so remote completion state lines up with what those pages show.
 // Draw Frame Breaker/Finisher and Spinning don't hit the backend yet — they save to the
-// browser's local store (see localProcessParameterStore), so their source reads from there too.
+// browser's local store (see localProcessParameterStore), so their source reads from there too
+// (and filter query params are meaningless for them since there's no server round-trip).
 const REMOTE_STATUS_SOURCES = [
   {
     index: 0,
-    fetch: () => getMixingProcessParameterEntries({ page: 1, limit: 200 }),
+    fetch: (filters) => getMixingProcessParameterEntries({ page: 1, limit: 200, ...buildFilterParams(filters) }),
     getId: (entry) => entry?.entry_id ?? entry?.param_id,
     isDone: (entry) => (entry?.status || "DONE") === "DONE",
+    getDetails: getEntryDetails,
   },
   {
     index: 1,
-    fetch: () => fetchBlowroomProcessParametersApi({ page: 1, limit: 200 }),
+    fetch: (filters) => fetchBlowroomProcessParametersApi({ page: 1, limit: 200, ...buildFilterParams(filters) }),
     getId: (entry) =>
       entry?.display_entry_id ?? entry?.process_parameter_id ?? entry?.parameter_id ?? entry?.param_id ?? entry?.br_code,
     isDone: () => true,
+    getDetails: getEntryDetails,
   },
   {
     index: 2,
-    fetch: () => getCardingProcessParameterEntries({ page: 1, limit: 200 }),
+    fetch: (filters) => getCardingProcessParameterEntries({ page: 1, limit: 200, ...buildFilterParams(filters) }),
     getId: (entry) =>
       entry?.entry_id ?? entry?.param_id ?? entry?.qc_code ?? entry?.qc_id ?? entry?.process_parameter_id ?? entry?.id,
     isDone: () => true,
+    getDetails: getEntryDetails,
   },
   {
     index: 3,
     fetch: () => Promise.resolve({ data: loadLocalEntries("draw-frame-breaker") }),
     getId: (entry) => entry?.param_id ?? entry?.entry_id,
     isDone: () => true,
+    getDetails: getEntryDetails,
   },
   {
     index: 4,
     fetch: () => Promise.resolve({ data: loadLocalEntries("draw-frame-finisher") }),
     getId: (entry) => entry?.param_id ?? entry?.entry_id,
     isDone: () => true,
+    getDetails: getEntryDetails,
   },
   {
     index: 5,
-    fetch: () => fetchSimplexProcessParameterEntries({ page: 1, limit: 200 }),
+    fetch: (filters) => fetchSimplexProcessParameterEntries({ page: 1, limit: 200, ...buildFilterParams(filters) }),
     getId: (entry) => entry?.entry_id ?? entry?.process_parameter_id ?? entry?.param_id,
     isDone: () => true,
+    getDetails: getEntryDetails,
   },
   {
     index: 6,
     fetch: () => Promise.resolve({ data: loadLocalEntries("spinning") }),
     getId: (entry) => entry?.param_id ?? entry?.entry_id,
     isDone: (entry) => (entry?.status || "DONE") === "DONE",
+    getDetails: getEntryDetails,
   },
   {
     index: 7,
-    fetch: () => fetchAutoconerProcessParameters({ page: 1, limit: 200 }),
+    fetch: (filters) => fetchAutoconerProcessParameters({ page: 1, limit: 200, ...buildFilterParams(filters) }),
     getId: (entry) => entry?.entry_id ?? entry?.ins_code ?? entry?.param_id,
     isDone: () => true,
+    getDetails: getEntryDetails,
   },
   {
     index: 8,
-    fetch: () => fetchAutoconerQ2Entries({ page: 1, limit: 200 }),
+    fetch: (filters) => fetchAutoconerQ2Entries({ page: 1, limit: 200, ...buildFilterParams(filters) }),
     getId: (entry) => entry?.entry_id ?? entry?.ins_code,
     isDone: () => true,
+    getDetails: getEntryDetails,
   },
   {
     index: 9,
-    fetch: () => fetchAutoconerQ3Entries({ page: 1, limit: 200 }),
+    fetch: (filters) => fetchAutoconerQ3Entries({ page: 1, limit: 200, ...buildFilterParams(filters) }),
     getId: (entry) => entry?.entry_id ?? entry?.ins_code,
     isDone: () => true,
+    getDetails: getEntryDetails,
   },
 ];
 
@@ -251,8 +289,8 @@ const COMBINED_PREVIEW_COLUMNS = [
   { key: "Mixing", label: "Mixing", department: "Mixing", typeName: "Process Parameter", Component: MixingProcessParameter },
   { key: "Blow Room", label: "Blow Room", department: "Blow Room", typeName: "Process Parameter", Component: BlowRoomProcessParameter },
   { key: "Carding", label: "Carding", department: "Carding", typeName: "Process Parameter", Component: CardingProcessParameter },
-  { key: "Draw Frame Breaker", label: "Draw Frame Breaker", department: "Draw Frame", typeName: "PP - Breaker Drawing", Component: DrawFrameHeaderEntry },
-  { key: "Draw Frame Finisher", label: "Draw Frame Finisher", department: "Draw Frame", typeName: "PP - Finisher Drawing", Component: DrawFrameHeaderEntry },
+  { key: "Draw Frame Breaker", label: "DF Breaker", department: "Draw Frame", typeName: "PP - Breaker Drawing", Component: DrawFrameHeaderEntry },
+  { key: "Draw Frame Finisher", label: "DF Finisher", department: "Draw Frame", typeName: "PP - Finisher Drawing", Component: DrawFrameHeaderEntry },
   { key: "Simplex", label: "Simplex", department: "Simplex", typeName: "Process Parameter", Component: SimplexProcessParameter },
   { key: "Spinning", label: "Spinning", department: "Spinning", typeName: "Process Parameter", Component: SpinningProcessParameter },
   { key: "Autoconer PP", label: "Autoconer PP", department: "Autoconer", typeName: "Process Parameter", Component: AutoconerProcessParameter },
@@ -279,6 +317,16 @@ export default function ProcessParameterPage() {
   const [completedCells, setCompletedCells] = useState({});
   const [dynamicRows, setDynamicRows] = useState([]);
   const [remoteStatusMap, setRemoteStatusMap] = useState({});
+  const [remoteCountNameMap, setRemoteCountNameMap] = useState({});
+  const [remoteConsigneeNameMap, setRemoteConsigneeNameMap] = useState({});
+  const [remoteDateMap, setRemoteDateMap] = useState({});
+  const [countNameFilter, setCountNameFilter] = useState("");
+  const [consigneeNameFilter, setConsigneeNameFilter] = useState("");
+  const [dateFromFilter, setDateFromFilter] = useState("");
+  const [dateToFilter, setDateToFilter] = useState("");
+  const { countOptions: masterCountOptions } = useMixingCountOptions();
+  const dateFromInputRef = useRef(null);
+  const dateToInputRef = useRef(null);
   const componentRef = useRef(null);
   const [previewPpId, setPreviewPpId] = useState("");
   const [previewData, setPreviewData] = useState({});
@@ -310,9 +358,15 @@ export default function ProcessParameterPage() {
   }, []);
 
   const loadRemoteStatuses = async () => {
-    const results = await Promise.allSettled(REMOTE_STATUS_SOURCES.map((source) => source.fetch()));
+    const filters = { consigneeFilter, countFilter, dateFrom, dateTo };
+    const results = await Promise.allSettled(
+      REMOTE_STATUS_SOURCES.map((source) => source.fetch(filters))
+    );
 
     const map = {};
+    const countNameMap = {};
+    const consigneeNameMap = {};
+    const dateMap = {};
     results.forEach((result, sourceIndex) => {
       if (result.status !== "fulfilled") return;
       const source = REMOTE_STATUS_SOURCES[sourceIndex];
@@ -321,15 +375,47 @@ export default function ProcessParameterPage() {
         if (!normalizedId || !isCanonicalPpId(normalizedId) || !source.isDone(entry)) return;
         if (!map[normalizedId]) map[normalizedId] = createBlankStatusRow().statuses.slice();
         map[normalizedId][source.index] = true;
+
+        // Older PP ids saved before the count-name lock existed have no entry in the
+        // local registry, so fall back to whatever count name the earliest-saved
+        // sub-department entry already has on the backend.
+        const countName = String(entry?.count_name || "").trim();
+        if (countName && !countNameMap[normalizedId]) countNameMap[normalizedId] = countName;
+
+        // A PP id can have a different consignee name per sub-department, so keep
+        // every distinct value seen for it (used to power the consignee filter).
+        const consigneeName = String(entry?.consignee_name || "").trim();
+        if (consigneeName) {
+          if (!consigneeNameMap[normalizedId]) consigneeNameMap[normalizedId] = new Set();
+          consigneeNameMap[normalizedId].add(consigneeName);
+        }
+
+        const creationDate = String(entry?.creation_date || "").split("T")[0];
+        if (creationDate && (!dateMap[normalizedId] || creationDate < dateMap[normalizedId])) {
+          dateMap[normalizedId] = creationDate;
+        }
       });
     });
 
     setRemoteStatusMap(map);
+    setRemoteCountNameMap(countNameMap);
+    setRemoteConsigneeNameMap(
+      Object.fromEntries(Object.entries(consigneeNameMap).map(([id, set]) => [id, Array.from(set)]))
+    );
+    setRemoteDateMap(dateMap);
   };
 
   useEffect(() => {
     loadRemoteStatuses();
   }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      loadRemoteStatuses();
+    }, 400);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [consigneeFilter, countFilter, dateFrom, dateTo]);
 
   useEffect(() => {
     const handleStorageChange = () => {
@@ -369,16 +455,24 @@ export default function ProcessParameterPage() {
   const showFooter = ["Mixing", "Carding", "Blow Room", "Simplex", "Spinning", "Autoconer"].includes(
     selectedSubDepartment
   );
-  const isEditingFromExisting = activeTab === "existing" && Boolean(selectedSubDepartment) && Boolean(selectedEntryId);
+  const lockedCountName = selectedEntryId
+    ? getProcessParameterCountName(selectedEntryId) ||
+      remoteCountNameMap[normalizeProcessParameterId(selectedEntryId)] ||
+      ""
+    : "";
   const isEditingViaTab = openEditTabs.some((tab) => tab.tabId === activeTab);
-  const showFormCard = activeTab === "new" || isEditingFromExisting || isEditingViaTab;
+  const showFormCard = activeTab === "new" || isEditingViaTab;
   const showListCard = activeTab === "existing";
   const [searchTerm, setSearchTerm] = useState("");
 
-  const getPpSequence = (id) => {
-    const match = String(id || "").match(/^PP-(\d+)$/i);
-    return match ? Number(match[1]) || 0 : 0;
-  };
+  const consigneeFilterOptions = useMemo(
+    () => buildProcessParameterOptions(PROCESS_PARAMETER_CONSIGNEE_OPTIONS, [], consigneeFilter),
+    [consigneeFilter]
+  );
+  const countFilterOptions = useMemo(
+    () => buildProcessParameterOptions(PROCESS_PARAMETER_COUNT_OPTIONS, [], countFilter),
+    [countFilter]
+  );
 
   const mergedRows = useMemo(() => {
     const byId = new Map();
@@ -403,9 +497,43 @@ export default function ProcessParameterPage() {
     return `PP-${String(highestSequence + 1).padStart(4, "0")}`;
   }, [mergedRows]);
 
-  const filteredRows = mergedRows.filter((row) =>
-    String(row.id).toLowerCase().includes(String(searchTerm).toLowerCase())
-  );
+  const getRowCountName = (rowId) => getProcessParameterCountName(rowId) || remoteCountNameMap[rowId] || "";
+  const getRowConsigneeNames = (rowId) => remoteConsigneeNameMap[rowId] || [];
+  const getRowDate = (rowId) => remoteDateMap[rowId] || "";
+
+  // Same master option lists (plus whatever backend values aren't in them yet) used by
+  // the PP data-entry forms, so the filter dropdowns offer the full catalogue rather than
+  // only the count/consignee names that already appear in the matrix.
+  const countNameFilterOptions = useMemo(() => {
+    const baseCountNames = masterCountOptions.length
+      ? masterCountOptions.map((option) => option.count_name || option.label || option.value)
+      : PROCESS_PARAMETER_COUNT_OPTIONS;
+    const usedCountNames = mergedRows.map((row) => getRowCountName(row.id)).filter(Boolean);
+    return buildProcessParameterOptions(baseCountNames, usedCountNames).sort((a, b) =>
+      a.localeCompare(b)
+    );
+  }, [mergedRows, remoteCountNameMap, masterCountOptions]);
+
+  const consigneeNameFilterOptions = useMemo(() => {
+    const usedConsigneeNames = mergedRows.flatMap((row) => getRowConsigneeNames(row.id));
+    return buildProcessParameterOptions(PROCESS_PARAMETER_CONSIGNEE_OPTIONS, usedConsigneeNames).sort(
+      (a, b) => a.localeCompare(b)
+    );
+  }, [mergedRows, remoteConsigneeNameMap]);
+
+  const filteredRows = mergedRows.filter((row) => {
+    if (!String(row.id).toLowerCase().includes(String(searchTerm).toLowerCase())) return false;
+
+    if (countNameFilter && getRowCountName(row.id) !== countNameFilter) return false;
+
+    if (consigneeNameFilter && !getRowConsigneeNames(row.id).includes(consigneeNameFilter)) return false;
+
+    const rowDate = getRowDate(row.id);
+    if (dateFromFilter && (!rowDate || rowDate < dateFromFilter)) return false;
+    if (dateToFilter && (!rowDate || rowDate > dateToFilter)) return false;
+
+    return true;
+  });
   const getRowStatuses = (rowId) => {
     const base =
       mergedRows.find((row) => row.id === rowId)?.statuses || createBlankStatusRow().statuses;
@@ -427,31 +555,19 @@ export default function ProcessParameterPage() {
       return;
     }
 
-    // Only columns marked "done" for this row actually have an entryId passed to their
-    // hidden instance (see the hidden-mount render below), so only those need to be polled
-    // for a real backend match. Pending columns are mounted with no entryId at all — they
-    // never attempt a fetch/match and their blank getPreviewData() output is correct and
-    // available immediately, so we don't want to sit there polling/timing-out for them.
-    const doneStatuses = getRowStatuses(previewPpId);
-    const pendingKeys = new Set(
-      COMBINED_PREVIEW_COLUMNS.filter((_, index) => doneStatuses[index]).map((column) => column.key)
-    );
-    const immediateKeys = COMBINED_PREVIEW_COLUMNS.filter((_, index) => !doneStatuses[index]).map(
-      (column) => column.key
-    );
+    // Every column now gets a real entryId (see the hidden-mount render below) and attempts
+    // its own fetch/match against the backend, independent of the matrix's aggregated done
+    // status (which can be stale/incomplete if the status-fetch sweep missed or failed for
+    // a source). Columns that genuinely have no saved entry will simply time out with their
+    // blank output, which is still the correct result for them.
+    const pendingKeys = new Set(COMBINED_PREVIEW_COLUMNS.map((column) => column.key));
     const targetId = normalizeProcessParameterId(previewPpId);
     const startedAt = Date.now();
 
     const poll = () => {
-      [...pendingKeys, ...immediateKeys].forEach((key) => {
+      pendingKeys.forEach((key) => {
         const items = previewRefs.current[key]?.getPreviewData?.();
         if (!Array.isArray(items)) return;
-
-        if (!pendingKeys.has(key)) {
-          // Pending (not-done) column: no entryId was passed, so its blank output is final.
-          setPreviewData((current) => (current[key]?.ready ? current : { ...current, [key]: { items, ready: true } }));
-          return;
-        }
 
         const identifier = findIdentifierValue(items);
         const isReady = Boolean(identifier) && normalizeProcessParameterId(identifier) === targetId;
@@ -486,6 +602,24 @@ export default function ProcessParameterPage() {
 
   const handlePrintMatrix = () => {
     setPrintMode("matrix");
+  };
+
+  const openDatePicker = (inputRef) => {
+    const input = inputRef.current;
+    if (!input) return;
+    if (typeof input.showPicker === "function") {
+      input.showPicker();
+    } else {
+      input.focus();
+    }
+  };
+
+  const clearAllFilters = () => {
+    setSearchTerm("");
+    setConsigneeNameFilter("");
+    setCountNameFilter("");
+    setDateFromFilter("");
+    setDateToFilter("");
   };
 
   const handlePrintRow = (rowId) => {
@@ -623,14 +757,14 @@ export default function ProcessParameterPage() {
     }
   }, [activeTab, selectedSubDepartment, selectedEntryId, drawFrameType, autoconerType]);
 
-  const handleMatrixCellClick = (rowId, columnIndex, done) => {
+  const handleMatrixCellClick = (rowId, columnIndex) => {
     const columnName = updateExistingColumns[columnIndex + 1];
     const department = COLUMN_TO_DEPARTMENT[columnName];
     if (!department) return;
 
     const nextDrawFrameType =
       department === "Draw Frame"
-        ? columnName === "Draw Frame Finisher"
+        ? columnName === "DF Finisher"
           ? "PP - Finisher Drawing"
           : "PP - Breaker Drawing"
         : null;
@@ -643,30 +777,21 @@ export default function ProcessParameterPage() {
             : "Process Parameter"
         : null;
 
-    // Pending cells open their own tab in the tab bar (alongside "Create New PP" /
-    // "Update Existing PP") instead of editing inline below the matrix, so several
-    // pending entries can be worked on side by side without losing the matrix view.
-    if (!done) {
-      const tabId = `edit:${rowId}:${columnName}`;
-      setOpenEditTabs((current) =>
-        current.some((tab) => tab.tabId === tabId)
-          ? current
-          : [...current, { tabId, rowId, department, drawFrameType: nextDrawFrameType, autoconerType: nextAutoconerType, label: `${rowId} · ${columnName}` }]
-      );
-      setSelectedEntryId(rowId);
-      setSelectedSubDepartment(department);
-      if (nextDrawFrameType) setDrawFrameType(nextDrawFrameType);
-      if (nextAutoconerType) setAutoconerType(nextAutoconerType);
-      setActiveTab(tabId);
-      return;
-    }
-
+    // Every cell (done or pending) opens its own tab in the tab bar (alongside
+    // "Create New PP" / "Update Existing PP") instead of editing inline below the
+    // matrix, so several entries can be worked on side by side without losing the
+    // matrix view.
+    const tabId = `edit:${rowId}:${columnName}`;
+    setOpenEditTabs((current) =>
+      current.some((tab) => tab.tabId === tabId)
+        ? current
+        : [...current, { tabId, rowId, department, drawFrameType: nextDrawFrameType, autoconerType: nextAutoconerType, label: `${rowId} · ${columnName}` }]
+    );
     setSelectedEntryId(rowId);
     setSelectedSubDepartment(department);
-    setActiveTab("existing");
-
     if (nextDrawFrameType) setDrawFrameType(nextDrawFrameType);
     if (nextAutoconerType) setAutoconerType(nextAutoconerType);
+    setActiveTab(tabId);
   };
 
   const handleSelectEditTab = (tabId) => {
@@ -683,10 +808,6 @@ export default function ProcessParameterPage() {
     event.stopPropagation();
     setOpenEditTabs((current) => current.filter((tab) => tab.tabId !== tabId));
     setActiveTab((current) => (current === tabId ? "existing" : current));
-  };
-
-  const handleCloseInlineEdit = () => {
-    setSelectedEntryId("");
   };
 
   const handleTabChange = (tab) => {
@@ -719,21 +840,37 @@ export default function ProcessParameterPage() {
           </header>
 
           <div className={styles.subHeaderRow}>
-            <label className={styles.subDeptField}>
-              <span>Sub Department</span>
-              <select
-                value={selectedSubDepartment}
-                onChange={(event) => handleSubDepartmentChange(event.target.value)}
-              >
-                <option value="">Select sub-department</option>
-                {visibleSubDepartments.map((item) => (
-                  <option key={item.value} value={item.value}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className={styles.currentDate}>Current Date : {currentDate}</div>
+            {activeTab === "new" ? (
+              <label className={styles.subDeptField}>
+                <span>Sub Department</span>
+                <select
+                  value={selectedSubDepartment}
+                  onChange={(event) => handleSubDepartmentChange(event.target.value)}
+                >
+                  <option value="">Select sub-department</option>
+                  {visibleSubDepartments.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : (
+              <div />
+            )}
+            <div className={styles.subHeaderRight}>
+              {showListCard ? (
+                <button
+                  type="button"
+                  className={styles.printMatrixButton}
+                  onClick={handlePrintMatrix}
+                  title="Print this matrix"
+                >
+                  <MdPrint /> Print Matrix
+                </button>
+              ) : null}
+              <div className={styles.currentDate}>Current Date : {currentDate}</div>
+            </div>
           </div>
 
           <div className={styles.tabBar} role="tablist" aria-label="Process parameter mode">
@@ -783,23 +920,186 @@ export default function ProcessParameterPage() {
           {showListCard ? (
             <div className={styles.listCard}>
               <div className={styles.listToolbar}>
-                <div className={styles.searchInputWrap}>
-                  <MdSearch className={styles.searchIcon} />
+                <input
+                  type="text"
+                  className={styles.searchInput}
+                  placeholder="Search"
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                />
+              </div>
+
+              <div className={styles.filterRow}>
+                <label className={styles.filterField}>
+                  <span>Consignee Name</span>
+                  <SearchableSelect
+                    className={styles.filterInput}
+                    value={consigneeFilter}
+                    onChange={setConsigneeFilter}
+                    options={consigneeFilterOptions}
+                    placeholder="Search or select consignee name"
+                    ariaLabel="Filter by Consignee Name"
+                  />
+                </label>
+
+                <label className={styles.filterField}>
+                  <span>Count Name</span>
+                  <SearchableSelect
+                    className={styles.filterInput}
+                    value={countFilter}
+                    onChange={setCountFilter}
+                    options={countFilterOptions}
+                    placeholder="Search or select count name"
+                    ariaLabel="Filter by Count Name"
+                  />
+                </label>
+
+                <label className={styles.filterField}>
+                  <span>Date From</span>
                   <input
-                    type="text"
-                    className={styles.searchInput}
-                    placeholder="Search"
-                    value={searchTerm}
-                    onChange={(event) => setSearchTerm(event.target.value)}
+                    type="date"
+                    className={styles.filterInput}
+                    value={dateFrom}
+                    onChange={(event) => setDateFrom(event.target.value)}
                   />
                 </div>
+
+                <div className={styles.selectFilterWrap}>
+                  <select
+                    className={styles.filterSelect}
+                    value={consigneeNameFilter}
+                    onChange={(event) => setConsigneeNameFilter(event.target.value)}
+                    aria-label="Filter by consignee name"
+                  >
+                    <option value="">Consignee Name</option>
+                    {consigneeNameFilterOptions.map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className={styles.dateClearButton}
+                    onClick={() => setConsigneeNameFilter("")}
+                    disabled={!consigneeNameFilter}
+                    aria-label="Clear consignee name filter"
+                    title="Clear consignee name filter"
+                  >
+                    <MdClose />
+                  </button>
+                </div>
+
+                <div className={styles.selectFilterWrap}>
+                  <select
+                    className={styles.filterSelect}
+                    value={countNameFilter}
+                    onChange={(event) => setCountNameFilter(event.target.value)}
+                    aria-label="Filter by count name"
+                  >
+                    <option value="">Count Name</option>
+                    {countNameFilterOptions.map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className={styles.dateClearButton}
+                    onClick={() => setCountNameFilter("")}
+                    disabled={!countNameFilter}
+                    aria-label="Clear count name filter"
+                    title="Clear count name filter"
+                  >
+                    <MdClose />
+                  </button>
+                </div>
+
+                <div className={styles.dateRangeFilter}>
+                  <label className={styles.dateFieldWrap}>
+                    <span className={styles.dateFieldLabel}>From Date</span>
+                    <div className={styles.dateInputWrap}>
+                      <button
+                        type="button"
+                        className={styles.dateCalendarButton}
+                        onClick={() => openDatePicker(dateFromInputRef)}
+                        aria-label="Open from date calendar"
+                        title="Open calendar"
+                      >
+                        <MdCalendarToday />
+                      </button>
+                      <input
+                        ref={dateFromInputRef}
+                        type="date"
+                        className={styles.filterDateInput}
+                        value={dateFromFilter}
+                        onChange={(event) => setDateFromFilter(event.target.value)}
+                        aria-label="Filter from date"
+                      />
+                      {dateFromFilter ? (
+                        <button
+                          type="button"
+                          className={styles.dateClearButton}
+                          onClick={() => setDateFromFilter("")}
+                          aria-label="Clear from date"
+                          title="Clear from date"
+                        >
+                          <MdClose />
+                        </button>
+                      ) : null}
+                    </div>
+                  </label>
+                  <span className={styles.dateRangeSeparator}>to</span>
+                  <label className={styles.dateFieldWrap}>
+                    <span className={styles.dateFieldLabel}>To Date</span>
+                    <div className={styles.dateInputWrap}>
+                      <button
+                        type="button"
+                        className={styles.dateCalendarButton}
+                        onClick={() => openDatePicker(dateToInputRef)}
+                        aria-label="Open to date calendar"
+                        title="Open calendar"
+                      >
+                        <MdCalendarToday />
+                      </button>
+                      <input
+                        ref={dateToInputRef}
+                        type="date"
+                        className={styles.filterDateInput}
+                        value={dateToFilter}
+                        onChange={(event) => setDateToFilter(event.target.value)}
+                        aria-label="Filter to date"
+                      />
+                      {dateToFilter ? (
+                        <button
+                          type="button"
+                          className={styles.dateClearButton}
+                          onClick={() => setDateToFilter("")}
+                          aria-label="Clear to date"
+                          title="Clear to date"
+                        >
+                          <MdClose />
+                        </button>
+                      ) : null}
+                    </div>
+                  </label>
+                </div>
+
                 <button
                   type="button"
-                  className={styles.printMatrixButton}
-                  onClick={handlePrintMatrix}
-                  title="Print this matrix"
+                  className={styles.clearFiltersButton}
+                  onClick={clearAllFilters}
+                  disabled={
+                    !searchTerm &&
+                    !consigneeNameFilter &&
+                    !countNameFilter &&
+                    !dateFromFilter &&
+                    !dateToFilter
+                  }
+                  title="Clear all filters"
                 >
-                  <MdPrint /> Print Matrix
+                  Clear Filter
                 </button>
               </div>
 
@@ -807,14 +1107,19 @@ export default function ProcessParameterPage() {
                 <table className={styles.matrixTable}>
                   <thead>
                     <tr>
-                      {updateExistingColumns.map((column) => (
+                      <th>{updateExistingColumns[0]}</th>
+                      <th>Count Name</th>
+                      {updateExistingColumns.slice(1).map((column) => (
                         <th key={column}>{column}</th>
                       ))}
                       <th></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredRows.map((row) => (
+                    {filteredRows.map((row) => {
+                      const rowStatuses = getRowStatuses(row.id);
+                      const allSubDepartmentsDone = rowStatuses.every(Boolean);
+                      return (
                       <tr key={row.id}>
                         <td className={styles.matrixIdCell}>
                           <button
@@ -826,14 +1131,18 @@ export default function ProcessParameterPage() {
                             {row.id}
                           </button>
                         </td>
-                        {getRowStatuses(row.id).map((done, index) => (
+                        <td className={styles.matrixCountNameCell} title={getRowCountName(row.id) || ""}>
+                          {getRowCountName(row.id) || "-"}
+                        </td>
+                        {rowStatuses.map((done, index) => (
                           <td key={`${row.id}-${index}`} className={styles.matrixStatusCell}>
                             <button
                               type="button"
                               className={done ? styles.statusDone : styles.statusPending}
-                              onClick={() => handleMatrixCellClick(row.id, index, done)}
+                              onClick={done ? undefined : () => handleMatrixCellClick(row.id, index)}
+                              disabled={done}
                               aria-label={`${row.id} ${updateExistingColumns[index + 1]} ${done ? "completed" : "pending"}`}
-                              title={done ? undefined : "Opens in a new tab"}
+                              title={done ? "Completed" : "Opens in a new tab"}
                             >
                               {done ? "✓" : ""}
                             </button>
@@ -844,14 +1153,20 @@ export default function ProcessParameterPage() {
                             type="button"
                             className={styles.matrixPrintButton}
                             onClick={() => handlePrintRow(row.id)}
+                            disabled={!allSubDepartmentsDone}
                             aria-label={`Print ${row.id}`}
-                            title="Print this row's preview"
+                            title={
+                              allSubDepartmentsDone
+                                ? "Print this row's preview"
+                                : "Complete all sub-departments before printing"
+                            }
                           >
                             <MdPrint />
                           </button>
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -863,40 +1178,6 @@ export default function ProcessParameterPage() {
 
           {showFormCard ? (
             <div className={styles.formCard}>
-              {isEditingFromExisting ? (
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: "12px",
-                    padding: "10px 16px",
-                    marginBottom: "12px",
-                    borderRadius: "8px",
-                    background: "#eef5ff",
-                    border: "1px solid #c8d9f0",
-                    fontWeight: 600,
-                    color: "#1e3a5f",
-                  }}
-                >
-                  <span>
-                    Editing {selectedEntryId} — {selectedSubDepartment}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleCloseInlineEdit}
-                    style={{
-                      border: "none",
-                      background: "transparent",
-                      color: "#3d5a80",
-                      cursor: "pointer",
-                      fontWeight: 600,
-                    }}
-                  >
-                    Close ✕
-                  </button>
-                </div>
-              ) : null}
               {SelectedComponent ? (
                 <SelectedComponent
                   key={`${selectedSubDepartment}-${selectedTypeName}-${selectedEntryId || "new"}`}
@@ -911,6 +1192,7 @@ export default function ProcessParameterPage() {
                   }}
                   entryId={selectedEntryId}
                   nextEntryIdPreview={nextAvailableId}
+                  lockedCountName={lockedCountName}
                   {...getDepartmentFormProps(selectedSubDepartment, selectedTypeName, typeOptions)}
                   onTypeChange={
                     selectedSubDepartment === "Draw Frame"
@@ -933,14 +1215,34 @@ export default function ProcessParameterPage() {
                     onSave={async () => {
                       const valid = componentRef.current?.validate?.();
                       if (valid === false) return;
+                      const previewItems = componentRef.current?.getPreviewData?.() || [];
                       const result = await componentRef.current?.submit?.();
                       refreshRegistryRows();
                       const batchDisplayId = resolveProcessParameterDisplayId(result, selectedEntryId);
                       if (batchDisplayId && !selectedEntryId) setSelectedEntryId(batchDisplayId);
 
                       const colIndex = getColumnIndexForDepartment();
-                      if ((result !== false || batchDisplayId) && batchDisplayId && colIndex > 0) {
+                      const isSuccess = result !== false || batchDisplayId;
+                      if (isSuccess && batchDisplayId && colIndex > 0) {
                         upsertRowStatus(batchDisplayId, colIndex - 1, true);
+                      }
+
+                      if (isSuccess) {
+                        try {
+                          await recordSubmittedNotebook({
+                            department: "Quality Control",
+                            subDepartment: selectedSubDepartment,
+                            notebookName: selectedTypeName,
+                            entryId: batchDisplayId || selectedEntryId,
+                            previewItems,
+                            user,
+                          });
+                        } catch (error) {
+                          console.warn(
+                            "Process parameter submitted notebook record failed:",
+                            error?.response?.data || error?.message || error
+                          );
+                        }
                       }
                     }}
                     saveLabel="Save Record"
@@ -966,16 +1268,15 @@ export default function ProcessParameterPage() {
             pointerEvents: "none",
           }}
         >
-          {COMBINED_PREVIEW_COLUMNS.map((column, index) => {
+          {COMBINED_PREVIEW_COLUMNS.map((column) => {
             const HiddenComponent = column.Component;
-            const isDone = Boolean(getRowStatuses(previewPpId)[index]);
             return (
               <HiddenComponent
                 key={`${previewPpId}-${column.key}`}
                 ref={(instance) => {
                   previewRefs.current[column.key] = instance;
                 }}
-                entryId={isDone ? previewPpId : ""}
+                entryId={previewPpId}
                 {...getHiddenPreviewProps(column)}
               />
             );

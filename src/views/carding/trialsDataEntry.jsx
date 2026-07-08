@@ -43,7 +43,6 @@ const requiredFields = [
     "trialtype",
     "nature",
     "materialMixing",
-    "yarnresults",
     "totalCuts",
     "nepsCuts",
     "shortCuts",
@@ -613,7 +612,7 @@ function TrialDepartment({ types = [], selectedType = "", onTypeChange = () => {
 
                     <div className={styles.cardRow}>
                         <div className={`${styles.cardFormGroup} ${styles.fullWidth}`}>
-                            <label>Yarn Remarks</label>
+                            <label>Yarn Remarks (optional)</label>
                             <textarea name="yarnresults" value={formData.yarnresults || ""} onChange={handleChange} className={fieldClass("yarnresults")} />
                         </div>
                     </div>

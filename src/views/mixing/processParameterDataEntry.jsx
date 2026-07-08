@@ -18,7 +18,7 @@ import {
   reserveGlobalProcessParameterId,
   resolveProcessParameterDisplayId,
 } from "@/utils/processParameterId";
-import { registerProcessParameterId } from "@/utils/processParameterRegistry";
+import { getProcessParameterCountName, registerProcessParameterId } from "@/utils/processParameterRegistry";
 import {
   mixingProcessParameterDataEntry,
   updateMixingProcessParameterEntry,
@@ -101,6 +101,8 @@ const mapApiEntryToVersion = (entry) => {
       ? entry.blends.map((blend) => [Number(blend.blend_no), blend])
       : []
   );
+  const blendCount = Math.max(blendMap.size, 1);
+  const blendNumbers = Array.from({ length: blendCount }, (_, i) => i + 1);
 
   return {
     id: String(entry?.qc_id ?? entry?.param_id ?? Date.now()),
@@ -113,7 +115,7 @@ const mapApiEntryToVersion = (entry) => {
       countName: entry?.count_name || "",
       consigneeName: entry?.consignee_name || "",
       creationDate: normalizedDate || new Date().toISOString().split("T")[0],
-      rows: [1, 2, 3, 4].map((blendNo) => {
+      rows: blendNumbers.map((blendNo) => {
         const blend = blendMap.get(blendNo);
         return {
           label: `Blend-${blendNo}`,
@@ -327,6 +329,7 @@ const ProcessParameterDataEntry = forwardRef(function ProcessParameterDataEntry(
     onTypeChange,
     standaloneSection = false,
     savedVersionsTargetId = "",
+    lockedCountName = "",
   },
   ref
 ) {
@@ -341,7 +344,16 @@ const ProcessParameterDataEntry = forwardRef(function ProcessParameterDataEntry(
   const [previewNextId, setPreviewNextId] = useState("");
 
   const loadVersions = async () => {
-    const response = await getMixingProcessParameterEntries({ page: 1, limit: 200 });
+    let response;
+    try {
+      response = await getMixingProcessParameterEntries({ page: 1, limit: 200 });
+    } catch {
+      setVersions([]);
+      setForm({ ...createDefaultForm(), paramId: entryId || "" });
+      setExpandedVersionId(null);
+      setSavedProcessParameterId(entryId || "");
+      return;
+    }
     const rows = Array.isArray(response?.data) ? response.data : [];
     const nextVersions = rows.map(mapApiEntryToVersion);
 
@@ -401,6 +413,15 @@ const ProcessParameterDataEntry = forwardRef(function ProcessParameterDataEntry(
       setSavedProcessParameterId(entryId);
     }
   }, [entryId]);
+
+  // Once a PP id has a locked count name (set by whichever sub-department entered it
+  // first), every other sub-department under that same PP id must reuse it.
+  useEffect(() => {
+    if (!lockedCountName) return;
+    setForm((current) =>
+      current.countName === lockedCountName ? current : { ...current, countName: lockedCountName }
+    );
+  }, [lockedCountName, versions]);
 
   useEffect(() => {
     if (entryId) return;
@@ -563,7 +584,7 @@ const ProcessParameterDataEntry = forwardRef(function ProcessParameterDataEntry(
       : await mixingProcessParameterDataEntry(payload);
 
     const nextParamId = resolveProcessParameterDisplayId(response, form.paramId || entryId || savedProcessParameterId);
-    registerProcessParameterId(response, "Mixing");
+    registerProcessParameterId(response, "Mixing", form.countName);
     setSavedProcessParameterId(nextParamId);
     await loadVersions();
     dispatch(clearMixingState());
@@ -626,6 +647,7 @@ const ProcessParameterDataEntry = forwardRef(function ProcessParameterDataEntry(
             options={countOptions}
             placeholder="Search or select count name"
             ariaLabel="Count Name"
+            disabled={Boolean(lockedCountName)}
           />
         </div>
 

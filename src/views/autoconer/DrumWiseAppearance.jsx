@@ -368,7 +368,7 @@ function DrumWiseAppearance({
       </div>
 
       <div className={styles.remarksBlock}>
-        <label>Remarks</label>
+        <label>Remarks (optional)</label>
         <textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} style={errorStyle(errors.remarks)} />
       </div>
     </div>
