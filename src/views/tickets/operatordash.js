@@ -78,6 +78,13 @@ export default function operatorboard() {
 
     const formatSubmissionTicket = (ticket) => {
         const transformedTicket = transformTicket(ticket);
+        const isPpBatchTicket = isPpBatchCompletionTicketRecord(ticket);
+        // A PP batch ticket is only ever raised once L1 has already missed the completion
+        // deadline, so its created_at IS the moment of breach — hours since then is the lag.
+        const hoursLagged = Math.max(
+            0,
+            Math.round((Date.now() - transformedTicket.rawCreatedAt.getTime()) / (1000 * 60 * 60))
+        );
             return {
                 id: transformedTicket.ticket_id || ticket.ticket_id,
                 machine:
@@ -100,19 +107,21 @@ export default function operatorboard() {
             actual: "-",
             standard: "-",
             threshold: "-",
-            frequency:
-                ticket.frequency ||
-                transformedTicket.frequency ||
-                transformedTicket.submission_frequency ||
-                transformedTicket.check_frequency ||
-                "-",
-            occurrences:
-                ticket.occurrences ??
-                ticket.configured_occurrences ??
-                transformedTicket.occurrences ??
-                transformedTicket.occurrence_count ??
-                transformedTicket.count ??
-                "-",
+            frequency: isPpBatchTicket
+                ? `${hoursLagged}h`
+                : ticket.frequency ||
+                  transformedTicket.frequency ||
+                  transformedTicket.submission_frequency ||
+                  transformedTicket.check_frequency ||
+                  "-",
+            occurrences: isPpBatchTicket
+                ? 1
+                : ticket.occurrences ??
+                  ticket.configured_occurrences ??
+                  transformedTicket.occurrences ??
+                  transformedTicket.occurrence_count ??
+                  transformedTicket.count ??
+                  "-",
             severity: ticket.severity || transformedTicket.severity || "High",
             status: transformedTicket.status,
             rawCreatedAt: transformedTicket.rawCreatedAt,
@@ -143,11 +152,20 @@ export default function operatorboard() {
     const fetchTickets = async () => {
         try {
             setThresholdError("");
-            const response = await getOperatorTickets({ _ts: Date.now() });
+            const response = await getOperatorTickets({ page: 1, limit: 500, _ts: Date.now() });
 
             const ticketsArray = Array.isArray(response)
                 ? response
-                : response?.data || response?.tickets || [];
+                : response?.data?.tickets ||
+                  response?.data?.rows ||
+                  response?.data ||
+                  response?.tickets ||
+                  response?.rows ||
+                  [];
+
+            if (!ticketsArray.length && response && typeof response === "object") {
+                console.warn("getOperatorTickets returned an unrecognized response shape:", response);
+            }
 
             const normalizedTickets = applyStoredTicketStatuses(ticketsArray);
             const thresholdTickets = applyOneTimeThresholdTicketReset(
@@ -193,10 +211,19 @@ export default function operatorboard() {
     const fetchSubmissionTickets = async () => {
         try {
             setSubmissionError("");
-            const response = await getSubmissionTickets({ page: 1, limit: 200, _ts: Date.now() });
+            const response = await getSubmissionTickets({ page: 1, limit: 500, _ts: Date.now() });
             const ticketsArray = Array.isArray(response)
                 ? response
-                : response?.data || response?.tickets || [];
+                : response?.data?.tickets ||
+                  response?.data?.rows ||
+                  response?.data ||
+                  response?.tickets ||
+                  response?.rows ||
+                  [];
+
+            if (!ticketsArray.length && response && typeof response === "object") {
+                console.warn("getSubmissionTickets returned an unrecognized response shape:", response);
+            }
 
             const formattedData = ticketsArray.map(formatSubmissionTicket);
 
@@ -479,7 +506,7 @@ export default function operatorboard() {
                             <tr
                                 key={t.id} // Use 't.id', not 'ticket.id'
                                 style={{ cursor: "pointer" }}
-                                onClick={() => router.push(`/operatordetail?ticketId=${encodeURIComponent(t.id.replace("#", ""))}`)}
+                                onClick={() => router.push(`/operatordetail?ticketId=${encodeURIComponent(t.id.replace("#", ""))}&ticketType=${activeTicketingView}`)}
                             >
                                 <td className={styles["ticket-link"]}>{t.id}</td>
                                 <td>{t.machine}</td>
@@ -599,7 +626,7 @@ export default function operatorboard() {
                 )}
 
                 {displayTickets.map((t) => (
-                    <div key={t.id} className={styles["mobile-card"]} onClick={() => router.push(`/operatordetail?ticketId=${encodeURIComponent(t.id.replace("#", ""))}`)}>
+                    <div key={t.id} className={styles["mobile-card"]} onClick={() => router.push(`/operatordetail?ticketId=${encodeURIComponent(t.id.replace("#", ""))}&ticketType=${activeTicketingView}`)}>
                         <div className={styles["card-top"]}>
                             <div className={styles["left-section"]}>
                                 <div className={styles["card-id-machine"]}>{t.id} | {t.machine}</div>
