@@ -714,9 +714,49 @@ export const fetchSpinningWheelChangeDropdown = async (wheelType = "", params = 
 export const submitSpinningProcessParameterEntry =
   spinningProcessParameterDataEntry;
 
+// "Latest" means most recently *entered* (submitted), not most recently
+// *touched* — an older entry's updated_at can be bumped later than a newer
+// entry's created_at simply because an L2 reviewer approved/rejected it
+// after the fact, which would otherwise outrank the actual newest row.
+const getRecordTimestamp = (record) => {
+  const raw =
+    record?.created_at ??
+    record?.createdAt ??
+    record?.created_time ??
+    record?.createdTime ??
+    record?.created_on ??
+    record?.createdOn ??
+    record?.entry_date ??
+    record?.date ??
+    record?.updated_at ??
+    record?.updatedAt ??
+    Object.entries(record || {}).find(([key, value]) => {
+      if (!value) return false;
+      const normalizedKey = String(key || "").toLowerCase();
+      if (!/(created|updated|time|date)/.test(normalizedKey)) return false;
+      return !Number.isNaN(new Date(value).getTime());
+    })?.[1] ??
+    null;
+  const parsed = raw ? new Date(raw).getTime() : NaN;
+  return Number.isFinite(parsed) ? parsed : -Infinity;
+};
+
+// The backend's id column for these tables isn't consistently named "id" —
+// fall back to any *_id-shaped numeric key so the recency tiebreaker still
+// works when the field is e.g. type1_id/entry_id instead.
+const getRecordId = (record) => {
+  const direct = Number(record?.id);
+  if (Number.isFinite(direct) && direct !== 0) return direct;
+  const match = Object.entries(record || {}).find(([key, value]) => {
+    if (!/(^|_)id$/i.test(key)) return false;
+    const numeric = Number(value);
+    return Number.isFinite(numeric) && numeric !== 0;
+  });
+  return match ? Number(match[1]) : 0;
+};
+
 const normalizeWheelChangeLatestRecordPayload = (payload) => {
   const latestRecord = payload?.latest_record ?? payload?.latestRecord ?? null;
-  if (latestRecord) return latestRecord;
 
   const rows = Array.isArray(payload?.data)
     ? payload.data
@@ -726,7 +766,34 @@ const normalizeWheelChangeLatestRecordPayload = (payload) => {
         ? payload
         : [];
 
-  return rows[0] || null;
+  // Filtered wheel-change queries (e.g. approval_status=approved) come back
+  // as a single flat record object with no data/rows/latest_record wrapper
+  // at all — the payload itself *is* the record. Only rows/latestRecord
+  // cover the wrapped shapes above, so without this the payload is silently
+  // dropped and the function returns null even though a real match exists.
+  const isWrapperPayload =
+    payload && typeof payload === "object" && !Array.isArray(payload) &&
+    (Array.isArray(payload.data) || Array.isArray(payload.rows) || "latest_record" in payload || "latestRecord" in payload);
+  const singleRecord =
+    payload && typeof payload === "object" && !Array.isArray(payload) && !isWrapperPayload && Object.keys(payload).length
+      ? payload
+      : null;
+
+  // Some endpoints don't guarantee newest-first ordering, and the backend's
+  // own latest_record has been observed to lag behind the actual newest row
+  // (e.g. it reflects the first entry ever saved for that variety instead of
+  // the most recent). Don't trust either source blindly — pick whichever of
+  // latest_record vs. the data/rows array is actually newest by timestamp.
+  const candidates = [latestRecord, singleRecord, ...rows].filter(Boolean);
+  if (!candidates.length) return null;
+
+  const sortedByRecency = [...candidates].sort((a, b) => {
+    const diff = getRecordTimestamp(b) - getRecordTimestamp(a);
+    if (diff !== 0) return diff;
+    return getRecordId(b) - getRecordId(a);
+  });
+
+  return sortedByRecency[0] || null;
 };
 
 export const fetchSpinningWheelChangeLatestRecord = async (wheelType = "", params = {}) => {

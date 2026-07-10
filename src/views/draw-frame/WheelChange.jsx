@@ -1234,15 +1234,90 @@ const pickSavedRows = (entry) => {
   return [];
 };
 
+// "Latest" means most recently *entered* (submitted), not most recently
+// *touched* — an older entry's updated_at can be bumped later than a newer
+// entry's created_at simply because an L2 reviewer approved/rejected it
+// after the fact, which would otherwise outrank the actual newest row.
+const getRecordTimestamp = (record) => {
+  const raw =
+    record?.created_at ??
+    record?.createdAt ??
+    record?.created_time ??
+    record?.createdTime ??
+    record?.created_on ??
+    record?.createdOn ??
+    record?.entry_date ??
+    record?.date ??
+    record?.updated_at ??
+    record?.updatedAt ??
+    Object.entries(record || {}).find(([key, value]) => {
+      if (!value) return false;
+      const normalizedKey = String(key || "").toLowerCase();
+      if (!/(created|updated|time|date)/.test(normalizedKey)) return false;
+      return !Number.isNaN(new Date(value).getTime());
+    })?.[1] ??
+    null;
+  const parsed = raw ? new Date(raw).getTime() : NaN;
+  return Number.isFinite(parsed) ? parsed : -Infinity;
+};
+
+// The backend's id column for these tables isn't consistently named "id" —
+// fall back to any *_id-shaped numeric key so the recency tiebreaker still
+// works when the field is e.g. entry_id instead.
+const getRecordId = (record) => {
+  const direct = Number(record?.id);
+  if (Number.isFinite(direct) && direct !== 0) return direct;
+  const match = Object.entries(record || {}).find(([key, value]) => {
+    if (!/(^|_)id$/i.test(key)) return false;
+    const numeric = Number(value);
+    return Number.isFinite(numeric) && numeric !== 0;
+  });
+  return match ? Number(match[1]) : 0;
+};
+
 const extractLatestEntry = (payload) => {
+  const latestRecord = payload?.latest_record ?? payload?.latestRecord ?? null;
+
   const rows = Array.isArray(payload?.data)
     ? payload.data
     : Array.isArray(payload?.rows)
       ? payload.rows
-      : Array.isArray(payload)
-        ? payload
-        : [];
-  return rows[0] || null;
+      : Array.isArray(payload?.entries)
+        ? payload.entries
+        : Array.isArray(payload?.items)
+          ? payload.items
+          : Array.isArray(payload?.data?.rows)
+            ? payload.data.rows
+            : Array.isArray(payload)
+              ? payload
+              : [];
+
+  // Filtered wheel-change queries (e.g. approval_status=approved) can come
+  // back as a single flat record object with no data/rows/latest_record
+  // wrapper at all — the payload itself *is* the record.
+  const isWrapperPayload =
+    payload && typeof payload === "object" && !Array.isArray(payload) &&
+    (Array.isArray(payload.data) || Array.isArray(payload.rows) || Array.isArray(payload.entries) || Array.isArray(payload.items) || "latest_record" in payload || "latestRecord" in payload);
+  const singleRecord =
+    payload && typeof payload === "object" && !Array.isArray(payload) && !isWrapperPayload && Object.keys(payload).length
+      ? payload
+      : null;
+
+  const candidates = [latestRecord, singleRecord, ...rows].filter(Boolean);
+  if (!candidates.length) return null;
+
+  // Some endpoints don't guarantee newest-first ordering, and the backend's
+  // own latest_record has been observed to lag behind the actual newest row
+  // (e.g. it reflects the first entry ever saved instead of the most
+  // recent). Don't trust rows[0]/latest_record blindly — pick whichever
+  // candidate is actually newest by timestamp, falling back to id.
+  const sortedByRecency = [...candidates].sort((a, b) => {
+    const diff = getRecordTimestamp(b) - getRecordTimestamp(a);
+    if (diff !== 0) return diff;
+    return getRecordId(b) - getRecordId(a);
+  });
+
+  return sortedByRecency[0] || null;
 };
 
 const toInputDate = (value) => {
@@ -1320,7 +1395,9 @@ const DrawFrameWheelChange = forwardRef(function DrawFrameWheelChange(
   const selectedMixingRow = activeRows.find(
     (row) => row.key.toLowerCase().includes("mixing") || row.label.toLowerCase().includes("mixing")
   );
-  const selectedMixingExisting = String(values[selectedMixingRow?.key]?.existing || "").trim();
+  const selectedMixingExisting = String(
+    values[selectedMixingRow?.key]?.existing || values[selectedMixingRow?.key]?.proposed || ""
+  ).trim();
   const availableWheelChangeTypes = useMemo(
     () => WHEEL_CHANGE_TYPES_BY_LINE[lineType] || [],
     [lineType]
@@ -1417,7 +1494,11 @@ const DrawFrameWheelChange = forwardRef(function DrawFrameWheelChange(
 
   const loadLatestSaved = async (requestedWheelChangeType = wheelChangeType, mixingValue = "") => {
     const apiWheelChangeType = getApiWheelChangeType(requestedWheelChangeType);
-    const baseParams = { page: 1, limit: 1, wheelChangeType: apiWheelChangeType };
+    // limit must be large enough to actually receive every matching row —
+    // the backend doesn't sort by recency before truncating to the page
+    // size, so a limit of 1 can hand back the *oldest* entry instead of the
+    // latest, leaving nothing for the client-side recency sort to work with.
+    const baseParams = { page: 1, limit: 200, wheelChangeType: apiWheelChangeType };
     const trimmedMixing = String(mixingValue || "").trim();
     if (trimmedMixing) {
       // Fetch/pre-populate is keyed by Mixing/Process, matching Spinning and
@@ -1934,6 +2015,14 @@ const DrawFrameWheelChange = forwardRef(function DrawFrameWheelChange(
       payload.parameters.push(parameter);
     });
 
+    // Every sub-type stores its Mixing row under its own key (milling,
+    // lrsbMixing, d40Mixing, ...), but the backend's mixing lookup filter
+    // reads rows->'mixing' literally. Mirror the value under that canonical
+    // key too so the approved-entry lookup matches regardless of sub-type.
+    if (selectedMixingRow && payload.rows[selectedMixingRow.key]) {
+      payload.rows.mixing = payload.rows[selectedMixingRow.key];
+    }
+
     return payload;
   };
 
@@ -1978,6 +2067,10 @@ const DrawFrameWheelChange = forwardRef(function DrawFrameWheelChange(
     const isMixingRow = row.inputType === "select" && (row.key.toLowerCase().includes("mixing") || row.label.toLowerCase().includes("mixing"));
 
     if (isMixingRow) {
+      // The Mixing dropdown is the one driving control: selecting it looks
+      // up the latest approved entry for that mixing and fills in every
+      // other row's Existing baseline below. Only this row's Existing cell
+      // stays editable — every other row's Existing cell is read-only.
       return (
         <SearchableSelect
           className={className}
@@ -2003,10 +2096,17 @@ const DrawFrameWheelChange = forwardRef(function DrawFrameWheelChange(
       );
     }
 
+    const isReadOnlyExisting = column === "existing";
+
     if (row.inputType === "select") {
       const options = getSelectOptions(row.key, wheelChangeType);
       return (
-        <select className={className} value={value} onChange={handleValueChange(row.key, column)}>
+        <select
+          className={className}
+          value={value}
+          onChange={handleValueChange(row.key, column)}
+          disabled={isReadOnlyExisting}
+        >
           <option value="">Select</option>
           {options.map((option) => {
             const optionValue = typeof option === "string" ? option : option.value;
@@ -2028,6 +2128,7 @@ const DrawFrameWheelChange = forwardRef(function DrawFrameWheelChange(
           inputMode="text"
           className={className}
           value={value}
+          readOnly={isReadOnlyExisting}
           onChange={(event) => {
             const nextValue = sanitizeBlendPercentInput(event.target.value);
             setValues((current) => {
@@ -2054,7 +2155,7 @@ const DrawFrameWheelChange = forwardRef(function DrawFrameWheelChange(
         className={className}
         value={value}
         onChange={handleNumericValueChange(row.key, column)}
-        readOnly={row.darkInput}
+        readOnly={row.darkInput || isReadOnlyExisting}
       />
     );
   };

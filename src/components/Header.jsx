@@ -93,10 +93,16 @@ const managementHubLinks = [
     { href: "/submitted-notebooks", label: "Submitted Notebooks" },
     { href: "/submitted-notebook-threshold", label: "Acknowledgement Threshold" },
     { href: "/activity-log", label: "Activity Log" },
-    { href: "/wheel-change-approvals", label: "Spinning Wheel Change Approvals", wheelChangeApproval: true },
-    { href: "/drawframe-wheel-change-approvals", label: "Draw Frame Wheel Change Approvals", wheelChangeApproval: true },
-    { href: "/carding-change-control-approvals", label: "Carding Change Control Approvals", wheelChangeApproval: true },
-    { href: "/simplex-wheel-change-approvals", label: "Simplex Wheel Change Approvals", wheelChangeApproval: true },
+    {
+        label: "WC Approvals",
+        wheelChangeApproval: true,
+        children: [
+            { href: "/wheel-change-approvals", label: "Spinning" },
+            { href: "/drawframe-wheel-change-approvals", label: "Drawframe" },
+            { href: "/carding-change-control-approvals", label: "Carding" },
+            { href: "/simplex-wheel-change-approvals", label: "Simplex" },
+        ],
+    },
 ];
 const analyticsHubLinks = [
     { href: "/statistics-analysis", label: "Statistics Analytics" },
@@ -132,6 +138,7 @@ const Header = ({ navLinks = defaultNavLinks }) => {
     const [isReportsMenuOpen, setIsReportsMenuOpen] = useState(false);
     const [isAnalyticsHubOpen, setIsAnalyticsHubOpen] = useState(false);
     const [isTeamPerformanceOpen, setIsTeamPerformanceOpen] = useState(false);
+    const [isWheelChangeApprovalsOpen, setIsWheelChangeApprovalsOpen] = useState(false);
     const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
     const [notifications, setNotifications] = useState([]);
     const [notificationUnreadCount, setNotificationUnreadCount] = useState(0);
@@ -491,7 +498,7 @@ const Header = ({ navLinks = defaultNavLinks }) => {
     useEffect(() => {
         document.documentElement.style.setProperty(
             "--app-sidebar-width",
-            isSidebarCollapsed ? "76px" : "250px"
+            isSidebarCollapsed ? "76px" : "275px"
         );
 
         return () => document.documentElement.style.removeProperty("--app-sidebar-width");
@@ -798,15 +805,46 @@ const Header = ({ navLinks = defaultNavLinks }) => {
                                         <FiChevronDown className={`${styles["department-chevron"]} ${isManagementHubOpen ? styles["department-chevron-open"] : ""}`} />
                                     </button>
                                     <div className={`${styles["side-subnav"]} ${isManagementHubOpen ? styles["side-subnav-open"] : ""}`}>
-                                        {managementHubLinks.map((managementLink) => (
-                                            <Link
-                                                key={managementLink.href}
-                                                href={managementLink.href}
-                                                className={`${styles["side-subnav-link"]} ${isActiveLink(managementLink.href) ? styles["side-subnav-active"] : ""}`}
-                                            >
-                                                {managementLink.label}
-                                            </Link>
-                                        ))}
+                                        {visibleManagementHubLinks.map((managementLink) => {
+                                            if (managementLink.children) {
+                                                const isWheelChangeApprovalsActive = managementLink.children.some((child) => isActiveLink(child.href));
+
+                                                return (
+                                                    <div key={managementLink.label} className={styles["side-subnav-group"]}>
+                                                        <button
+                                                            type="button"
+                                                            className={`${styles["side-subnav-link"]} ${styles["side-subnav-button"]} ${isWheelChangeApprovalsActive ? styles["side-subnav-active"] : ""}`}
+                                                            aria-expanded={isWheelChangeApprovalsOpen}
+                                                            onClick={() => setIsWheelChangeApprovalsOpen((isOpen) => !isOpen)}
+                                                        >
+                                                            <span>{managementLink.label}</span>
+                                                            <FiChevronDown className={`${styles["side-subnav-chevron"]} ${isWheelChangeApprovalsOpen ? styles["department-chevron-open"] : ""}`} />
+                                                        </button>
+                                                        <div className={`${styles["side-nested-subnav"]} ${isWheelChangeApprovalsOpen ? styles["side-nested-subnav-open"] : ""}`}>
+                                                            {managementLink.children.map((child) => (
+                                                                <Link
+                                                                    key={child.href}
+                                                                    href={child.href}
+                                                                    className={`${styles["side-subnav-link"]} ${styles["side-nested-subnav-link"]} ${isActiveLink(child.href) ? styles["side-subnav-active"] : ""}`}
+                                                                >
+                                                                    {child.label}
+                                                                </Link>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            }
+
+                                            return (
+                                                <Link
+                                                    key={managementLink.href}
+                                                    href={managementLink.href}
+                                                    className={`${styles["side-subnav-link"]} ${isActiveLink(managementLink.href) ? styles["side-subnav-active"] : ""}`}
+                                                >
+                                                    {managementLink.label}
+                                                </Link>
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             );
