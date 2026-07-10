@@ -2,7 +2,12 @@ import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState }
 import { useSelector } from "react-redux";
 import SearchableSelect from "@/components/SearchableSelect";
 import InputScreenUploadButton from "@/components/InputScreenUploadButton";
-import { fetchSpinningMachineNumberOptions, fetchSpinningWheelChangeDropdown, fetchSpinningWheelChangeLatestRecord } from "@/apis/spinning";
+import {
+  fetchSpinningCountChangeRfNos,
+  fetchSpinningMachineNumberOptions,
+  fetchSpinningWheelChangeDropdown,
+  fetchSpinningWheelChangeLatestRecord,
+} from "@/apis/spinning";
 import { sanitizeIntegerInput, sanitizeNumericInput } from "@/utils/inputValidation";
 import styles from "@/styles/spinningWheelChange.module.css";
 
@@ -725,10 +730,14 @@ const buildWheelChangeValuesFromRecord = (record = {}, wheelChangeType = "", mac
   const rows = typeConfig?.rows || {};
   const values = ALL_WHEEL_CHANGE_PARAMETER_ROWS.reduce((values, row) => {
     const fieldBase = rows[row.key];
+    // The last approved record's own "_proposed" values are what's actually
+    // in effect now — its "_existing" is the pre-approval baseline from
+    // before that change, so a new entry must carry the proposed value
+    // forward as its Existing, not the older one.
     const existingValue = fieldBase
       ? normalizeWheelChangeRecordValue(
-          record?.[`${fieldBase}_existing`] ??
-            record?.[`${fieldBase}_proposed`] ??
+          record?.[`${fieldBase}_proposed`] ??
+            record?.[`${fieldBase}_existing`] ??
             record?.[fieldBase]
         )
       : "";
@@ -940,6 +949,16 @@ const WheelChange = forwardRef(function WheelChange(
   // shown (and will be silently overwritten on the next submit).
   const [unapprovedEntry, setUnapprovedEntry] = useState(null);
   const lastLoadedVarietyRef = useRef("");
+  const lastLoadedMachineRef = useRef("");
+  // selectedVariety is a derived string, so re-picking the *same* mixing (or
+  // it already being selected on revisit) never changes the value and the
+  // lookup effect below never re-fires - it just keeps showing whatever was
+  // fetched the first time that mixing was ever selected in this session,
+  // even if a newer entry for it was saved afterward. Bumping this on every
+  // focus of the Mixing field forces a fresh fetch of the current latest
+  // entry regardless of whether the text value actually changed.
+  const [varietyRefreshTick, setVarietyRefreshTick] = useState(0);
+  const refreshSelectedVariety = () => setVarietyRefreshTick((tick) => tick + 1);
   const activeRows = WHEEL_CHANGE_PARAMETER_ROWS_BY_TYPE[wheelChangeType] || TYPE_1_PARAMETER_ROWS;
   const referenceLabel = "R/F No.";
   const machineLookupParams = useMemo(
@@ -1074,12 +1093,16 @@ const WheelChange = forwardRef(function WheelChange(
     let isMounted = true;
 
     Promise.allSettled([
+      // Same live R/F No. source as COTS Checking's Machine No. dropdown
+      // (fetchSpinningCountChangeRfNos), so both screens show identical,
+      // up-to-date machine numbers instead of Wheel Change's own stale list.
+      fetchSpinningCountChangeRfNos(),
       fetchSpinningMachineNumberOptions({
         screen: "rsm-lycra-online",
         ...machineLookupParams,
       }),
       fetchSpinningWheelChangeDropdown(wheelChangeType, machineLookupParams),
-    ]).then(([machineResult, dropdownResult]) => {
+    ]).then(([cotsRfResult, machineResult, dropdownResult]) => {
       if (!isMounted) return;
 
       const machineOptionSources = [];
@@ -1087,6 +1110,10 @@ const WheelChange = forwardRef(function WheelChange(
       machineOptionSources.push(
         STATIC_RF_NO_OPTIONS.map((value) => ({ value, label: value }))
       );
+
+      if (cotsRfResult.status === "fulfilled") {
+        machineOptionSources.push(getWheelChangeMachineOptions(cotsRfResult.value));
+      }
 
       if (machineResult.status === "fulfilled") {
         machineOptionSources.push(getWheelChangeMachineOptions(machineResult.value));
@@ -1124,7 +1151,10 @@ const WheelChange = forwardRef(function WheelChange(
       return;
     }
 
-    const selectionKey = `${wheelChangeType}::${selectedVariety}`;
+    // varietyRefreshTick is folded into the cache key so focusing the Mixing
+    // field (see refreshSelectedVariety) always forces a fresh fetch even
+    // when the mixing text itself hasn't changed.
+    const selectionKey = `${wheelChangeType}::${selectedVariety}::${varietyRefreshTick}`;
     if (lastLoadedVarietyRef.current === selectionKey) return;
 
     let cancelled = false;
@@ -1206,7 +1236,79 @@ const WheelChange = forwardRef(function WheelChange(
     return () => {
       cancelled = true;
     };
-  }, [selectedVariety, wheelChangeType]);
+  }, [selectedVariety, wheelChangeType, varietyRefreshTick]);
+
+  // Type 4 has no "Count From"/variety row — it's keyed by machine number
+  // (fm_no) instead, matching the backend's fetchLatestWheelChangeByMachine
+  // carry-forward lookup.
+  useEffect(() => {
+    if (wheelChangeType !== "Type 4" || !machineNumber.trim()) {
+      if (wheelChangeType === "Type 4") lastLoadedMachineRef.current = "";
+      return;
+    }
+
+    const trimmedMachine = machineNumber.trim();
+    const selectionKey = `Type 4::${trimmedMachine}`;
+    if (lastLoadedMachineRef.current === selectionKey) return;
+
+    let cancelled = false;
+
+    Promise.allSettled([
+      fetchSpinningWheelChangeLatestRecord("Type 4", {
+        fm_no: trimmedMachine,
+        machine_no: trimmedMachine,
+        approval_status: "approved",
+        status: "approved",
+      }),
+      fetchSpinningWheelChangeLatestRecord("Type 4", {
+        fm_no: trimmedMachine,
+        machine_no: trimmedMachine,
+        approval_status: "pending",
+        status: "pending",
+      }),
+      fetchSpinningWheelChangeLatestRecord("Type 4", {
+        fm_no: trimmedMachine,
+        machine_no: trimmedMachine,
+        approval_status: "rejected",
+        status: "rejected",
+      }),
+    ]).then(([approvedResult, pendingResult, rejectedResult]) => {
+      if (cancelled) return;
+
+      const approvedRecord = approvedResult.status === "fulfilled" ? approvedResult.value : null;
+      const pendingRecord = pendingResult.status === "fulfilled" ? pendingResult.value : null;
+      const rejectedRecord = rejectedResult.status === "fulfilled" ? rejectedResult.value : null;
+      const unapprovedRecord = pendingRecord || rejectedRecord;
+      if (!approvedRecord && !unapprovedRecord) return;
+
+      lastLoadedMachineRef.current = selectionKey;
+      setUnapprovedEntry(
+        unapprovedRecord
+          ? {
+              status: pendingRecord ? "pending" : "rejected",
+              remarks: getTextValue(
+                unapprovedRecord?.review_remarks ?? unapprovedRecord?.reviewRemarks ?? ""
+              ),
+              reviewedBy: getTextValue(
+                unapprovedRecord?.reviewed_by ?? unapprovedRecord?.reviewedBy ?? ""
+              ),
+              reviewedAt: unapprovedRecord?.reviewed_at ?? unapprovedRecord?.reviewedAt ?? "",
+            }
+          : null
+      );
+      setValues(() => {
+        let nextValues = buildWheelChangeValuesFromRecord(approvedRecord || {}, "Type 4", trimmedMachine);
+        if (unapprovedRecord) {
+          nextValues = buildWheelChangeProposedValuesFromRecord(unapprovedRecord, "Type 4", trimmedMachine, nextValues);
+        }
+        return nextValues;
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [machineNumber, wheelChangeType]);
 
   const clear = () => {
     setWheelChangeType("");
@@ -1216,6 +1318,8 @@ const WheelChange = forwardRef(function WheelChange(
     setValues(createWheelChangeValues());
     setErrors({});
     setUnapprovedEntry(null);
+    lastLoadedVarietyRef.current = "";
+    lastLoadedMachineRef.current = "";
     if (typeof window !== "undefined") {
       window.localStorage.removeItem(WHEEL_CHANGE_DRAFT_STORAGE_KEY);
     }
@@ -1393,6 +1497,11 @@ const WheelChange = forwardRef(function WheelChange(
     const shouldUseSelect =
       row.inputType === "select" &&
       (wheelChangeType !== "Type 1" || !["tdv", "tm", "tciTm"].includes(row.key) || Boolean(machineNumber));
+    // Count From (Mixing) is the one driving control: picking it looks up the
+    // latest approved entry and fills in every other row's Existing baseline.
+    // Only its Existing cell stays editable — every other row's Existing cell
+    // is read-only, matching Carding/Draw Frame.
+    const isReadOnlyExisting = column === "existing" && row.key !== "countForm";
 
     if (shouldUseSelect) {
       const optionKeys = WHEEL_CHANGE_DROPDOWN_KEYS[row.key] || [];
@@ -1419,12 +1528,13 @@ const WheelChange = forwardRef(function WheelChange(
           placeholder="Select"
           ariaLabel={row.label}
           dropUp={row.key === "totalDraft"}
-          disabled={row.computed === true}
+          disabled={row.computed === true || isReadOnlyExisting}
+          onFocus={row.key === "countForm" ? refreshSelectedVariety : undefined}
         />
       );
     }
 
-    const isReadOnly = row.computed === true;
+    const isReadOnly = row.computed === true || isReadOnlyExisting;
     const isNumericInput = isNumericParameterRow(row);
 
     return (

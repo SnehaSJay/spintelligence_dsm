@@ -113,7 +113,54 @@ const mapApiEntryToVersion = (entry) => {
   };
 };
 
-const extractLatestNotebookEntry = (payload) => {
+// "Latest" means most recently *entered* (submitted), not most recently
+// *touched* — an older entry's updated_at can be bumped later than a newer
+// entry's created_at simply because an L2 reviewer approved/rejected it
+// after the fact, which would otherwise outrank the actual newest row.
+const getRecordTimestamp = (record) => {
+  const raw =
+    record?.created_at ??
+    record?.createdAt ??
+    record?.created_time ??
+    record?.createdTime ??
+    record?.created_on ??
+    record?.createdOn ??
+    record?.entry_date ??
+    record?.date ??
+    record?.updated_at ??
+    record?.updatedAt ??
+    Object.entries(record || {}).find(([key, value]) => {
+      if (!value) return false;
+      const normalizedKey = String(key || "").toLowerCase();
+      if (!/(created|updated|time|date)/.test(normalizedKey)) return false;
+      return !Number.isNaN(new Date(value).getTime());
+    })?.[1] ??
+    null;
+  const parsed = raw ? new Date(raw).getTime() : NaN;
+  return Number.isFinite(parsed) ? parsed : -Infinity;
+};
+
+// The backend's id column for these tables isn't consistently named "id" —
+// fall back to any *_id-shaped numeric key so the recency tiebreaker still
+// works when the field is e.g. entry_id instead.
+const getRecordId = (record) => {
+  const direct = Number(record?.id);
+  if (Number.isFinite(direct) && direct !== 0) return direct;
+  const match = Object.entries(record || {}).find(([key, value]) => {
+    if (!/(^|_)id$/i.test(key)) return false;
+    const numeric = Number(value);
+    return Number.isFinite(numeric) && numeric !== 0;
+  });
+  return match ? Number(match[1]) : 0;
+};
+
+// Extracts every candidate record from a wheel-change list/detail payload,
+// without picking a "winner" yet — the caller may need to filter by mixing
+// first (the backend has been observed to ignore the mixing/variety query
+// param entirely and return entries for every machine/mixing).
+const extractNotebookEntryCandidates = (payload) => {
+  const latestRecord = payload?.latest ?? payload?.latest_record ?? payload?.latestRecord ?? null;
+
   const rows = Array.isArray(payload?.data)
     ? payload.data
     : Array.isArray(payload?.rows)
@@ -121,8 +168,37 @@ const extractLatestNotebookEntry = (payload) => {
       : Array.isArray(payload)
         ? payload
         : [];
-  return rows[0] || payload?.data?.[0] || payload?.latest || null;
+
+  // Filtered wheel-change queries (e.g. approval_status=approved) can come
+  // back as a single flat record object with no data/rows/latest wrapper at
+  // all — the payload itself *is* the record.
+  const isWrapperPayload =
+    payload && typeof payload === "object" && !Array.isArray(payload) &&
+    (Array.isArray(payload.data) || Array.isArray(payload.rows) || "latest" in payload || "latest_record" in payload || "latestRecord" in payload);
+  const singleRecord =
+    payload && typeof payload === "object" && !Array.isArray(payload) && !isWrapperPayload && Object.keys(payload).length
+      ? payload
+      : null;
+
+  return [latestRecord, singleRecord, ...rows].filter(Boolean);
 };
+
+// Some endpoints don't guarantee newest-first ordering, and the backend's
+// own latest record has been observed to lag behind the actual newest row
+// (e.g. it reflects the first entry ever saved instead of the most
+// recent). Don't trust rows[0]/latest blindly — pick whichever candidate is
+// actually newest by timestamp, falling back to id.
+const pickLatestEntry = (candidates) => {
+  if (!candidates.length) return null;
+  const sortedByRecency = [...candidates].sort((a, b) => {
+    const diff = getRecordTimestamp(b) - getRecordTimestamp(a);
+    if (diff !== 0) return diff;
+    return getRecordId(b) - getRecordId(a);
+  });
+  return sortedByRecency[0] || null;
+};
+
+const extractLatestNotebookEntry = (payload) => pickLatestEntry(extractNotebookEntryCandidates(payload));
 
 const parseNumericValue = (value) => {
   const parsed = Number.parseFloat(String(value ?? "").trim());
@@ -272,6 +348,15 @@ const WheelChange = forwardRef(function WheelChange(
   const [unapprovedEntry, setUnapprovedEntry] = useState(null);
   const skipAutoLoadRef = useRef(false);
   const lastLoadedMixingRef = useRef("");
+  // selectedMixing is a derived string, so re-picking the *same* mixing (or
+  // it already being selected) never changes the value and the lookup
+  // effect below never re-fires — it just keeps showing whatever was
+  // fetched the first time that mixing was ever selected, even if a newer
+  // entry was saved for it afterward. Bumping this on every focus of the
+  // Mixing dropdown forces a fresh fetch of the current latest entry
+  // regardless of whether the mixing text itself changed, matching Spinning.
+  const [mixingRefreshTick, setMixingRefreshTick] = useState(0);
+  const refreshSelectedMixing = () => setMixingRefreshTick((tick) => tick + 1);
 
   // Fetch/pre-populate is keyed by the Mixing / Process row (matching
   // Spinning and Carding). SMX No. is still sent on submit below since the
@@ -353,6 +438,28 @@ const WheelChange = forwardRef(function WheelChange(
     });
   };
 
+  // The backend has been observed to ignore the mixing/variety query param
+  // entirely and return entries for every machine/mixing in the table, so
+  // "latest" must be filtered to only entries whose own mixing value
+  // (proposed, i.e. the one now in effect, else existing) matches what was
+  // actually selected — otherwise the most recent entry for a *different*
+  // mixing wins by timestamp alone.
+  const getEntryMixingValue = (entry) => {
+    const savedRows = extractRowsBlob(entry);
+    const list = Array.isArray(savedRows) ? savedRows : Object.values(savedRows || {});
+    const mixingRow = list.find(
+      (item) => String(item?.key ?? "").trim() === "mixing" || String(item?.label ?? "").trim().toLowerCase().includes("mixing")
+    );
+    return String(mixingRow?.proposed || mixingRow?.existing || "").trim().toLowerCase();
+  };
+
+  const extractLatestNotebookEntryForMixing = (payload, mixing) => {
+    const candidates = extractNotebookEntryCandidates(payload).filter(
+      (candidate) => getEntryMixingValue(candidate) === mixing.trim().toLowerCase()
+    );
+    return pickLatestEntry(candidates);
+  };
+
   // Fetches approved/pending/rejected for the selected Mixing/Process in
   // parallel — Existing always comes from the approved record only;
   // Proposed is prefilled from whichever unapproved (pending/rejected)
@@ -367,7 +474,12 @@ const WheelChange = forwardRef(function WheelChange(
       return null;
     }
 
-    const baseParams = { page: 1, limit: 1, variety: mixing, variety_name: mixing, mixing };
+    // limit must be large enough to actually receive every matching row —
+    // the backend doesn't sort by recency before truncating to the page
+    // size, so a limit of 1 can hand back the *oldest* entry instead of the
+    // latest, leaving nothing for the client-side recency sort/filter above
+    // to work with.
+    const baseParams = { page: 1, limit: 200, variety: mixing, variety_name: mixing, mixing };
 
     const [approvedResult, pendingResult, rejectedResult] = await Promise.allSettled([
       fetchSimplexWheelChangeEntries({ ...baseParams, approval_status: "approved" }),
@@ -375,9 +487,9 @@ const WheelChange = forwardRef(function WheelChange(
       fetchSimplexWheelChangeEntries({ ...baseParams, approval_status: "rejected" }),
     ]);
 
-    const approved = approvedResult.status === "fulfilled" ? extractLatestNotebookEntry(approvedResult.value) : null;
-    const pending = pendingResult.status === "fulfilled" ? extractLatestNotebookEntry(pendingResult.value) : null;
-    const rejected = rejectedResult.status === "fulfilled" ? extractLatestNotebookEntry(rejectedResult.value) : null;
+    const approved = approvedResult.status === "fulfilled" ? extractLatestNotebookEntryForMixing(approvedResult.value, mixing) : null;
+    const pending = pendingResult.status === "fulfilled" ? extractLatestNotebookEntryForMixing(pendingResult.value, mixing) : null;
+    const rejected = rejectedResult.status === "fulfilled" ? extractLatestNotebookEntryForMixing(rejectedResult.value, mixing) : null;
     const unapproved = pending || rejected;
 
     setUnapprovedEntry(
@@ -423,7 +535,10 @@ const WheelChange = forwardRef(function WheelChange(
     return referenceEntry;
   };
 
-  // Runs whenever the selected mixing changes.
+  // Runs whenever the selected mixing changes, or the dropdown is focused
+  // again (mixingRefreshTick) — mixingRefreshTick is folded into the cache
+  // key so reopening/reselecting the same mixing always forces a fresh
+  // fetch even when the mixing text itself hasn't changed.
   useEffect(() => {
     if (skipAutoLoadRef.current) {
       skipAutoLoadRef.current = false;
@@ -436,24 +551,27 @@ const WheelChange = forwardRef(function WheelChange(
       return undefined;
     }
 
-    if (lastLoadedMixingRef.current === selectedMixing) return undefined;
+    const selectionKey = `${selectedMixing}::${mixingRefreshTick}`;
+    if (lastLoadedMixingRef.current === selectionKey) return undefined;
 
     let cancelled = false;
-    loadLatestForMixing(selectedMixing).catch(() => {
+    loadLatestForMixing(selectedMixing).then(() => {
+      if (!cancelled) lastLoadedMixingRef.current = selectionKey;
+    }).catch(() => {
       // Keep the current rows when history isn't available for this mixing.
     });
 
     return () => {
       cancelled = true;
     };
-  }, [selectedMixing]);
+  }, [selectedMixing, mixingRefreshTick]);
 
   const clear = () => {
     setForm(createInitialForm());
     setRows(createEmptyRows());
     setSubmitError("");
     setUnapprovedEntry(null);
-    lastLoadedMachineRef.current = "";
+    lastLoadedMixingRef.current = "";
   };
 
   const validate = () => Boolean(selectedTypeName && form.smxNo && form.smxNoProposed);
@@ -523,8 +641,8 @@ const WheelChange = forwardRef(function WheelChange(
       await submitSimplexWheelChangeEntry(payload);
       // Re-fetch so the just-submitted entry shows up as "Awaiting L2" (or
       // supersedes whatever was previously pending/rejected for this machine).
-      lastLoadedMachineRef.current = "";
-      await loadLatestForMachine(form.smxNo);
+      lastLoadedMixingRef.current = "";
+      await loadLatestForMixing(selectedMixing);
       loadVersions();
       return true;
     } catch (error) {
@@ -584,38 +702,42 @@ const WheelChange = forwardRef(function WheelChange(
   };
 
   useEffect(() => {
-    const getValue = (key) => rows.find((item) => item.key === key)?.proposed || rows.find((item) => item.key === key)?.existing || "";
+    // Existing and Proposed are independent columns — each computed field
+    // must be derived from that same column's own inputs only, otherwise
+    // editing Proposed would bleed into the Existing column's value (and
+    // vice versa) instead of the two staying separate.
+    const getColumnValue = (key, column) => rows.find((item) => item.key === key)?.[column] || "";
 
-    const tpiValue = computeSimplexLrsbTpi({
-      tw: getValue("md2"),
-      tcwh: getValue("tw1"),
-      tcwg: getValue("tw0"),
-      frontRollerDia: getValue("md1"),
-    });
-    const tmValue = computeSimplexLrsbTm({ tpi: tpiValue, delHank: getValue("delHank") });
-    const breakDraftValueResult = computeSimplexLrsbBreakDraftValue({ breakDraftCp: getValue("breakDraft") });
-    const creelDraftValue = computeSimplexLrsbCreelDraft({ creelDraftChange: getValue("creelDraftChange") });
-    const totalDraftValue = computeSimplexLrsbTotalDraft({ breakDraftCp: getValue("breakDraft"), cp: getValue("cp") });
+    const computeForColumn = (column) => {
+      const getValue = (key) => getColumnValue(key, column);
+      const tpiValue = computeSimplexLrsbTpi({
+        tw: getValue("md2"),
+        tcwh: getValue("tw1"),
+        tcwg: getValue("tw0"),
+        frontRollerDia: getValue("md1"),
+      });
+      return {
+        tf: tpiValue,
+        tm: computeSimplexLrsbTm({ tpi: tpiValue, delHank: getValue("delHank") }),
+        breakDraftValue: computeSimplexLrsbBreakDraftValue({ breakDraftCp: getValue("breakDraft") }),
+        creelDraft: computeSimplexLrsbCreelDraft({ creelDraftChange: getValue("creelDraftChange") }),
+        totalDraft: computeSimplexLrsbTotalDraft({ breakDraftCp: getValue("breakDraft"), cp: getValue("cp") }),
+      };
+    };
+
+    const existingByKey = computeForColumn("existing");
+    const proposedByKey = computeForColumn("proposed");
 
     setRows((current) => {
-      const computedByKey = {
-        tf: tpiValue,
-        tm: tmValue,
-        breakDraftValue: breakDraftValueResult,
-        creelDraft: creelDraftValue,
-        totalDraft: totalDraftValue,
-      };
-
       const isUnchanged = current.every((item) => {
-        if (!(item.key in computedByKey)) return true;
-        const computed = computedByKey[item.key];
-        return (item.existing || "") === computed && (item.proposed || "") === computed;
+        if (!(item.key in existingByKey)) return true;
+        return (item.existing || "") === existingByKey[item.key] && (item.proposed || "") === proposedByKey[item.key];
       });
       if (isUnchanged) return current;
 
       return current.map((item) =>
-        item.key in computedByKey
-          ? { ...item, existing: computedByKey[item.key], proposed: computedByKey[item.key] }
+        item.key in existingByKey
+          ? { ...item, existing: existingByKey[item.key], proposed: proposedByKey[item.key] }
           : item
       );
     });
@@ -644,6 +766,7 @@ const WheelChange = forwardRef(function WheelChange(
             placeholder="Select"
             ariaLabel={row.label}
             disabled={row.readOnly === true}
+            onFocus={refreshSelectedMixing}
           />
         );
       }
@@ -652,7 +775,7 @@ const WheelChange = forwardRef(function WheelChange(
         <select
           className={className}
           value={value}
-          disabled={row.readOnly === true}
+          disabled={row.readOnly === true || valueKey === "existing"}
           onChange={(e) =>
             setRows((current) =>
               current.map((item) => (item.key === row.key ? { ...item, [valueKey]: e.target.value } : item))
@@ -676,7 +799,7 @@ const WheelChange = forwardRef(function WheelChange(
       <input
         className={className}
         value={value}
-        readOnly={row.readOnly === true}
+        readOnly={row.readOnly === true || valueKey === "existing"}
         onChange={(e) =>
           setRows((current) =>
             current.map((item) => (item.key === row.key ? { ...item, [valueKey]: e.target.value } : item))

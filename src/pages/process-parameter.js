@@ -37,11 +37,6 @@ import {
   fetchAutoconerQ3Entries,
 } from "@/apis/autoconer";
 import SearchableSelect from "@/components/SearchableSelect";
-import {
-  buildProcessParameterOptions,
-  PROCESS_PARAMETER_CONSIGNEE_OPTIONS,
-  PROCESS_PARAMETER_COUNT_OPTIONS,
-} from "@/data/processParameterMasterOptions";
 import styles from "@/styles/processParameterPage.module.css";
 
 const updateExistingColumns = [
@@ -333,6 +328,10 @@ export default function ProcessParameterPage() {
   const [consigneeNameFilter, setConsigneeNameFilter] = useState("");
   const [dateFromFilter, setDateFromFilter] = useState("");
   const [dateToFilter, setDateToFilter] = useState("");
+  const [consigneeFilter, setConsigneeFilter] = useState("");
+  const [countFilter, setCountFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const { countOptions: masterCountOptions } = useMixingCountOptions();
   const dateFromInputRef = useRef(null);
   const dateToInputRef = useRef(null);
@@ -1010,7 +1009,7 @@ export default function ProcessParameterPage() {
                     value={dateFrom}
                     onChange={(event) => setDateFrom(event.target.value)}
                   />
-                </div>
+                </label>
 
                 <div className={styles.selectFilterWrap}>
                   <select

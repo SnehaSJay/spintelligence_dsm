@@ -13,6 +13,7 @@ function SearchableSelect({
   dropUp = false,
   includeEmptyOption = false,
   emptyOptionLabel = "Select",
+  onFocus,
 }) {
   const containerRef = useRef(null);
   const inputRef = useRef(null);
@@ -121,6 +122,7 @@ function SearchableSelect({
         onFocus={() => {
           setSearchTerm(selectedOption?.label || value);
           setIsOpen(true);
+          onFocus?.();
         }}
         onClick={() => {
           if (disabled) return;
