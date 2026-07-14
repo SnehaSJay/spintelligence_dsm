@@ -7,6 +7,7 @@ import {
   fetchRowsForDashboardWidget,
   filterRowsByDateRange,
   getDashboardFieldValue,
+  getDashboardRowDate,
 } from "@/utils/dashboardWidgets";
 import { departmentDirectory } from "@/views/departments/data";
 import { getThresholdFieldsForScreen } from "@/views/thresholds/fieldCatalog";
@@ -49,7 +50,217 @@ const toField = (fieldName) => {
   return label ? { key: label, label } : null;
 };
 
+const withDropTestTuftCounts = (rows) => {
+  const list = Array.isArray(rows) ? rows : [];
+  const countByDropId = new Map();
+  list.forEach((row) => {
+    const dropId = row?.drop_id;
+    if (!dropId) return;
+    countByDropId.set(dropId, (countByDropId.get(dropId) || 0) + 1);
+  });
+  if (!countByDropId.size) return list;
+  return list.map((row) =>
+    row?.drop_id ? { ...row, num_tufts: countByDropId.get(row.drop_id) } : row
+  );
+};
+
+const THICK_PLACE_CV_SCREEN_NAME = "Thick place & CV";
+
+const pivotThickPlaceCvRows = (rows) => {
+  const list = Array.isArray(rows) ? rows : [];
+  const groups = new Map();
+  const machineOrder = [];
+
+  list.forEach((row) => {
+    if (!row || typeof row !== "object") return;
+    const groupKey = row.header_id ?? row.entry_id ?? row.id;
+    const machine = row.machine ?? row.machine_name ?? row.machineName;
+    if (!groups.has(groupKey)) {
+      groups.set(groupKey, { ...row });
+    }
+    if (!machine) return;
+    if (!machineOrder.includes(machine)) machineOrder.push(machine);
+
+    const merged = groups.get(groupKey);
+    merged[`${machine}::cv_value`] = row.cv_value ?? row.cv1;
+    merged[`${machine}::cv_5m_value`] = row.cv_5m_value ?? row.cv_5m ?? row.cv2;
+  });
+
+  machineOrder.sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true }));
+
+  const pivotedRows = Array.from(groups.values());
+  const pivotedFields = machineOrder.flatMap((machine) => [
+    { key: `${machine}::cv_value`, label: `${machine} - Card Thick Place Value` },
+    { key: `${machine}::cv_5m_value`, label: `${machine} - 5m CV` },
+  ]);
+
+  return { pivotedRows, pivotedFields };
+};
+
+const fieldsFromPivotedRows = (rows) => {
+  const machineOrder = [];
+  (Array.isArray(rows) ? rows : []).forEach((row) => {
+    Object.keys(row || {}).forEach((key) => {
+      if (!key.endsWith("::cv_value")) return;
+      const machine = key.slice(0, -"::cv_value".length);
+      if (!machineOrder.includes(machine)) machineOrder.push(machine);
+    });
+  });
+  machineOrder.sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true }));
+  return machineOrder.flatMap((machine) => [
+    { key: `${machine}::cv_value`, label: `${machine} - Card Thick Place Value` },
+    { key: `${machine}::cv_5m_value`, label: `${machine} - 5m CV` },
+  ]);
+};
+
+const BETWEEN_WITHIN_CARD_SCREEN_NAME = "Between & Within Card Data Entry";
+
+const BETWEEN_WITHIN_CARD_FIELDS = [
+  { key: "id", label: "Test ID" },
+  { key: "mc_name", label: "MC Name" },
+  { key: "inspection_type", label: "Inspection Type" },
+  { key: "num_entries", label: "Number of Entries (N)" },
+  { key: "sw_avg", label: "Sample Weight Calculations - Avg" },
+  { key: "sw_max", label: "Sample Weight Calculations - Max" },
+  { key: "sw_min", label: "Sample Weight Calculations - Min" },
+  { key: "sw_range", label: "Sample Weight Calculations - Range" },
+  { key: "sw_sd", label: "Sample Weight Calculations - SD" },
+  { key: "sw_cv", label: "Sample Weight Calculations - CV" },
+  { key: "h_avg", label: "Hank Calculations - Avg" },
+  { key: "h_max", label: "Hank Calculations - Max" },
+  { key: "h_min", label: "Hank Calculations - Min" },
+  { key: "h_range", label: "Hank Calculations - Range" },
+  { key: "h_sd", label: "Hank Calculations - SD" },
+  { key: "h_cv", label: "Hank Calculations - CV" },
+];
+
+const getFieldsForBetweenWithinCard = () => uniqueReportFields(BETWEEN_WITHIN_CARD_FIELDS);
+
 const REPORT_FIELD_ALIASES = {
+  "Created At": ["createdAt", "created_on", "createdOn", "created_date", "createdDate", "inserted_at", "insertedAt", "created"],
+  "Entry ID": [
+    "entryId",
+    "entry_no",
+    "entryNo",
+    "entry_code",
+    "entryCode",
+    "record_id",
+    "recordId",
+    "reference_id",
+    "referenceId",
+    "afis_id",
+    "afisId",
+    "fibre_id",
+    "fibreId",
+    "moisture_id",
+    "moistureId",
+  ],
+  "Line No": ["line_no", "lineNo"],
+  "Checked By": ["checked_by", "checkedBy"],
+  "Number of Rows (N)": ["entries", "num_rows", "numRows"],
+  "Run Time (Seconds)": ["value_a"],
+  "Idle Time (Seconds)": ["value_b"],
+  "Sub Total Time": ["value_c"],
+  "Sync Percentage (%)": ["sync_percentage", "syncPercentage"],
+  "Grand Total Time (HH:MM:SS)": ["total_time", "totalTime"],
+  "Carding Production (KGs)": ["carding_production_kg", "cardingProductionKg", "cardingProduction", "carding_production"],
+  "Cylinder Speed": ["cylinder_speed", "cylinderSpeed"],
+  "Lickerin Speed": ["lickerin_speed", "lickerinSpeed"],
+  "Flat Speed": ["flat_speed", "flatSpeed"],
+  "Doffer Speed": ["doffer_speed", "dofferSpeed"],
+  "Delivery Speed": ["delivery_speed", "deliverySpeed"],
+  "Wing Setting": ["wing_setting_1", "wingSetting"],
+  "Wing Settling 1": ["wing_setting_1", "wingSettling1"],
+  "Wing Settling 2": ["wing_setting_2", "wingSettling2"],
+  "1st Lickerin Speed": ["lickerin_speed_1", "firstLickerinSpeed"],
+  "2nd Lickerin Speed": ["lickerin_speed_2", "secondLickerinSpeed"],
+  "3rd Lickerin Speed": ["lickerin_speed_3", "thirdLickerinSpeed"],
+  "MC No": ["mc_no", "mcNo"],
+  "Draft": ["draft_speed", "draftSpeed"],
+  "Tension Draft": ["tension_draft", "tensionDraft"],
+  "Delivery Hank": ["delivery_hank", "deliveryHank"],
+  "Feed Roll to Lickerin": ["feed_roll_to_lickerin", "feedRollToLickerin"],
+  "Lickerin to Cylinder": ["lickerin_to_cylinder", "lickerinToCylinder"],
+  "Cylinder to Flats": ["cylinder_to_flats", "cylinderToFlats"],
+  "Cylinder to Doffer": ["cylinder_to_doffer", "cylinderToDoffer"],
+  "SFL": ["sfl"],
+  "SFD": ["sfd"],
+  "Lickerin": ["lickerin"],
+  "Cylinder": ["cylinder"],
+  "Doffer": ["doffer"],
+  "Flats": ["flats"],
+  "Card Thick Place Value": ["cv_value", "cv1"],
+  "5m CV": ["cv_5m_value", "cv_5m", "cv2"],
+  "Cylinder Wire Specification - Specs": ["cylinder_specs", "cylinderSpecs"],
+  "Cylinder Wire Specification - Tonnage in Kgs (1)": ["cylinder_tonnage_1", "cylinderTonnage1"],
+  "Cylinder Wire Specification - Tonnage in Kgs (2)": ["cylinder_tonnage_2", "cylinderTonnage2"],
+  "Doffer Wire Specification - Specs": ["doffer_specs", "dofferSpecs"],
+  "Doffer Wire Specification - Tonnage in Kgs (1)": ["doffer_tonnage_1", "dofferTonnage1"],
+  "Doffer Wire Specification - Tonnage in Kgs (2)": ["doffer_tonnage_2", "dofferTonnage2"],
+  "Flat Wire Specification - Specs": ["flat_specs", "flatSpecs"],
+  "Flat Wire Specification - Tonnage in Kgs (1)": ["flat_tonnage_1", "flatTonnage1"],
+  "Flat Wire Specification - Tonnage in Kgs (2)": ["flat_tonnage_2", "flatTonnage2"],
+  "Lickerin Wire Specification - Specs": ["lickerin_specs", "lickerinSpecs"],
+  "Lickerin Wire Specification - Tonnage in Kgs (1)": ["lickerin_tonnage_1", "lickerinTonnage1"],
+  "Lickerin Wire Specification - Tonnage in Kgs (2)": ["lickerin_tonnage_2", "lickerinTonnage2"],
+  "Silver Hank": ["silver_hank", "silverHank"],
+  "Delivery Mtr / Min": ["delivery_mtr_min", "deliveryMtrMin"],
+  "Fibre Nep / Gms card mat": ["fibre_nep_gms_card_mat", "fibreNepGmsCardMat"],
+  "Fibre Nep / Gms in Silver": ["fibre_nep_gms_silver", "fibreNepGmsSilver"],
+  "Carding NRE%": ["carding_nre_percent", "cardingNrePercent"],
+  "1mCV": ["cvm_1m", "im_cvm"],
+  "3mCV": ["cvm_3m", "m3_cvm"],
+  "Department": ["department"],
+  "Approval Status": ["approval_status"],
+  "Operator": ["operator"],
+  "Entry Date": ["entry_date"],
+  "CDO No": ["cdo_no"],
+  "CDG No Proposed": ["cdg_no_proposed"],
+  "Mixing - Existing": ["mixing_existing"],
+  "Mixing - Proposed": ["mixing_proposed"],
+  "Blend % - Existing": ["blend_percent_existing"],
+  "Blend % - Proposed": ["blend_percent_proposed"],
+  "Delivery Hank - Existing": ["del_hank_existing"],
+  "Delivery Hank - Proposed": ["del_hank_proposed"],
+  "Feed Weight - Existing": ["feed_weight_existing"],
+  "Feed Weight - Proposed": ["feed_weight_proposed"],
+  "Lickerin Speed 1 - Existing": ["licker_in_speed_1_existing"],
+  "Lickerin Speed 1 - Proposed": ["licker_in_speed_1_proposed"],
+  "Lickerin Speed 2 - Existing": ["licker_in_speed_2_existing"],
+  "Lickerin Speed 2 - Proposed": ["licker_in_speed_2_proposed"],
+  "Cylinder Speed - Existing": ["cylinder_speed_existing"],
+  "Cylinder Speed - Proposed": ["cylinder_speed_proposed"],
+  "Flats Speed (MM/Min) - Existing": ["flats_speed_mm_min_existing"],
+  "Flats Speed (MM/Min) - Proposed": ["flats_speed_mm_min_proposed"],
+  "Feed Plate to Lickerin - Existing": ["feed_plate_to_licker_in_existing"],
+  "Feed Plate to Lickerin - Proposed": ["feed_plate_to_licker_in_proposed"],
+  "SFL - Existing": ["sfl_existing"],
+  "SFL - Proposed": ["sfl_proposed"],
+  "SFD - Existing": ["sfd_existing"],
+  "SFD - Proposed": ["sfd_proposed"],
+  "Cylinder to Flats - Existing": ["cylinder_to_flats_existing"],
+  "Cylinder to Flats - Proposed": ["cylinder_to_flats_proposed"],
+  "Cylinder to Doffer - Existing": ["cylinder_in_doffer_existing"],
+  "Cylinder to Doffer - Proposed": ["cylinder_in_doffer_proposed"],
+  "Web Speed Draft (MW-V4) - Existing": ["web_speed_draft_mw_v4_existing"],
+  "Web Speed Draft (MW-V4) - Proposed": ["web_speed_draft_mw_v4_proposed"],
+  "LC Wing Setting - Existing": ["lc_wing_setting_existing"],
+  "LC Wing Setting - Proposed": ["lc_wing_setting_proposed"],
+  "RR/RK Beater Speed - Existing": ["rr_rk_beater_speed_existing"],
+  "RR/RK Beater Speed - Proposed": ["rr_rk_beater_speed_proposed"],
+  "MC Production": ["mc_production", "mcProduction"],
+  "Waste Type": ["waste_type", "wasteType"],
+  "Waste Kgs Value": ["waste_kg", "wasteKg", "waste_kgs_value", "wasteKgsValue"],
+  "Waste Kgs Percent": ["waste_percent", "wastePercent", "waste_kgs_percent", "wasteKgsPercent"],
+  "Overall Waste": ["overall_percent", "overallPercent", "overall_waste", "overallWaste"],
+  "Remarks": ["remarks"],
+  "No. of Tufts": ["num_tufts", "numTufts"],
+  "Tuft Variety": ["tuft_variety", "tuftVariety"],
+  "Display Wt.": ["display_weight", "displayWeight"],
+  "Actual Wt.": ["actual_weight", "actualWeight"],
+  "Average Wt.": ["average_weight", "averageWeight"],
+  "Diff (Actual Wt. - Display Wt.)": ["difference"],
+  "Ratio (Average Wt. / Total) * 100": ["ratio_percent", "ratioPercent"],
   "Span Length (2.5%)": ["span_length", "spanLength"],
   "Invisible Loss %": ["invisible_loss_percentage", "invisible_loss_percent", "invisibleLossPercent"],
   "Trash Content %": ["trash_content_percentage", "trash_content_percent", "trashContentPercent"],
@@ -60,7 +271,67 @@ const REPORT_FIELD_ALIASES = {
   "Colour Grade": ["colour_grade", "color_grade", "colourGrade", "colorGrade"],
   "U%": ["u_percent", "uPercent"],
   "CV%": ["cv_percent", "cvPercent"],
+  "Lot No.": ["lot_no", "lotNo"],
+  "Invoice No": ["invoice_no", "invoiceNo"],
+  "Length CV": ["length_cv", "lengthCV"],
+  "Mean Denier": ["mean_denier", "meanDenier"],
+  "CV per Denier": ["cv_per_denier", "cvPerDenier"],
+  "CV per Tenacity": ["cv_per_tenacity", "cvPerTenacity"],
+  "CV per Elongation": ["cv_per_elongation", "cvPerElongation"],
+  "Crimp (ARC/CM)": ["crimp"],
+  "Whiteness Index": ["whiteness_index", "whitenessIndex"],
+  "Spin Finish": ["spin_finish", "spinFinish"],
+  "UQL": ["uql"],
+  "L5%": ["l5", "l5_percent", "l5Percent"],
+  "SFC(N)": ["sfc_n", "sfcN"],
+  "IFC %": ["ifc", "ifc_percent", "ifcPercent"],
+  "Fibre Neps Gms": ["fibre_neps_gms", "fibreNepsGms"],
+  "SFC(W)": ["sfc_w", "sfcW"],
+  "Fineness": ["fineness"],
+  "SCN/gm": ["scn_gms", "scnGms", "sc_nep_count_g", "scNepCountG"],
+  "Crimp %": ["crimp_percent", "crimpPercent"],
+  "Mc. Name": ["mc_name", "mcName"],
+  "Blow Room": ["blow_room", "blowRoom"],
+  "Breaker Drawing": ["breaker_drawing", "breakerDrawing"],
+  "Finisher Drawing": ["finisher_drawing", "finisherDrawing"],
+  "SCP NEP Count": ["scp_nep_count", "scpNepCount"],
+  "L(W)": ["l_w_mm", "lWMm"],
+  "L(W) CV": ["l_w_cv", "lWCv"],
+  "SCF(W)<12.70mm": ["sfc_w_percent", "sfcWPercent"],
+  "UQL(w)": ["uql_w_mm", "uqlWMm"],
+  "L(n)": ["l_n_mm", "lNMm"],
+  "L(n)CV": ["l_n_cv_percent", "lNCvPercent"],
+  "SCF(n)<12.70mm": ["sfc_n_percent", "sfcNPercent"],
+  "5%L(n)": ["five_pct_l_n_mm", "fivePctLNMm"],
+  "Total Nep Count / g": ["total_nep_count_g", "totalNepCountG"],
+  "Total Nep mean size": ["total_nep_mean_size_um", "totalNepMeanSizeUm"],
+  "Fiber Nep Count": ["fiber_nep_count_g", "fiberNepCountG"],
+  "Fiber Nep Mean Size": ["fiber_nep_mean_size_um", "fiberNepMeanSizeUm"],
+  "SC Nep Count": ["sc_nep_count_g", "scNepCountG"],
+  "SC Nep Mean Size": ["sc_nep_mean_size_um", "scNepMeanSizeUm"],
+  "L(w)": ["l_w_mm", "lWMm"],
+  "L(w)CV": ["l_w_cv", "lWCv"],
+  "SCF(w)<12.70mm": ["sfc_w_percent", "sfcWPercent"],
+  "Fitness Index": ["fitness_index", "fitnessIndex"],
+  "Maturity Ratio Mat 1": ["maturity_ratio_mat1", "maturityRatioMat1"],
+  "IFC%": ["ifc_percent", "ifcPercent"],
+  "50%L(n)": ["fifty_pct_l_n_mm", "fiftyPctLNMm"],
+  "Cut Length(n)": ["cut_length_n_mm", "cutLengthNMm"],
+  "Fineness Den": ["fineness_den", "finenessDen"],
+  "Fineness CV": ["fineness_cv_percent", "finenessCvPercent"],
+  "Long Fiber >45.60mm": ["long_fiber_gt_46_80_percent", "longFiberGt4680Percent", "long_fiber_gt_45_60_percent", "longFiberGt4560Percent"],
+  "Long Fiber Count >45.60mm": ["long_fiber_count_gt_46_80", "longFiberCountGt4680", "long_fiber_count_gt_45_60", "longFiberCountGt4560"],
+  "Machine": ["machine_name", "machineName", "machine"],
+  "Lap Weight (KGs)": ["lap_weight", "lapWeight"],
+  "Lap Length (Mts)": ["lap_length", "lapLength"],
+  "Grams / Meter": ["grams_per_meter", "gramsPerMeter"],
+  "Average": ["average"],
+  "Minimum": ["minimum"],
+  "Maximum": ["maximum"],
+  "Standard Deviation": ["std_deviation", "stdDeviation"],
+  "Coefficient of Variation (CV%)": ["cv_percent", "cvPercent"],
 };
+
 
 const getCanonicalFieldKey = (field) => {
   const fieldKey = String(field?.key || field?.label || "").trim();
@@ -76,7 +347,172 @@ const uniqueReportFields = (fields) =>
     return key && index === list.findIndex((item) => getCanonicalFieldKey(item) === key);
   });
 
+const findEntryIdLikeValue = (row) => {
+  if (!row || typeof row !== "object") return null;
+  const denylist = new Set(["id", "_id"]);
+  const candidateKey = Object.keys(row).find((key) => {
+    if (denylist.has(key)) return false;
+    const normalized = normalizeLookup(key);
+    return normalized.includes("entryid") || normalized.includes("entrycode") || normalized.includes("entryno");
+  });
+  if (!candidateKey) return null;
+  const value = row[candidateKey];
+  return value !== null && typeof value !== "undefined" && value !== "" ? value : null;
+};
+
+const BLEND_FIELD_PATTERN = /^blend-(\d+)$/i;
+
+const getBlendFieldValue = (row, field) => {
+  const match = BLEND_FIELD_PATTERN.exec(String(field?.label || field?.key || "").trim());
+  if (!match) return undefined;
+  const blendNo = Number(match[1]);
+  const blends = Array.isArray(row?.blends) ? row.blends : [];
+  const blend = blends.find((item) => Number(item?.blend_no) === blendNo);
+  if (!blend) return null;
+  return blend.percentage ?? null;
+};
+
+const SAMPLE_FIELD_PATTERN = /^sample\s*(\d+)$/i;
+
+const getSampleFieldValue = (row, field) => {
+  const match = SAMPLE_FIELD_PATTERN.exec(String(field?.label || field?.key || "").trim());
+  if (!match) return undefined;
+  const sampleNo = Number(match[1]);
+  const sampleIndex = sampleNo - 1;
+
+  const samplesRaw = row?.samples;
+  const samples = Array.isArray(samplesRaw)
+    ? samplesRaw
+    : typeof samplesRaw === "string"
+      ? (() => {
+          try {
+            const parsed = JSON.parse(samplesRaw);
+            return Array.isArray(parsed) ? parsed : null;
+          } catch {
+            return null;
+          }
+        })()
+      : null;
+  if (samples) {
+    const value = samples[sampleIndex];
+    if (value !== null && typeof value !== "undefined" && value !== "") return value;
+  }
+
+  const directKeys = [
+    `sample_${sampleNo}`,
+    `sample${sampleNo}`,
+    `sampleNo${sampleNo}`,
+    `Sample ${sampleNo}`,
+  ];
+  for (const key of directKeys) {
+    if (row?.[key] !== null && typeof row?.[key] !== "undefined" && row?.[key] !== "") return row[key];
+  }
+
+  return null;
+};
+
+const WASTE_ROW_FIELD_KEYS = {
+  "wastekgsvalue": "waste_kgs_value",
+  "wastekgspercent": "waste_kgs_percent",
+  "wastetype": "waste_type",
+};
+
+const getWasteRowFieldValue = (row, field) => {
+  const canonical = normalizeLookup(field?.label || field?.key || "");
+  const entryKey = WASTE_ROW_FIELD_KEYS[canonical];
+  if (!entryKey) return undefined;
+
+  if (row?.[entryKey] !== null && typeof row?.[entryKey] !== "undefined" && row?.[entryKey] !== "") {
+    return row[entryKey];
+  }
+
+  const wasteRows = Array.isArray(row?.waste_rows) ? row.waste_rows : [];
+  const firstRow = wasteRows.find(
+    (item) => item && typeof item === "object" && item[entryKey] !== null && typeof item[entryKey] !== "undefined" && item[entryKey] !== ""
+  );
+  return firstRow ? firstRow[entryKey] : undefined;
+};
+
+const TYPE_ROW_FIELD_KEYS = {
+  "cylinderspeed": "cylinder_speed",
+  "lickerinspeed": "lickerin_speed",
+  "flatspeed": "flat_speed",
+  "dofferspeed": "doffer_speed",
+  "deliveryspeed": "delivery_speed",
+  "wingsetting": "wing_setting_1",
+  "wingsettling1": "wing_setting_1",
+  "wingsettling2": "wing_setting_2",
+  "1stlickerinspeed": "lickerin_speed_1",
+  "2ndlickerinspeed": "lickerin_speed_2",
+  "3rdlickerinspeed": "lickerin_speed_3",
+  "mcno": "mc_no",
+  "mcproduction": "mc_production",
+};
+
+const getTypeRowFieldValue = (row, field) => {
+  const canonical = normalizeLookup(field?.label || field?.key || "");
+  const entryKey = TYPE_ROW_FIELD_KEYS[canonical];
+  if (!entryKey) return undefined;
+
+  if (row?.[entryKey] !== null && typeof row?.[entryKey] !== "undefined" && row?.[entryKey] !== "") {
+    return row[entryKey];
+  }
+
+  const typeRows = Array.isArray(row?.type_rows) ? row.type_rows : [];
+  const firstRow = typeRows.find(
+    (item) => item && typeof item === "object" && item[entryKey] !== null && typeof item[entryKey] !== "undefined" && item[entryKey] !== ""
+  );
+  return firstRow ? firstRow[entryKey] : undefined;
+};
+
+const SYNC_ENTRY_FIELD_KEYS = {
+  "runtime(seconds)": "value_a",
+  "idletime(seconds)": "value_b",
+  "subtotaltime": "value_c",
+  "syncpercentage": "sync_percentage",
+};
+
+const getSyncEntryFieldValue = (row, field) => {
+  const canonical = normalizeLookup(field?.label || field?.key || "");
+
+  if (canonical === "numberofrowsn") {
+    if (row?.number_of_entries !== null && typeof row?.number_of_entries !== "undefined" && row?.number_of_entries !== "") {
+      return row.number_of_entries;
+    }
+    const entries = Array.isArray(row?.entries) ? row.entries : null;
+    return entries ? entries.length : undefined;
+  }
+
+  const entryKey = SYNC_ENTRY_FIELD_KEYS[canonical];
+  if (!entryKey) return undefined;
+
+  if (row?.[entryKey] !== null && typeof row?.[entryKey] !== "undefined" && row?.[entryKey] !== "") {
+    return row[entryKey];
+  }
+
+  const entries = Array.isArray(row?.entries) ? row.entries : [];
+  const firstEntry = entries.find(
+    (entry) => entry && typeof entry === "object" && entry[entryKey] !== null && typeof entry[entryKey] !== "undefined" && entry[entryKey] !== ""
+  );
+  return firstEntry ? firstEntry[entryKey] : undefined;
+};
+
 const getReportFieldValue = (row, field) => {
+  const blendValue = getBlendFieldValue(row, field);
+  if (typeof blendValue !== "undefined") return blendValue;
+
+  const sampleValue = getSampleFieldValue(row, field);
+  if (typeof sampleValue !== "undefined") return sampleValue;
+
+  const syncValue = getSyncEntryFieldValue(row, field);
+  if (typeof syncValue !== "undefined") return syncValue;
+
+  const wasteRowValue = getWasteRowFieldValue(row, field);
+  if (typeof wasteRowValue !== "undefined") return wasteRowValue;
+
+  const typeRowValue = getTypeRowFieldValue(row, field);
+  if (typeof typeRowValue !== "undefined") return typeRowValue;
+
   const keys = [
     field?.key,
     field?.label,
@@ -92,16 +528,60 @@ const getReportFieldValue = (row, field) => {
   return null;
 };
 
+const CREATED_AT_FIELD = { key: "created_at", label: "Created At" };
+const ENTRY_ID_FIELD = { key: "entry_id", label: "Entry ID" };
+const INVOICE_DATE_FIELD_KEYS = new Set(["invoicedate"]);
+
+const formatIstDateTime = (value) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value ?? "");
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Asia/Kolkata",
+  }).format(date);
+};
+
+const formatIstDateOnly = (value) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value ?? "");
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    timeZone: "Asia/Kolkata",
+  }).format(date);
+};
+
 const getCellValue = (row, field) => {
-  const value = getReportFieldValue(row, field);
+  const isCreatedAtField = getCanonicalFieldKey(field) === getCanonicalFieldKey(CREATED_AT_FIELD);
+  const isEntryIdField = getCanonicalFieldKey(field) === getCanonicalFieldKey(ENTRY_ID_FIELD);
+  const isInvoiceDateField = INVOICE_DATE_FIELD_KEYS.has(getCanonicalFieldKey(field));
+  const value = isCreatedAtField
+    ? getReportFieldValue(row, field) || getDashboardRowDate(row)
+    : isEntryIdField
+      ? getReportFieldValue(row, field) || findEntryIdLikeValue(row)
+      : getReportFieldValue(row, field);
   if (value === null || typeof value === "undefined" || value === "") return "-";
+  if (isCreatedAtField) return formatIstDateTime(value);
+  if (isInvoiceDateField) return formatIstDateOnly(value);
   if (typeof value === "object") return JSON.stringify(value);
   return String(value);
 };
 
-const getFieldsForType = (typeName, typeRows) => {
-  const catalogFields = getThresholdFieldsForScreen(typeName).map(toField).filter(Boolean);
-  return uniqueReportFields(catalogFields.length ? catalogFields : inferFields(typeRows));
+const getFieldsForType = (typeName, typeRows, context, pivotedFields) => {
+  if (typeName === THICK_PLACE_CV_SCREEN_NAME) {
+    return uniqueReportFields([ENTRY_ID_FIELD, ...(pivotedFields || []), CREATED_AT_FIELD]);
+  }
+  if (typeName === BETWEEN_WITHIN_CARD_SCREEN_NAME) {
+    return uniqueReportFields([ENTRY_ID_FIELD, ...getFieldsForBetweenWithinCard(), CREATED_AT_FIELD]);
+  }
+  const catalogFields = getThresholdFieldsForScreen(typeName, context).map(toField).filter(Boolean);
+  const fields = uniqueReportFields(catalogFields.length ? catalogFields : inferFields(typeRows));
+  return uniqueReportFields([ENTRY_ID_FIELD, ...fields, CREATED_AT_FIELD]);
 };
 
 const sanitizeFilenamePart = (value) =>
@@ -200,24 +680,34 @@ export default function GeneralReport() {
   );
   const isAllTypeSelected = selectedNotebook === ALL_TYPES_VALUE;
   const isInvoiceDataType = String(selectedNotebook || "").trim().toLowerCase().includes("invoice");
-  const filteredRows = useMemo(
-    () => (isInvoiceDataType ? rows : filterRowsByDateRange(rows, fromDate, toDate)),
-    [fromDate, isInvoiceDataType, rows, toDate]
-  );
+  const applyScreenTransform = (typeName, typeRows) => {
+    if (typeName === THICK_PLACE_CV_SCREEN_NAME) return pivotThickPlaceCvRows(typeRows);
+    return { pivotedRows: typeRows, pivotedFields: null };
+  };
+
+  const filteredRows = useMemo(() => {
+    const baseRows = withDropTestTuftCounts(isInvoiceDataType ? rows : filterRowsByDateRange(rows, fromDate, toDate));
+    return applyScreenTransform(selectedNotebook, baseRows).pivotedRows;
+  }, [fromDate, isInvoiceDataType, rows, selectedNotebook, toDate]);
+  const thickPlaceCvFields = useMemo(() => {
+    if (selectedNotebook !== THICK_PLACE_CV_SCREEN_NAME) return null;
+    const baseRows = withDropTestTuftCounts(isInvoiceDataType ? rows : filterRowsByDateRange(rows, fromDate, toDate));
+    return pivotThickPlaceCvRows(baseRows).pivotedFields;
+  }, [fromDate, isInvoiceDataType, rows, selectedNotebook, toDate]);
   const filteredRowsByType = useMemo(
     () =>
       Object.fromEntries(
-        Object.entries(rowsByType).map(([typeName, typeRows]) => [
-          typeName,
-          isInvoiceDataType ? typeRows : filterRowsByDateRange(typeRows, fromDate, toDate),
-        ])
+        Object.entries(rowsByType).map(([typeName, typeRows]) => {
+          const baseRows = withDropTestTuftCounts(isInvoiceDataType ? typeRows : filterRowsByDateRange(typeRows, fromDate, toDate));
+          return [typeName, applyScreenTransform(typeName, baseRows).pivotedRows];
+        })
       ),
     [fromDate, isInvoiceDataType, rowsByType, toDate]
   );
   const reportFields = useMemo(() => {
     if (isAllTypeSelected) return [];
-    return getFieldsForType(selectedNotebook, filteredRows);
-  }, [filteredRows, isAllTypeSelected, selectedNotebook]);
+    return getFieldsForType(selectedNotebook, filteredRows, selectedSubDept, thickPlaceCvFields);
+  }, [filteredRows, isAllTypeSelected, selectedNotebook, selectedSubDept, thickPlaceCvFields]);
   const reportSections = useMemo(() => {
     if (!isAllTypeSelected) {
       return [{ typeName: selectedNotebook, rows: filteredRows, fields: reportFields }];
@@ -225,13 +715,15 @@ export default function GeneralReport() {
 
     return notebooks.map((typeName) => {
       const typeRows = filteredRowsByType[typeName] || [];
+      const pivotedFields =
+        typeName === THICK_PLACE_CV_SCREEN_NAME ? fieldsFromPivotedRows(typeRows) : null;
       return {
         typeName,
         rows: typeRows,
-        fields: getFieldsForType(typeName, typeRows),
+        fields: getFieldsForType(typeName, typeRows, selectedSubDept, pivotedFields),
       };
     });
-  }, [filteredRows, filteredRowsByType, isAllTypeSelected, notebooks, reportFields, selectedNotebook]);
+  }, [filteredRows, filteredRowsByType, isAllTypeSelected, notebooks, reportFields, selectedNotebook, selectedSubDept]);
   const totalColumns = useMemo(
     () => reportSections.reduce((total, section) => total + section.fields.length, 0),
     [reportSections]
@@ -651,15 +1143,31 @@ export default function GeneralReport() {
                           <td colSpan={section.fields.length || 1}>{rowsError}</td>
                         </tr>
                       ) : null}
-                      {!loadingRows && !rowsError && section.rows.length ? (
-                        section.rows.map((row, rowIndex) => (
-                          <tr key={row?.id || row?.entry_id || `${section.typeName}-${rowIndex}`}>
-                            {section.fields.map((field) => (
-                              <td key={field.key}>{getCellValue(row, field)}</td>
-                            ))}
-                          </tr>
-                        ))
-                      ) : null}
+                      {!loadingRows && !rowsError && section.rows.length ? (() => {
+                        const rowGroups = buildRowGroups(section.rows);
+                        let rowIndex = 0;
+                        return rowGroups.flatMap((group) =>
+                          group.map((row, indexInGroup) => {
+                            const tr = (
+                              <tr key={row?.id || row?.entry_id || `${section.typeName}-${rowIndex}`}>
+                                {section.fields.map((field) => {
+                                  if (isMergedReportField(section.typeName, field)) {
+                                    if (indexInGroup > 0) return null;
+                                    return (
+                                      <td key={field.key} rowSpan={group.length}>
+                                        {getCellValue(row, field)}
+                                      </td>
+                                    );
+                                  }
+                                  return <td key={field.key}>{getCellValue(row, field)}</td>;
+                                })}
+                              </tr>
+                            );
+                            rowIndex += 1;
+                            return tr;
+                          })
+                        );
+                      })() : null}
                       {!loadingRows && !rowsError && !section.rows.length ? (
                         <tr>
                           <td colSpan={section.fields.length || 1}>No data stored for the selected date.</td>

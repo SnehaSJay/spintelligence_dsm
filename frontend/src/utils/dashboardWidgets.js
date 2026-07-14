@@ -1,4 +1,11 @@
 import apiConfig from "@/apis/apiConfig";
+import {
+  getCardingProcessParameterEntries,
+  fetchCardingUqcEntries,
+  fetchCardingDfkPressureEntries,
+  fetchCardingChangeControlEntries,
+  fetchCardWasteStudyEntries,
+} from "@/apis/carding";
 
 export const FIELD_WIDGET_TYPE = "field_metric";
 export const getDashboardWidgetsStorageKey = (userId) =>
@@ -42,7 +49,8 @@ const screenEndpoints = {
   "Quality Control": {
     Mixing: {
       "Process Parameter": "/mixing/qc",
-      "AFIS-6 Cotton Data Entry": "/mixing/afis-6-cotton",
+      "AFIS-6 Cotton Data Entry": "/mixing/afis6-cotton",
+      "AFIS-6 MMF Data Entry": "/mixing/afis6-mmf",
       "Cotton HVI Data Entry": "/mixing/cotton-hvi",
       "Fibre Data Entry": "/mixing/fibre",
       "AFIS Data Entry": "/mixing/afis",
@@ -52,19 +60,23 @@ const screenEndpoints = {
     "Blow Room": {
       "Blow Room Sync": "/blowroom/sync",
       "Process Parameter": "/blowroom/header",
-      "BR Waste Study Entry": "/blowroom/br-waste-study",
+      "BR Waste Study T-1": "/blowroom/br-waste-study",
+      "BR Waste Study T-2": "/blowroom/br-waste-study",
+      "BR Waste Study T-3": "/blowroom/br-waste-study",
       "Drop Test Data Entry": "/blowroom/drop-test",
       "B/R CV1M Data Entry Within Lap": "/blowroom/within-lap-cv",
       "B/R Between Lap CV%": "/blowroom/between-lap-cv",
     },
     Carding: {
-      "Process Parameter": "/carding/process-parameters",
+      "Process Parameter": "/carding/qc-header",
       "Between & Within Card Data Entry": "/carding/between-within-card",
     "Thick place & CV": "/carding/card-thick-place",
       "Carding NRE%": "/carding/nre",
-      "Nati Data Entry": "/carding/nati-data",
+      "Nati Data Entry": "/carding/nati-data-entry",
       "U% Data Entry": "/carding/uqc",
       "Card DFK Data": "/carding/dfk-pressure",
+      "Individual Card Waste Study": "/carding/card-waste-study",
+      "Wheel Change": "/carding/change-control",
     },
     "Individual Card Performance": {
       "Individual Card performance Data": "/carding/trials",
@@ -117,6 +129,18 @@ const screenEndpoints = {
   },
 };
 
+const screenFetchers = {
+  "Quality Control": {
+    Carding: {
+      "Process Parameter": getCardingProcessParameterEntries,
+      "U% Data Entry": fetchCardingUqcEntries,
+      "Card DFK Data": fetchCardingDfkPressureEntries,
+      "Wheel Change": fetchCardingChangeControlEntries,
+      "Individual Card Waste Study": fetchCardWasteStudyEntries,
+    },
+  },
+};
+
 const isRecordObject = (value) =>
   value && typeof value === "object" && !Array.isArray(value) && !(value instanceof Date);
 
@@ -154,8 +178,13 @@ export const normalizeDashboardRows = (response) => {
     if (!nestedArrays.length) return flattenRecord(row);
 
     const parent = flattenRecord(row);
-    return nestedArrays.flatMap(([, value]) =>
-      value.map((item) => ({ ...parent, ...flattenRecord(item) }))
+    const maxLength = Math.max(...nestedArrays.map(([, value]) => value.length));
+
+    return Array.from({ length: maxLength }, (_, index) =>
+      nestedArrays.reduce(
+        (merged, [, value]) => ({ ...merged, ...flattenRecord(value[index]) }),
+        parent
+      )
     );
   });
 };
@@ -278,12 +307,27 @@ export const buildFieldWidgetData = (widget, rows, startDate, endDate) => {
   };
 };
 
+const BR_WASTE_STUDY_TYPE_BY_SCREEN = {
+  "BR Waste Study T-1": "Type 1",
+  "BR Waste Study T-2": "Type 2",
+  "BR Waste Study T-3": "Type 3",
+};
+
 export const fetchRowsForDashboardWidget = async (widget) => {
+  const screenName = widget?.input_screen || widget?.screen_name;
+  const fetcher =
+    screenFetchers?.[widget?.department]?.[widget?.sub_department]?.[screenName];
   const endpoint =
     widget?.endpoint ||
-    screenEndpoints?.[widget?.department]?.[widget?.sub_department]?.[
-      widget?.input_screen || widget?.screen_name
-    ];
+    screenEndpoints?.[widget?.department]?.[widget?.sub_department]?.[screenName];
+  const brWasteStudyType = BR_WASTE_STUDY_TYPE_BY_SCREEN[screenName];
+
+  if (fetcher) {
+    const rows = normalizeDashboardRows(await fetcher({ page: 1, limit: 500 }));
+    return brWasteStudyType
+      ? rows.filter((row) => row?.study_type === brWasteStudyType)
+      : rows;
+  }
 
   const fallbackParams = {
     department: widget?.department,
@@ -315,7 +359,10 @@ export const fetchRowsForDashboardWidget = async (widget) => {
       { skipGlobalErrorModal: true }
     );
 
-    return normalizeDashboardRows(response?.data);
+    const rows = normalizeDashboardRows(response?.data);
+    return brWasteStudyType
+      ? rows.filter((row) => row?.study_type === brWasteStudyType)
+      : rows;
   } catch (error) {
     if (error?.response?.status === 404) {
       return fetchFallbackRows();
