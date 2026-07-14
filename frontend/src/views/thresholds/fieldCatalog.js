@@ -674,6 +674,20 @@ export const thresholdFieldCatalog = {
         "Sliver Wt",
         "Noils Wt",
     ],
+    "Stretch %": [
+        "Table No",
+        "Test ID",
+        "Total Test",
+        "Number of Entries (N)",
+        "Length",
+        "Tester",
+        "Std. Stretch %",
+        "Stretch %",
+        "Remark",
+        "Sample No",
+        "Initial Bobbin",
+        "Full Bobbin",
+    ],
     "U% Data Entry": [
         "Shift",
         "Variety",
@@ -698,7 +712,6 @@ export const thresholdFieldCatalog = {
         "AL ON",
     ],
     "COTS Checking": [
-        "Checking Type",
         "Inspection Date",
         "Machine No.",
         "LHS (Spindle Number)",
@@ -709,26 +722,18 @@ export const thresholdFieldCatalog = {
     "Count Change": [
         "RF No.",
         "Lycra Draft",
-        "Count Change Type",
         "Count Name (From)",
         "Count Name (To)",
         "No. of Readings",
-        "Generated Rows",
         "Reading No.",
         "Reading Value",
         "Count",
         "CV%",
         "Strength",
         "Mean",
-        "CV% 2",
         "CSP",
-        "Reading Avg",
-        "Count Avg",
-        "Strength Avg",
-        "Overall CSP",
     ],
     "Ring Frame Log Book": [
-        "Inspection Type",
         "Entry Date",
         "Shift",
         "Checker Name",
@@ -758,7 +763,6 @@ export const thresholdFieldCatalog = {
         "Comments",
     ],
     "Speed Checking": [
-        "Checking Type",
         "Inspection Date",
         "Machine",
         "Display Speed",
@@ -770,7 +774,6 @@ export const thresholdFieldCatalog = {
         "RHS Remarks",
     ],
     "Lycra Missing": [
-        "Checking Type",
         "Inspection Date",
         "Machine",
         "LHS (Spindle Number)",
@@ -779,7 +782,6 @@ export const thresholdFieldCatalog = {
         "RHS Remarks",
     ],
     "Bottom Apron Checking": [
-        "Checking Type",
         "Inspection Date",
         "Machine",
         "LHS (Spindle Number)",
@@ -788,7 +790,6 @@ export const thresholdFieldCatalog = {
         "RHS Remarks",
     ],
     "Lycra Out of Centering": [
-        "Checking Type",
         "Inspection Date",
         "Machine",
         "LHS (Spindle Number)",
@@ -797,7 +798,6 @@ export const thresholdFieldCatalog = {
         "RHS Remarks",
     ],
     "RSM & Lycrasensor Checking Online": [
-        "Checking Type",
         "Inspection Date",
         "Machine",
         "LHS (Spindle Number)",
@@ -806,7 +806,6 @@ export const thresholdFieldCatalog = {
         "RHS Remarks",
     ],
     "RSM & Lycrasensor Checking Offline": [
-        "Checking Type",
         "Inspection Date",
         "Machine",
         "LHS (Spindle Number)",
@@ -1173,7 +1172,6 @@ export const thresholdFieldCatalog = {
         "Gms / Litre - Range",
     ],
     "Cone Packing Audit": [
-        "Type",
         "Count Name",
         "Gross Wt. (Std)",
         "Gross Wt. (Act)",
@@ -1569,7 +1567,6 @@ export const thresholdFieldCatalog = {
     ]),
     "SMXCots Change Data Entry": [
         "Entry ID",
-        "Date",
         "MC Name",
         "Front Cots Damage",
         "Third Cots Damage",

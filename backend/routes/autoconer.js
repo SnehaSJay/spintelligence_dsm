@@ -1381,6 +1381,8 @@ router.post('/drum-wise', async (req, res) => {
       type,
       machine_id,
       count_id,
+      machine_code,
+      count_name,
       drum_from,
       drum_to,
       remarks,
@@ -1395,10 +1397,10 @@ router.post('/drum-wise', async (req, res) => {
 
     const drumWiseResult = await client.query(
       `INSERT INTO autoconer.drum_wise
-            (test_no, entry_date, type, machine_id, count_id, drum_from, drum_to, remarks)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            (test_no, entry_date, type, machine_id, count_id, machine_code, count_name, drum_from, drum_to, remarks)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             RETURNING id`,
-      [test_no, entry_date, type, machine_id ?? null, count_id ?? null, drum_from, drum_to, remarks]
+      [test_no, entry_date, type, machine_id ?? null, count_id ?? null, machine_code ?? null, count_name ?? null, drum_from, drum_to, remarks]
     );
 
     const drum_wise_id = drumWiseResult.rows[0].id;
@@ -1509,7 +1511,7 @@ router.get('/drum-wise', async (req, res) => {
     const offset = (page - 1) * limit;
 
     const dataQuery = `
-            SELECT 
+            SELECT
                 dw.id,
                 dw.test_no,
                 dw.entry_date,
@@ -1518,8 +1520,8 @@ router.get('/drum-wise', async (req, res) => {
                 dw.drum_to,
                 dw.remarks,
                 dw.created_at,
-                m.machine_code,
-                cm.count_name,
+                COALESCE(dw.machine_code, m.machine_code) AS machine_code,
+                COALESCE(dw.count_name, cm.count_name) AS count_name,
                 COALESCE(
                     json_agg(
                         json_build_object(
@@ -1536,7 +1538,7 @@ router.get('/drum-wise', async (req, res) => {
             LEFT JOIN autoconer.count_master cm ON dw.count_id = cm.id
             LEFT JOIN autoconer.drum_inspection di ON dw.id = di.drum_wise_id
             LEFT JOIN autoconer.v_drum_summary vds ON dw.id = vds.drum_wise_id AND di.drum_no = vds.drum_no
-            GROUP BY dw.id, m.machine_code, cm.count_name
+            GROUP BY dw.id, dw.machine_code, dw.count_name, m.machine_code, cm.count_name
             ORDER BY dw.entry_date DESC, dw.created_at DESC
             LIMIT $1 OFFSET $2
         `;

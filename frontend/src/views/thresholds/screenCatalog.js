@@ -64,6 +64,7 @@ export const thresholdScreenCatalog = {
             "SMX Breaks Study Report",
             "U% Data Entry",
             "Wheel Change",
+            "Stretch %",
         ],
         spinning: [
             "Process Parameter",

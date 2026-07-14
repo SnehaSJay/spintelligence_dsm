@@ -270,6 +270,10 @@ const ensureSimplexEntryIdColumns = async () => {
     WHERE entry_id IS NOT NULL;
   `);
   await client.query(`
+    ALTER TABLE IF EXISTS simplex.smx_breaks_inspection_items
+      ADD COLUMN IF NOT EXISTS length_range text;
+  `);
+  await client.query(`
     ALTER TABLE IF EXISTS simplex.u_data_entry
       ADD COLUMN IF NOT EXISTS entry_id text;
   `);
@@ -1275,12 +1279,14 @@ router.post('/study', async (req, res, next) => {
       machine_name,
       operator_name,
       shift,
+      items,
       inspection_items,
       user_fiber_parameters,
       epi_parameters,
       other_field_values
     } = req.body;
     const normalizedShift = String(shift || '').trim();
+    const resolvedInspectionItems = Array.isArray(items) ? items : inspection_items;
 
     if (!entry_id) {
       return res.status(400).json({ message: 'entry_id is required and must be unique' });
@@ -1313,9 +1319,10 @@ router.post('/study', async (req, res, next) => {
 
     // Insert inspection items
     let derivedBreakCount = 0;
-    if (inspection_items && Array.isArray(inspection_items)) {
-      for (const item of inspection_items) {
+    if (resolvedInspectionItems && Array.isArray(resolvedInspectionItems)) {
+      for (const item of resolvedInspectionItems) {
         const normalizedName = normalizeBreakItemName(item?.item_name);
+        const lengthRange = item?.length_range ? String(item.length_range).trim() : null;
         const breakArray = parseBreakArray(item?.status_value).map((v) => String(toWholeNumberOrNull(v) ?? 0));
         const columnTotal = breakArray.length;
         const statusValue = breakArray.length ? toPgArrayLiteral(breakArray) : toWholeNumberOrNull(item?.status_value);
@@ -1327,11 +1334,11 @@ router.post('/study', async (req, res, next) => {
         }
         await client.query(
           `INSERT INTO simplex.smx_breaks_inspection_items
-           (study_id, item_name, status_value, remarks)
-           VALUES ($1, $2, $3, $4)`,
-          [study_id, normalizedName, statusValue, item.remarks || null]
+           (study_id, item_name, length_range, status_value, remarks)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [study_id, normalizedName, lengthRange, statusValue, item.remarks || null]
         );
-        normalizedItems.push({ item_name: normalizedName, status_value: statusValue });
+        normalizedItems.push({ item_name: normalizedName, length_range: lengthRange, status_value: statusValue });
       }
     }
 
@@ -1504,7 +1511,23 @@ router.post('/study', async (req, res, next) => {
 router.get('/list', async (req, res, next) => {
   try {
     const result = await client.query(
-      `SELECT * FROM simplex.smx_breaks_study_header ORDER BY entry_date DESC`
+      `SELECT h.*,
+              COALESCE(
+                json_agg(
+                  json_build_object(
+                    'item_name', i.item_name,
+                    'length_range', i.length_range,
+                    'status_value', i.status_value,
+                    'remarks', i.remarks
+                  )
+                ) FILTER (WHERE i.id IS NOT NULL),
+                '[]'
+              ) AS items
+       FROM simplex.smx_breaks_study_header h
+       LEFT JOIN simplex.smx_breaks_inspection_items i
+       ON i.study_id = h.id
+       GROUP BY h.id, h.s_no, h.entry_date, h.machine_name, h.operator_name, h.shift, h.remarks, h.created_at, h.updated_at, h.entry_id
+       ORDER BY h.entry_date DESC`
     );
 
     res.status(200).json(result.rows.map((row) => withScreenEntryId('study', row)));

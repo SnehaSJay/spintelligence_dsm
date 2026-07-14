@@ -45,6 +45,11 @@ const withoutTestNumber = (record = {}) => {
   return rest;
 };
 
+const withoutCheckingType = (record = {}) => {
+  const { type, checking_type, ...rest } = record;
+  return rest;
+};
+
 const isUniqueViolation = (err) => err && err.code === '23505';
 const toNumberOrNull = (value) => {
   if (value === null || value === undefined || value === '') return null;
@@ -1498,52 +1503,7 @@ router.post('/speed-checking', async (req, res, next) => {
 router.get('/speed-checking', async (req, res, next) => {
   try {
     const result = await client.query(`
-      SELECT 
-        id,
-        entry_id,
-        InspectionDate,
-        MachineNo,
-        Display_Speed,
-        Spindle_Speed,
-        Difference,
-        LHS_TextRemarks,
-        encode(LHS_Audio, 'base64') as LHS_Audio,
-        RHS_TextRemarks,
-        encode(RHS_Audio, 'base64') as RHS_Audio,
-        CreatedAt
-      FROM spinning.speed_checking
-      ORDER BY CreatedAt DESC;
-    `);
-
-    res.json({
-      count: result.rowCount,
-      data: result.rows.map((row) => withScreenEntryId('speed_checking', row))
-    });
-
-  } catch (err) {
-    next(err);
-  }
-});
-
-/**
- * @swagger
- * /spinning/speed-checking:
- *   get:
- *     summary: Get all speed-checking records
- *     tags:
- *       - Spinning
- *     responses:
- *       200:
- *         description: List of records
- *       500:
- *         description: Internal server error
- */
-
-router.get('/speed-checking', async (req, res, next) => {
-  try {
-    const result = await client.query(`
-      SELECT 
-        id,
+      SELECT
         entry_id,
         InspectionDate,
         MachineNo,
@@ -1553,9 +1513,9 @@ router.get('/speed-checking', async (req, res, next) => {
         RHS_Value,
         Difference,
         LHS_TextRemarks,
-        encode(LHS_Audio, 'base64') AS LHS_Audio,
+        encode(LHS_Audio, 'base64') as LHS_Audio,
         RHS_TextRemarks,
-        encode(RHS_Audio, 'base64') AS RHS_Audio,
+        encode(RHS_Audio, 'base64') as RHS_Audio,
         CreatedAt
       FROM spinning.speed_checking
       ORDER BY CreatedAt DESC;
@@ -1698,7 +1658,6 @@ router.post('/cots-checking', async (req, res, next) =>{
  */
 router.get('/cots-checking', async (req, res, next) => {
   try {
-    const filterDate = req.query.date || new Date().toISOString().slice(0, 10);
     const result = await client.query(`
       SELECT
         entry_id AS id,
@@ -1713,9 +1672,9 @@ router.get('/cots-checking', async (req, res, next) => {
         encode(RHS_Audio, 'base64') as RHS_Audio,
         CreatedAt
       FROM spinning.cots_checking
-      WHERE InspectionDate::date = $1::date
+      WHERE $1::date IS NULL OR InspectionDate::date = $1::date
       ORDER BY CreatedAt DESC;
-    `, [filterDate]);
+    `, [req.query.date || null]);
 
     res.json({
       count: result.rowCount,
@@ -1843,7 +1802,6 @@ router.get('/lycra-missing', async (req, res, next) => {
     const filterDate = req.query.date || new Date().toISOString().slice(0, 10);
     const result = await client.query(`
       SELECT
-        id,
         entry_id,
         InspectionDate,
         MachineNo,
@@ -1982,10 +1940,8 @@ router.post('/bottom-apron-checking', async (req, res, next) => {
  */
 router.get('/bottom-apron-checking', async (req, res, next) => {
   try {
-    const filterDate = req.query.date || new Date().toISOString().slice(0, 10);
     const result = await client.query(`
       SELECT
-        id,
         entry_id,
         InspectionDate,
         MachineNo,
@@ -1997,9 +1953,9 @@ router.get('/bottom-apron-checking', async (req, res, next) => {
         encode(RHS_Audio, 'base64') as RHS_Audio,
         CreatedAt
       FROM spinning.bottom_apron_checking
-      WHERE InspectionDate::date = $1::date
+      WHERE $1::date IS NULL OR InspectionDate::date = $1::date
       ORDER BY CreatedAt DESC;
-    `, [filterDate]);
+    `, [req.query.date || null]);
 
     res.json({
       count: result.rowCount,
@@ -2124,10 +2080,8 @@ router.post('/lycra-centering', async (req, res, next) => {
  */
 router.get('/lycra-centering', async (req, res, next) => {
   try {
-    const filterDate = req.query.date || new Date().toISOString().slice(0, 10);
     const result = await client.query(`
       SELECT
-        id,
         entry_id,
         InspectionDate,
         MachineNo,
@@ -2139,9 +2093,9 @@ router.get('/lycra-centering', async (req, res, next) => {
         encode(RHS_Audio, 'base64') as RHS_Audio,
         CreatedAt
       FROM spinning.lycra_centering
-      WHERE InspectionDate::date = $1::date
+      WHERE $1::date IS NULL OR InspectionDate::date = $1::date
       ORDER BY CreatedAt DESC;
-    `, [filterDate]);
+    `, [req.query.date || null]);
 
     res.json({
       count: result.rowCount,
@@ -2266,10 +2220,8 @@ router.post('/rsm-lycra-online', async (req, res, next) => {
  */
 router.get('/rsm-lycra-online', async (req, res, next) => {
   try {
-    const filterDate = req.query.date || new Date().toISOString().slice(0, 10);
     const result = await client.query(`
       SELECT
-        id,
         entry_id,
         InspectionDate,
         MachineNo,
@@ -2281,9 +2233,9 @@ router.get('/rsm-lycra-online', async (req, res, next) => {
         encode(RHS_Audio, 'base64') as RHS_Audio,
         CreatedAt
       FROM spinning.RSM_and_lycrasensor_cheking_online
-      WHERE InspectionDate::date = $1::date
+      WHERE $1::date IS NULL OR InspectionDate::date = $1::date
       ORDER BY CreatedAt DESC;
-    `, [filterDate]);
+    `, [req.query.date || null]);
 
     res.json({
       count: result.rowCount,
@@ -2408,10 +2360,8 @@ router.post('/rsm-lycra-offline', async (req, res, next) => {
  */
 router.get('/rsm-lycra-offline', async (req, res, next) => {
   try {
-    const filterDate = req.query.date || new Date().toISOString().slice(0, 10);
     const result = await client.query(`
       SELECT
-        id,
         entry_id,
         InspectionDate,
         MachineNo,
@@ -2423,9 +2373,9 @@ router.get('/rsm-lycra-offline', async (req, res, next) => {
         encode(RHS_Audio, 'base64') as RHS_Audio,
         CreatedAt
       FROM spinning.RSM_and_lycrasensor_cheking_offline
-      WHERE InspectionDate::date = $1::date
+      WHERE $1::date IS NULL OR InspectionDate::date = $1::date
       ORDER BY CreatedAt DESC;
-    `, [filterDate]);
+    `, [req.query.date || null]);
 
     res.json({
       count: result.rowCount,
@@ -2773,7 +2723,7 @@ router.get('/ring-frame', async (req, res) => {
     const filterDate = req.query.date || new Date().toISOString().slice(0, 10);
     const result = await client.query(`
       SELECT
-        i.*,
+        i.id, i.entry_date, i.shift, i.checker_name, i.created_at, i.entry_id,
 
         -- Rows
         COALESCE(
@@ -3017,7 +2967,6 @@ router.post('/count-change', async (req, res) => {
 
 router.get('/count-change', async (req, res) => {
   try {
-    const filterDate = req.query.date || new Date().toISOString().slice(0, 10);
     const hasMcMaster = await hasPostgresTable('ticketing_system.mc_master');
     const rfSelect = hasMcMaster
       ? `,
@@ -3050,16 +2999,17 @@ router.get('/count-change', async (req, res) => {
       ${rfJoin}
       LEFT JOIN spinning.count_change_readings r
       ON i.id = r.inspection_id
-      WHERE i.entry_date::date = $1::date
+      WHERE $1::date IS NULL OR i.entry_date::date = $1::date
       GROUP BY i.id
       ${hasMcMaster ? ', m.mcname, m.deptcode, m.deptname' : ''}
       ORDER BY i.created_at DESC;
-    `, [filterDate]);
+    `, [req.query.date || null]);
 
     res.json({
       count: result.rowCount,
       data: result.rows.map((row) => {
-        return withScreenEntryId('count_change', withoutTestNumber(row));
+        const { type, ...rest } = withoutTestNumber(row);
+        return withScreenEntryId('count_change', rest);
       })
     });
 
@@ -3520,8 +3470,8 @@ router.get('/wheel-change/type1', async (req, res, next) => {
       : null;
 
     res.json({
-      data: result.rows.map((row) => withWheelChangeMachineAliases(withWheelChangeRfAliases('wheel_change_type1', row, 'fm_no'), 'fm_no')),
-      latest_record: latestRecord ? withWheelChangeMachineAliases(withWheelChangeRfAliases('wheel_change_type1', latestRecord, 'fm_no'), 'fm_no') : null
+      data: result.rows.map((row) => withWheelChangeMachineAliases(withWheelChangeRfAliases('wheel_change_type1', withoutCheckingType(row), 'fm_no'), 'fm_no')),
+      latest_record: latestRecord ? withWheelChangeMachineAliases(withWheelChangeRfAliases('wheel_change_type1', withoutCheckingType(latestRecord), 'fm_no'), 'fm_no') : null
     });
 
   } catch (err) {
@@ -3733,8 +3683,8 @@ router.get('/wheel-change/type2', async (req, res, next) => {
       : null;
 
     res.json({
-      data: result.rows.map((row) => withWheelChangeMachineAliases(withWheelChangeRfAliases('wheel_change_type2', row, 'fm_no'), 'fm_no')),
-      latest_record: latestRecord ? withWheelChangeMachineAliases(withWheelChangeRfAliases('wheel_change_type2', latestRecord, 'fm_no'), 'fm_no') : null
+      data: result.rows.map((row) => withWheelChangeMachineAliases(withWheelChangeRfAliases('wheel_change_type2', withoutCheckingType(row), 'fm_no'), 'fm_no')),
+      latest_record: latestRecord ? withWheelChangeMachineAliases(withWheelChangeRfAliases('wheel_change_type2', withoutCheckingType(latestRecord), 'fm_no'), 'fm_no') : null
     });
 
   } catch (err) {
@@ -3978,8 +3928,8 @@ router.get('/wheel-change/type3', async (req, res, next) => {
       : null;
 
     res.json({
-      data: result.rows.map((row) => withWheelChangeMachineAliases(withWheelChangeType3Aliases(row), 'fr_no')),
-      latest_record: latestRecord ? withWheelChangeMachineAliases(withWheelChangeType3Aliases(latestRecord), 'fr_no') : null
+      data: result.rows.map((row) => withWheelChangeMachineAliases(withWheelChangeType3Aliases(withoutCheckingType(row)), 'fr_no')),
+      latest_record: latestRecord ? withWheelChangeMachineAliases(withWheelChangeType3Aliases(withoutCheckingType(latestRecord)), 'fr_no') : null
     });
 
   } catch (err) {
@@ -4268,8 +4218,8 @@ router.get('/wheel-change/type4', async (req, res, next) => {
       : null;
 
     res.json({
-      data: result.rows.map((row) => withWheelChangeMachineAliases(withWheelChangeRfAliases('wheel_change_type4', row, 'fm_no'), 'fm_no')),
-      latest_record: latestRecord ? withWheelChangeMachineAliases(withWheelChangeRfAliases('wheel_change_type4', latestRecord, 'fm_no'), 'fm_no') : null
+      data: result.rows.map((row) => withWheelChangeMachineAliases(withWheelChangeRfAliases('wheel_change_type4', withoutCheckingType(row), 'fm_no'), 'fm_no')),
+      latest_record: latestRecord ? withWheelChangeMachineAliases(withWheelChangeRfAliases('wheel_change_type4', withoutCheckingType(latestRecord), 'fm_no'), 'fm_no') : null
     });
 
   } catch (err) {

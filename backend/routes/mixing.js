@@ -681,11 +681,13 @@ const ensureMixingEntryIdColumns = async () => {
     FROM mixing.openness_inspection i
     JOIN mixing.openness_entries e ON e.inspection_id = i.id;
   `);
+  // CREATE OR REPLACE VIEW can only append columns at the end or keep existing ones in place —
+  // it can't rename/reorder a column already deployed. The live view already has entry_id as
+  // column 2, so param_id is appended at the end instead of being inserted before it.
   await client.query(`
     CREATE OR REPLACE VIEW mixing.mixing_qc_dashboard_entries AS
     SELECT
       h.qc_id,
-      h.param_id,
       h.entry_id,
       h.consignee_name,
       h.count_name,
@@ -697,7 +699,8 @@ const ensureMixingEntryIdColumns = async () => {
       b.cut_length,
       b.tenacity,
       b.elongation,
-      b.merge_no
+      b.merge_no,
+      h.param_id
     FROM mixing.mixing_qc_header h
     LEFT JOIN mixing.mixing_qc_blends b ON b.qc_id = h.qc_id;
   `);
