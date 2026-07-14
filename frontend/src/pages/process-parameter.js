@@ -485,7 +485,7 @@ export default function ProcessParameterPage() {
           if (!notebookName) return;
           const hours = Number(row?.completion_threshold_hours ?? row?.completionThresholdHours);
           if (!Number.isFinite(hours) || hours <= 0) return;
-          map[notebookName] = hours;
+          map[getColumnForNotebookKey(notebookName)] = hours;
         });
         setPpThresholdMap(map);
       })
@@ -514,7 +514,7 @@ export default function ProcessParameterPage() {
             ticket?.notebook || ticket?.notebook_name || ticket?.notebookName || ticket?.screen_name || ""
           ).trim();
           if (!entryIdValue || !notebookName) return;
-          map[`${entryIdValue}::${notebookName}`] =
+          map[`${entryIdValue}::${getColumnForNotebookKey(notebookName)}`] =
             ticket?.ticket_id || ticket?.ticketId || ticket?.id || ticket?._id || true;
         });
         setPpTicketMap(map);
@@ -871,7 +871,16 @@ export default function ProcessParameterPage() {
       if (typeof saved?.selectedSubDepartment === "string") {
         setSelectedSubDepartment(saved.selectedSubDepartment);
       }
-      if (typeof saved?.selectedEntryId === "string") {
+      // "Create New PP" (the default/most common restored tab) must always
+      // start blank — restoring a leftover selectedEntryId here would make
+      // the backend treat a brand-new PP as a continuation of whatever batch
+      // was last open before the reload (backend can't tell the difference;
+      // both look like "a valid previously-issued entry_id"). Genuine batch
+      // continuation happens through "Update Existing PP" clicking a real
+      // matrix row (handleMatrixCellClick/handleSelectEditTab), not through
+      // this reload restore, so only restore it for the "existing" tab,
+      // which never submits an entry itself.
+      if (typeof saved?.selectedEntryId === "string" && saved?.activeTab === "existing") {
         setSelectedEntryId(saved.selectedEntryId);
       }
       if (typeof saved?.drawFrameType === "string") {

@@ -55,7 +55,6 @@ import {
   fetchCardingDfkPressureEntries,
   fetchCardingChangeControlEntries,
   fetchCardingUqcEntries,
-  fetchCardWasteStudyEntries,
   fetchWrappingCardingNotebookEntries,
   getCardingProcessParameterEntries,
 } from "@/apis/carding";
@@ -66,7 +65,6 @@ import {
   fetchDrawFrameBreakerProcessParameterEntries,
   fetchDrawFrameFinisherProcessParameterEntries,
 } from "@/apis/draw-frame";
-import { fetchDrawFrameWheelChangeEntries } from "@/apis/drawFrameWheelChange";
 import {
   fetchMixingAfisEntries,
   fetchMixingAfis6CottonEntries,
@@ -94,6 +92,20 @@ const fetchEndpointRows = async (endpoint, params = {}) => {
     { skipGlobalErrorModal: true }
   );
   return response.data;
+};
+
+const fetchBrWasteStudyRowsByType = async (studyType) => {
+  const rows = await fetchEndpointRows("/blowroom/br-waste-study");
+  return (Array.isArray(rows) ? rows : []).filter(
+    (row) => row?.study_type === studyType
+  );
+};
+
+const fetchCardWasteStudyRowsByType = async (studyType) => {
+  const rows = await fetchEndpointRows("/carding/card-waste-study");
+  return (Array.isArray(rows) ? rows : []).filter(
+    (row) => row?.study_type === studyType
+  );
 };
 
 const fetchGeneralReportDataRows = async (params = {}) => {
@@ -185,7 +197,9 @@ const reportSources = {
     "Blow Room": {
       "Blow Room Sync": { endpoint: "/blowroom/sync" },
       "Process Parameter": { fetcher: fetchBlowroomProcessParametersApi },
-      "BR Waste Study Entry": { fetcher: fetchEndpointRows.bind(null, "/blowroom/br-waste-study") },
+      "BR Waste Study T-1": { fetcher: fetchBrWasteStudyRowsByType.bind(null, "Type 1") },
+      "BR Waste Study T-2": { fetcher: fetchBrWasteStudyRowsByType.bind(null, "Type 2") },
+      "BR Waste Study T-3": { fetcher: fetchBrWasteStudyRowsByType.bind(null, "Type 3") },
       "Drop Test Data Entry": { fetcher: fetchEndpointRows.bind(null, "/blowroom/drop-test") },
       "B/R CV1M Data Entry Within Lap": { endpoint: "/blowroom/within-lap-cv" },
       "B/R Between Lap CV%": { endpoint: "/blowroom/between-lap-cv" },
@@ -195,11 +209,13 @@ const reportSources = {
       "Between & Within Card Data Entry": { endpoint: "/carding/between-within-card" },
     "Thick place & CV": { endpoint: "/carding/card-thick-place" },
       "Carding NRE%": { endpoint: "/carding/nre" },
-      "Nati Data Entry": { endpoint: "/carding/nati-data" },
+      "Nati Data Entry": { endpoint: "/carding/nati-data-entry" },
       "U% Data Entry": { fetcher: fetchCardingUqcEntries },
       "Card DFK Data": { fetcher: fetchCardingDfkPressureEntries },
       WheelChange: { fetcher: fetchCardingChangeControlEntries },
-      "Individual Card Waste Study": { fetcher: fetchCardWasteStudyEntries },
+      "Card Waste Study T-1": { fetcher: fetchCardWasteStudyRowsByType.bind(null, "Type 1") },
+      "Card Waste Study T-2": { fetcher: fetchCardWasteStudyRowsByType.bind(null, "Type 2") },
+      "Card Waste Study T-3": { fetcher: fetchCardWasteStudyRowsByType.bind(null, "Type 3") },
     },
     "Individual Card Performance": {
       "Individual Card performance Data": { endpoint: "/carding/trials" },
@@ -219,9 +235,7 @@ const reportSources = {
       "A%": { endpoint: "/drawframe/a-percent" },
       "PP - Breaker Drawing": { fetcher: fetchDrawFrameBreakerProcessParameterEntries },
       "PP - Finisher Drawing": { fetcher: fetchDrawFrameFinisherProcessParameterEntries },
-      "Wheel Change": {
-        fetcher: (params) => fetchDrawFrameWheelChangeEntries({ ...params, approval_status: "approved" }),
-      },
+      "Wheel Change": { fetcher: fetchDrawFrameWheelChangeEntries },
     },
     Simplex: {
       "Process Parameter": { fetcher: fetchSimplexProcessParameterEntries },
@@ -241,7 +255,10 @@ const reportSources = {
       "Lycra Out of Centering": { endpoint: "/spinning/lycra-centering" },
       "RSM & Lycrasensor Checking Online": { endpoint: "/spinning/rsm-lycra-online" },
       "RSM & Lycrasensor Checking Offline": { endpoint: "/spinning/rsm-lycra-offline" },
-      "Wheel Change": { endpoint: "/spinning/wheel-change" },
+      "Wheel Change Type-1": { endpoint: "/spinning/wheel-change/type1" },
+      "Wheel Change Type-2": { endpoint: "/spinning/wheel-change/type2" },
+      "Wheel Change Type-3": { endpoint: "/spinning/wheel-change/type3" },
+      "Wheel Change Type-4": { endpoint: "/spinning/wheel-change/type4" },
     },
     Autoconer: {
       "Process Parameter": { fetcher: fetchAutoconerProcessParameters },
@@ -1196,9 +1213,9 @@ const reportFieldAliases = {
   "Sub Total Time": ["value_c"],
   "Wing Settling 1": ["wing_setting_1"],
   "Wing Settling 2": ["wing_setting_2"],
-  "1st Lickerin Speed": ["first_lickerin_speed"],
-  "2nd Lickerin Speed": ["second_lickerin_speed"],
-  "3rd Lickerin Speed": ["third_lickerin_speed"],
+  "1st Lickerin Speed": ["lickerin_speed_1"],
+  "2nd Lickerin Speed": ["lickerin_speed_2"],
+  "3rd Lickerin Speed": ["lickerin_speed_3"],
   "Waste KGs %": ["waste_percent", "waste_kgs_percent"],
   "Total Waste KGs %": ["waste_percent"],
   "Overall Waste %": ["overall_percent"],
@@ -1223,7 +1240,7 @@ const reportFieldAliases = {
   "Lickerin Wire Specification - Tonnage in Kgs (2)": ["lickerin_tonnage_2"],
   Draft: ["draft_speed"],
   "Card Thick Place Value": ["cv_value"],
-  "5m CV": ["cv_5m"],
+  "5m CV": ["cv_5m_value", "cv_5m"],
   "CV in Metres": ["cvm"],
   "1m CV in Metres": ["cvm_1m"],
   "3m CV in Metres": ["cvm_3m"],
@@ -1452,28 +1469,19 @@ const getReportFieldValue = (row, field) => {
     field?.label,
   ].filter(Boolean);
 
+  const rowKeyDenylist = new Set(["id", "_id"]);
+
   for (const key of keys) {
     if (row?.[key] !== null && typeof row?.[key] !== "undefined" && row?.[key] !== "") return row[key];
     const target = normalizeLookupKey(key);
     const rowKeys = Object.keys(row || {});
-    // Prefer an exact (case/format-insensitive) key match before falling back to substring
-    // matches — otherwise a field like "Date" can incorrectly pick up "Report Date"'s value
-    // just because "reportdate" contains "date". Among fuzzy matches, prefer keys coming from
-    // the user-edited "rows"/"manual_json" source over the raw "ocr_json" source, since the
-    // former reflects what was actually entered/saved in the form.
-    const exactKey = rowKeys.find((rowKey) => normalizeLookupKey(rowKey) === target);
-    const preferredFuzzyKey = rowKeys.find((rowKey) => {
-      const normalizedRowKey = normalizeLookupKey(rowKey);
-      return (
-        (normalizedRowKey.includes(target) || target.includes(normalizedRowKey)) &&
-        /^(rows|manual_json)/i.test(rowKey)
-      );
-    });
-    const fallbackFuzzyKey = rowKeys.find((rowKey) => {
+    const exactMatch = rowKeys.find((rowKey) => normalizeLookupKey(rowKey) === target && !rowKeyDenylist.has(rowKey));
+    const fuzzyMatch = rowKeys.find((rowKey) => {
+      if (rowKeyDenylist.has(rowKey)) return false;
       const normalizedRowKey = normalizeLookupKey(rowKey);
       return normalizedRowKey.includes(target) || target.includes(normalizedRowKey);
     });
-    const matchedKey = exactKey || preferredFuzzyKey || fallbackFuzzyKey;
+    const matchedKey = exactMatch || fuzzyMatch;
     if (matchedKey && row[matchedKey] !== null && typeof row[matchedKey] !== "undefined" && row[matchedKey] !== "") {
       return row[matchedKey];
     }

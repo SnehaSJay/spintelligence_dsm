@@ -357,7 +357,6 @@ function SpinningDepartment() {
     const [previewItems, setPreviewItems] = useState([]);
     const [validationMessage, setValidationMessage] = useState("");
     const [cotsMachineOptions, setCotsMachineOptions] = useState([]);
-    const [spinningMachineOptions, setSpinningMachineOptions] = useState([]);
     const [countChangeRfOptions, setCountChangeRfOptions] = useState([]);
     const [countChangeCountNameFromOptions, setCountChangeCountNameFromOptions] = useState(
         []
@@ -392,11 +391,9 @@ function SpinningDepartment() {
         typeName: checkingType,
         config: getSpinningEntryConfig(checkingType, wheelChangeSubType),
     });
-    const machineOptions = isCotsChecking && cotsMachineOptions.length
+    const machineOptions = cotsMachineOptions.length
         ? cotsMachineOptions
-        : spinningMachineOptions.length
-            ? spinningMachineOptions
-            : fallbackMachineOptions;
+        : fallbackMachineOptions;
     const machineSelectOptions = machineOptions;
     const countChangeRfSelectOptions = countChangeRfOptions;
     const countChangeCountNameFromSelectOptions = countChangeCountNameFromOptions;
@@ -479,9 +476,11 @@ function SpinningDepartment() {
         };
     }, [router.events, clearFormValues]);
 
+    // Every Spinning notebook that shows a "Machine No." / "Machine" field
+    // shares this single live source (the same one COTS Checking always
+    // used), so all screens list identical, up-to-date machine numbers
+    // instead of each notebook having its own stale/screen-specific list.
     useEffect(() => {
-        if (!isCotsChecking) return;
-
         let isMounted = true;
         fetchSpinningCountChangeRfNos()
             .then((payload) => {
@@ -495,36 +494,7 @@ function SpinningDepartment() {
         return () => {
             isMounted = false;
         };
-    }, [isCotsChecking]);
-
-    useEffect(() => {
-        if (isCotsChecking || isCountChange || isRingFrame || isProcessParameter || isWheelChange) {
-            setSpinningMachineOptions([]);
-            return;
-        }
-
-        const screenMap = {
-            "Lycra Missing": "lycra-missing",
-            "Lycra Out of Centering": "lycra-centering",
-            "RSM & Lycrasensor Checking Online": "rsm-lycra-online",
-            "RSM & Lycrasensor Checking Offline": "rsm-lycra-offline",
-        };
-        let isMounted = true;
-
-        fetchSpinningMachineNumberOptions({ screen: screenMap[checkingType] || "master" })
-            .then((payload) => {
-                if (!isMounted) return;
-                const options = normalizeMachineOptions(payload).filter((option) => option.value);
-                setSpinningMachineOptions(options);
-            })
-            .catch(() => {
-                if (isMounted) setSpinningMachineOptions([]);
-            });
-
-        return () => {
-            isMounted = false;
-        };
-    }, [checkingType, isCotsChecking, isCountChange, isProcessParameter, isRingFrame, isWheelChange]);
+    }, []);
 
     useEffect(() => {
         if (!isCountChange) return;

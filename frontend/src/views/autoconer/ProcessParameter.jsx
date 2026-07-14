@@ -246,7 +246,6 @@ const ProcessParameter = forwardRef(function ProcessParameter(
       setVersions([]);
       setForm({ ...createDefaultForm(safeSelectedType), paramId: entryId || "" });
       setExpandedVersionId(null);
-      setSavedProcessParameterId(entryId || "");
       return;
     }
     const rows = Array.isArray(response?.data) ? response.data : [];
@@ -312,11 +311,9 @@ const ProcessParameter = forwardRef(function ProcessParameter(
   }, [safeSelectedType]);
 
   useEffect(() => {
-    if (!entryId) return;
-    setForm((current) => ({
-      ...current,
-      paramId: entryId,
-    }));
+    setForm((current) =>
+      current.paramId === entryId ? current : { ...current, paramId: entryId || "" }
+    );
   }, [entryId]);
 
   useEffect(() => {

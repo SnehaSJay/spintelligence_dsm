@@ -27,7 +27,7 @@ const initialForm = () => ({
   remarks: "",
 });
 
-const SHIFT_OPTIONS = ["General", "Day", "Half Night", "Full Night"];
+const SHIFT_OPTIONS = ["Shift-1", "Shift-2", "Shift-3"];
 const DEPARTMENT_OPTIONS = ["Comber", "Drawing", "Preparatory"];
 const MC_NO_OPTIONS = ["MC-01", "MC-02", "MC-03", "CB-01", "CB-02", "CB-03", "CB-04"];
 const VARIETY_FALLBACK_OPTIONS = ["Cotton", "WPSF 0.90", "WPSF 1.20", "PSF Blend"];
@@ -81,9 +81,6 @@ const UPercentDataEntry = forwardRef(function UPercentDataEntry(
         const dropdown = await fetchComberUqcMasterDropdown();
         if (!active) return;
 
-        const nextShifts = dropdown.shifts
-          .map((item) => item?.value || item?.label || item)
-          .filter(Boolean);
         const nextVarieties = dropdown.varietyNames?.length
           ? dropdown.varietyNames
           : dropdown.varieties.map((item) => item.variety_name).filter(Boolean);
@@ -99,7 +96,6 @@ const UPercentDataEntry = forwardRef(function UPercentDataEntry(
               .filter((item) => item.value)
           : [];
 
-        if (nextShifts.length) setShiftOptions(nextShifts);
         if (nextVarieties.length) setVarietyOptions(nextVarieties);
         if (nextDepartments.length) setDepartmentOptions(nextDepartments);
         if (nextMcNos.length) setMcNoOptions(nextMcNos);
@@ -157,9 +153,9 @@ const UPercentDataEntry = forwardRef(function UPercentDataEntry(
     { label: "Department", value: form.department },
     { label: "MC No.", value: form.mc_no },
     { label: "U%", value: form.u_percent },
-    { label: "CV in Metres", value: form.cvm },
-    { label: "1m CV in Metres", value: form.im_cvm },
-    { label: "3m CV in Metres", value: form.m3_cvm },
+    { label: "CVM", value: form.cvm },
+    { label: "1mCV", value: form.im_cvm },
+    { label: "3mCV", value: form.m3_cvm },
     { label: "Remarks", value: form.remarks },
   ];
 
@@ -277,7 +273,7 @@ const UPercentDataEntry = forwardRef(function UPercentDataEntry(
         </div>
 
         <div>
-          <label>CV in Metres</label>
+          <label>CVM</label>
           <input
             value={form.cvm}
             onChange={(e) => handleChange("cvm", e.target.value)}
@@ -286,7 +282,7 @@ const UPercentDataEntry = forwardRef(function UPercentDataEntry(
         </div>
 
         <div>
-          <label>1m CV in Metres</label>
+          <label>1mCV</label>
           <input
             value={form.im_cvm}
             onChange={(e) => handleChange("im_cvm", e.target.value)}
@@ -295,7 +291,7 @@ const UPercentDataEntry = forwardRef(function UPercentDataEntry(
         </div>
 
         <div>
-          <label>3m CV in Metres</label>
+          <label>3mCV</label>
           <input
             value={form.m3_cvm}
             onChange={(e) => handleChange("m3_cvm", e.target.value)}
