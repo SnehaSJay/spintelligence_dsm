@@ -541,6 +541,7 @@ function Mixing() {
         };
 
         const payload = {
+            entry_id: entryId || undefined,
             inspection_date: date || "",
             lot_no: String(afis6Form.lot_no || "").trim(),
             variety: String(afis6Form.variety || "").trim(),
@@ -613,6 +614,18 @@ function Mixing() {
         setValidationMessage("");
         await dispatch(submitAfis6Cotton(buildAfis6Payload())).unwrap();
         await reserveEntryId();
+        try {
+            await recordSubmittedNotebook({
+                department: "Quality Control",
+                subDepartment: "Mixing",
+                notebookName: "AFIS-6 Cotton",
+                entryId,
+                previewItems: Object.entries(afis6Form).map(([key, value]) => ({ label: key, value })),
+                user,
+            });
+        } catch (error) {
+            console.warn("Mixing submitted notebook record failed:", error?.response?.data || error?.message || error);
+        }
         handleAfis6Clear();
         showSuccessOnce();
     };
@@ -699,6 +712,7 @@ function Mixing() {
         };
 
         const payload = {
+            entry_id: entryId || undefined,
             inspection_date: date || "",
             lot_no: String(afis6MmfForm.lot_no || "").trim(),
             variety: String(afis6MmfForm.variety || "").trim(),
@@ -803,6 +817,18 @@ function Mixing() {
         setValidationMessage("");
         await dispatch(submitAfis6Mmf(buildAfis6MmfPayload())).unwrap();
         await reserveEntryId();
+        try {
+            await recordSubmittedNotebook({
+                department: "Quality Control",
+                subDepartment: "Mixing",
+                notebookName: "AFIS-6 MMF",
+                entryId,
+                previewItems: Object.entries(afis6MmfForm).map(([key, value]) => ({ label: key, value })),
+                user,
+            });
+        } catch (error) {
+            console.warn("Mixing submitted notebook record failed:", error?.response?.data || error?.message || error);
+        }
         handleAfis6MmfClear();
         showSuccessOnce();
     };

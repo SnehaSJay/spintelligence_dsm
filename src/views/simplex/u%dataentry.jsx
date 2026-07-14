@@ -137,6 +137,7 @@ const UPercentDataEntry = forwardRef(function UPercentDataEntry(
     if (!validate()) return false;
     const resultAction = await dispatch(
       submitSimplexUqc({
+        entry_id: entryId,
         entry_type: selectedTypeName || "U% Data Entry",
         entry_date: form.date,
         shift: form.shift,

@@ -187,6 +187,7 @@ function DrumWiseAppearance({
     if (!validate()) return false;
     try {
       const payload = {
+        entry_id: entryId,
         entry_date: entryDate,
         test_no: testNo,
         type: "Drum Inspection",

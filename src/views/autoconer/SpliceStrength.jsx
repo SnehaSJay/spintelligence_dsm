@@ -218,6 +218,7 @@ function SpliceStrength({
     if (!validate()) return false;
     try {
       const payload = {
+        entry_id: entryId,
         type: "Splice Strength Test",
         test_no: testNo,
         inspection_date: date,

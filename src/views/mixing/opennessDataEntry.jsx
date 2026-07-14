@@ -91,7 +91,7 @@ function ReadOnlyField({ label, value }) {
 }
 
 const OpennessDataEntry = forwardRef(function OpennessDataEntry(
-  { date, target, onTargetChange, targetError, brLine, onSubmitSuccess },
+  { date, target, onTargetChange, targetError, brLine, onSubmitSuccess, entryId = "" },
   ref
 ) {
   const [form, setForm] = useState(initialForm);
@@ -258,6 +258,7 @@ const OpennessDataEntry = forwardRef(function OpennessDataEntry(
   };
 
   const buildPayload = () => ({
+    entry_id: entryId || undefined,
     inspection_date: date,
     br_line: brLine || "",
     actual_specific_volume_target: Number(target),

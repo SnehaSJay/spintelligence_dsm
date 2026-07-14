@@ -42,8 +42,8 @@ import {
   fetchAutoconerCountWiseCuts,
   fetchAutoconerDrumWise,
   fetchAutoconerLycraChecking,
-  fetchAutoconerPendingCspParameterEntries,
-  fetchAutoconerPendingQualityParameterEntries,
+  fetchAutoconerCspParameterEntriesForReport,
+  fetchAutoconerQualityParameterEntriesForReport,
   fetchAutoconerProcessParameters,
   fetchAutoconerQ2Entries,
   fetchAutoconerQ3Entries,
@@ -235,7 +235,6 @@ const reportSources = {
       "Count Change": { endpoint: "/spinning/count-change" },
       "Ring Frame Log Book": { endpoint: "/spinning/ring-frame" },
       "Speed Checking": { endpoint: "/spinning/speed-checking" },
-      "Lycra Missing": { endpoint: "/spinning/lycra-missing" },
       "Bottom Apron Checking": { endpoint: "/spinning/bottom-apron-checking" },
       "Lycra Out of Centering": { endpoint: "/spinning/lycra-centering" },
       "RSM & Lycrasensor Checking Online": { endpoint: "/spinning/rsm-lycra-online" },
@@ -253,8 +252,8 @@ const reportSources = {
       "Count Wise Cuts Record": { fetcher: fetchAutoconerCountWiseCuts },
       "Splice Strength": { fetcher: fetchAutoconerSpliceStrength },
       "Drum wise Appearance": { fetcher: fetchAutoconerDrumWise },
-      "CSP Parameter Entries": { fetcher: fetchAutoconerPendingCspParameterEntries },
-      "U% Parameter Entries": { fetcher: fetchAutoconerPendingQualityParameterEntries },
+      "CSP Parameter Entries": { fetcher: fetchAutoconerCspParameterEntriesForReport },
+      "U% Parameter Entries": { fetcher: fetchAutoconerQualityParameterEntriesForReport },
     },
     Wrapping: {
       Carding: { fetcher: fetchWrappingCardingNotebookEntries },
@@ -669,7 +668,12 @@ const formatDate = (value) => {
   if (!value) return "-";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
-  return date.toLocaleDateString("en-GB").replace(/\//g, "-");
+  // Build the day-month-year string manually (e.g. "20-08-2026") rather than relying on
+  // toLocaleDateString, whose output format depends on the runtime's ICU/locale data.
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = date.getFullYear();
+  return `${day}-${month}-${year}`;
 };
 
 const titleCase = (value) =>
@@ -933,22 +937,160 @@ const getAPercentTableValue = (row, fieldLabel) => {
   return match ? match[parsed.columnKey] : undefined;
 };
 
+// Simplex's "SMXCots Change Data Entry" saves its 14 damage/status checks as a single `items`
+// array (each shaped { item_name, status_value }) describing one entry, not 14 separate
+// records. Custom Report needs one column per item label — look each one up by item_name.
+const SMX_COTS_CHANGE_ITEM_LABELS = [
+  "Front Cots Damage",
+  "Third Cots Damage",
+  "Back Cots Damage",
+  "Apron Damage",
+  "Front Cots Tilting",
+  "Second Cots Tilting",
+  "Third Cots Tilting",
+  "Back Cots Tilting",
+  "Cradle Lifting",
+  "Floating Condensor Missing",
+  "Middle Condensor Missing",
+  "Back Condensor Missing",
+  "Others 1",
+  "Others 2",
+];
+
+const getSmxCotsChangeItemValue = (row, fieldLabel) => {
+  if (!SMX_COTS_CHANGE_ITEM_LABELS.includes(fieldLabel)) return undefined;
+  const items = Array.isArray(row?.items) ? row.items : [];
+  const match = items.find((item) => normalizeLookupKey(item?.item_name) === normalizeLookupKey(fieldLabel));
+  return match ? match.status_value : undefined;
+};
+
+// Simplex's "SMX Breaks Study Report" saves a 13 (length range) x 9 (break type) matrix as one
+// `items` array, each shaped { item_name: <break type>, length_range: <e.g. "0 - 200">,
+// status_value }. Custom Report needs one column per (length range x break type) cell —
+// generated as catalog labels like "Length 0-200 - Roving Breaks at Finger".
+const SMX_BREAKS_STUDY_COLUMNS = [
+  "Roving Breaks at Finger",
+  "Roving Breaks at Front Roller Nip",
+  "Roving Breaks at Between Flyer",
+  "Undraft",
+  "Top Roller Lapping",
+  "Bottom Roller Lapping",
+  "SLIVER BREAKS",
+  "Can Exhaust",
+  "Unknown Stop",
+];
+
+const parseSmxBreaksStudyFieldLabel = (label) => {
+  const match = String(label || "").match(/^Length\s+(\S+)\s-\s(.+)$/);
+  if (!match) return null;
+  const columnLabel = match[2].trim();
+  return SMX_BREAKS_STUDY_COLUMNS.includes(columnLabel) ? { lengthRange: match[1], columnLabel } : null;
+};
+
+const getSmxBreaksStudyCellValue = (row, fieldLabel) => {
+  const parsed = parseSmxBreaksStudyFieldLabel(fieldLabel);
+  if (!parsed) return undefined;
+  const items = Array.isArray(row?.items) ? row.items : [];
+  const match = items.find(
+    (item) =>
+      normalizeLookupKey(item?.item_name) === normalizeLookupKey(parsed.columnLabel) &&
+      normalizeLookupKey(item?.length_range) === normalizeLookupKey(parsed.lengthRange)
+  );
+  return match ? match.status_value : undefined;
+};
+
+// Simplex's "Stretch %" notebook stores a dynamic number of tables (each with its own meta
+// fields + samples[] + summaries[] arrays) under one `tables` array — one PDF can OCR into any
+// number of tables/sample rows, so Custom Report generates a capped set of columns like
+// "Table 1 - Test ID", "Table 1 - Sample 2 - Initial Bobbin", "Table 1 - Summary Hank - Full
+// Bobbin" (see fieldCatalog.js's "Stretch %" entry) and this resolves each back to the matching
+// table/sample/summary in the row's `tables` array.
+const STRETCH_TABLE_META_KEYS = {
+  "Test ID": "test_id",
+  "Total Test": "total_test",
+  "Number of Entries (N)": "number_of_entries",
+  Length: "length",
+  Tester: "tester",
+  "Std. Stretch %": "std_stretch_percent",
+  "Stretch %": "stretch_percent",
+  Remark: "remark",
+};
+
+const parseStretchFieldLabel = (label) => {
+  const text = String(label || "");
+  let match = text.match(/^Table\s+(\d+)\s-\s(Test ID|Total Test|Number of Entries \(N\)|Length|Tester|Std\. Stretch %|Stretch %|Remark)$/);
+  if (match) return { tableNo: match[1], kind: "meta", metaKey: STRETCH_TABLE_META_KEYS[match[2]] };
+
+  match = text.match(/^Table\s+(\d+)\s-\sSample\s+(\d+)\s-\s(Initial Bobbin|Full Bobbin)$/);
+  if (match) return { tableNo: match[1], kind: "sample", sampleNo: match[2], column: match[3] };
+
+  match = text.match(/^Table\s+(\d+)\s-\sSummary\s+(.+)\s-\s(Initial Bobbin|Full Bobbin)$/);
+  if (match) return { tableNo: match[1], kind: "summary", summaryLabel: match[2], column: match[3] };
+
+  return null;
+};
+
+const getStretchTableRow = (row, tableNo) => {
+  const tables = Array.isArray(row?.tables) ? row.tables : [];
+  return tables.find((table) => normalizeLookupKey(table?.table_no) === normalizeLookupKey(tableNo));
+};
+
+const getStretchTableValue = (row, fieldLabel) => {
+  const parsed = parseStretchFieldLabel(fieldLabel);
+  if (!parsed) return undefined;
+  const table = getStretchTableRow(row, parsed.tableNo);
+  if (!table) return undefined;
+
+  if (parsed.kind === "meta") return table[parsed.metaKey];
+
+  const columnKey = parsed.column === "Initial Bobbin" ? "initial_bobbin" : "full_bobbin";
+  if (parsed.kind === "sample") {
+    const samples = Array.isArray(table.samples) ? table.samples : [];
+    const match = samples.find((sample) => normalizeLookupKey(sample?.sample_no) === normalizeLookupKey(parsed.sampleNo));
+    return match ? match[columnKey] : undefined;
+  }
+
+  const summaries = Array.isArray(table.summaries) ? table.summaries : [];
+  const match = summaries.find((summary) => normalizeLookupKey(summary?.label) === normalizeLookupKey(parsed.summaryLabel));
+  return match ? match[columnKey] : undefined;
+};
+
+// Autoconer's "Drum wise Appearance" saves per-drum ok/not-ok flags as a `drum_inspections`
+// array, not a single "Appearance" value — sum across drums for a meaningful per-entry total.
+const DRUM_WISE_APPEARANCE_FIELD_KEYS = {
+  "Appearance OK Count": "appearance_ok_count",
+  "Appearance Not OK Count": "appearance_not_ok_count",
+};
+
+const getDrumWiseAppearanceCount = (row, fieldLabel) => {
+  const countKey = DRUM_WISE_APPEARANCE_FIELD_KEYS[fieldLabel];
+  if (!countKey) return undefined;
+  const inspections = Array.isArray(row?.drum_inspections) ? row.drum_inspections : [];
+  if (!inspections.length) return undefined;
+  return inspections.reduce((sum, item) => sum + (Number(item?.[countKey]) || 0), 0);
+};
+
 const OPERATOR_FIELD_KEY = "operator";
 const OPERATOR_FIELD = { key: OPERATOR_FIELD_KEY, label: "Operator" };
 const ENTRY_ID_FIELD = { key: "Entry ID", label: "Entry ID" };
 
 const normalizeEntryKey = (value) => String(value ?? "").trim().toLowerCase();
 
+// Priority order: try each candidate key (case/format-insensitive) in turn, and only move on to
+// the next if the found value is missing/empty — an empty `entry_id` shouldn't block falling
+// back to a distinct, non-empty `id` field (an empty string is not nullish, so `??` chaining
+// alone would get stuck on it).
+const ENTRY_KEY_CANDIDATES = ["entry_id", "entryid", "lot_no", "lotno", "id"];
+
 const getRowEntryKey = (row) => {
-  const direct = row?.entry_id ?? row?.entryId ?? row?.lot_no ?? row?.lotNo ?? row?.id;
-  if (direct !== null && typeof direct !== "undefined" && direct !== "") return normalizeEntryKey(direct);
-  // Some notebook types (e.g. Drawing's raw OCR-table endpoint) return the entry id under a
-  // differently-cased key (e.g. "ID" instead of "id") — fall back to a case-insensitive scan.
   const rowKeys = Object.keys(row || {});
-  const fallbackKey = rowKeys.find((key) =>
-    ["entry_id", "entryid", "lot_no", "lotno", "id"].includes(key.toLowerCase().replace(/[^a-z0-9]/g, ""))
-  );
-  return normalizeEntryKey(fallbackKey ? row[fallbackKey] : "");
+  for (const candidate of ENTRY_KEY_CANDIDATES) {
+    const matchKey = rowKeys.find((key) => key.toLowerCase().replace(/[^a-z0-9]/g, "") === candidate);
+    if (!matchKey) continue;
+    const value = row[matchKey];
+    if (value !== null && typeof value !== "undefined" && value !== "") return normalizeEntryKey(value);
+  }
+  return "";
 };
 
 const extractSubmittedNotebookRows = (data) => {
@@ -1010,6 +1152,16 @@ const reportFieldAliases = {
   "3mCV": ["cvm_3m", "m3_cvm", "3m_cvm", "three_m_cvm"],
   "A% (N-1)": ["a_percent_n_minus_1"],
   "A% (N+1)": ["a_percent_n_plus_1"],
+  "LHS (Spindle Number)": ["lhs_value"],
+  "Number of Readings (N)": ["num_readings"],
+  "Created Date": ["inspection_date", "creation_date"],
+  "Count": ["count_name"],
+  "CVT": ["cvd"],
+  "I1": ["l1"],
+  "I2": ["l2"],
+  "RHS (Spindle Number)": ["rhs_value"],
+  "LHS Remarks": ["lhs_textremarks"],
+  "RHS Remarks": ["rhs_textremarks"],
   "Span Length (2.5%)": ["span_length", "spanLength"],
   "Invisible Loss %": ["invisible_loss_percentage", "invisible_loss_percent", "invisibleLossPercent"],
   "Trash Content %": ["trash_content_percentage", "trash_content_percent", "trashContentPercent"],
@@ -1029,6 +1181,7 @@ const reportFieldAliases = {
   "Process Parameter ID": ["entry_id", "param_id", "paramId"],
   "Break Draft": ["breaker_draft", "break_draft"],
   "Scanning Roll Size": ["scanning_rolls_size", "scanning_roll_size"],
+  "MC Name": ["machine_name", "mc_name"],
   "Mc. Name": ["mc_name"],
   "SCF(W)<12.70mm": ["sfc_w_percent"],
   "SCF(n)<12.70mm": ["sfc_n_percent"],
@@ -1286,11 +1439,15 @@ const getCanonicalReportFieldKey = (field) => {
 };
 
 const getReportFieldValue = (row, field) => {
+  // Explicit aliases go first: they were added precisely because the plain label/key either
+  // doesn't exist on the row or fuzzy-matches the WRONG field (e.g. "Process Parameter ID" can
+  // substring-match an unrelated "process_parameter" type field before ever trying its real
+  // "entry_id" alias) — an alias should always win over a blind fuzzy guess on the label itself.
   const keys = [
-    field?.key,
-    field?.label,
     ...(reportFieldAliases[field?.label] || []),
     ...(reportFieldAliases[field?.key] || []),
+    field?.key,
+    field?.label,
   ].filter(Boolean);
 
   for (const key of keys) {
@@ -1339,18 +1496,30 @@ const getReportFieldValue = (row, field) => {
   return null;
 };
 
+// Any field recognized as "a date" (by its raw backend key or its display label) gets rendered
+// through formatDate as day-month-year — including backend-supplied generic fields like
+// "CREATED_AT" that arrive as a raw ISO timestamp with a time component.
+const DATE_FIELD_NORMALIZED_KEYS = new Set(
+  [
+    "inspection_date",
+    "creation_date",
+    "invoice_date",
+    "entry_date",
+    "created_date",
+    "created_at",
+    "createdat",
+    "updated_at",
+    "updatedat",
+  ].map(normalizeLookupKey)
+);
+
 const getCellValue = (row, field, operatorByEntryKey = {}) => {
   if (field.key === OPERATOR_FIELD_KEY) {
     const entryKey = getRowEntryKey(row);
     return (entryKey && operatorByEntryKey[entryKey]) || "-";
   }
 
-  if (
-    field.key === "inspection_date" ||
-    field.key === "creation_date" ||
-    field.key === "invoice_date" ||
-    field.key === "entry_date"
-  ) {
+  if (DATE_FIELD_NORMALIZED_KEYS.has(normalizeLookupKey(field.key)) || DATE_FIELD_NORMALIZED_KEYS.has(normalizeLookupKey(field.label))) {
     return formatDate(getReportFieldValue(row, field) || getRowDate(row));
   }
 
@@ -1366,8 +1535,34 @@ const getCellValue = (row, field, operatorByEntryKey = {}) => {
       : "-";
   }
 
+  // Same reasoning as the A% guard above, for SMXCots Change's `items` array.
+  if (SMX_COTS_CHANGE_ITEM_LABELS.includes(field.label || field.key)) {
+    const itemValue = getSmxCotsChangeItemValue(row, field.label || field.key);
+    return itemValue !== null && typeof itemValue !== "undefined" && itemValue !== "" ? String(itemValue) : "-";
+  }
+
+  // Same reasoning as the A% guard above, for SMX Breaks Study Report's `items` array.
+  if (parseSmxBreaksStudyFieldLabel(field.label || field.key)) {
+    const cellValue = getSmxBreaksStudyCellValue(row, field.label || field.key);
+    return cellValue !== null && typeof cellValue !== "undefined" && cellValue !== "" ? String(cellValue) : "-";
+  }
+
+  // Same reasoning as the A% guard above, for Stretch %'s `tables` array.
+  if (parseStretchFieldLabel(field.label || field.key)) {
+    const stretchValue = getStretchTableValue(row, field.label || field.key);
+    return stretchValue !== null && typeof stretchValue !== "undefined" && stretchValue !== "" ? String(stretchValue) : "-";
+  }
+
+  if (DRUM_WISE_APPEARANCE_FIELD_KEYS[field.label || field.key]) {
+    const appearanceCount = getDrumWiseAppearanceCount(row, field.label || field.key);
+    return typeof appearanceCount !== "undefined" ? String(appearanceCount) : "-";
+  }
+
   const value = getReportFieldValue(row, field);
   if (value === null || typeof value === "undefined" || value === "") return "-";
+  // Several forms (e.g. Cone Packing Audit's Yes/No radio fields) save these as real booleans —
+  // show them the same way the form does ("Yes"/"No") instead of the raw "true"/"false".
+  if (typeof value === "boolean") return value ? "Yes" : "No";
   if (typeof value === "object") return JSON.stringify(value);
   return String(value);
 };
@@ -1724,11 +1919,13 @@ function ReportsPage() {
     const catalogFields = isAmbiguousReportType(reportType) && matchedCatalogFields.length
       ? matchedCatalogFields
       : rawCatalogFields;
-    // "Date" is only excluded for the Wrapping OCR notebook types (Carding/Drawing/Simplex),
-    // where it duplicates the separate "Report Date" column — other screens (e.g. Draw Frame's
-    // U% Data Entry) genuinely use "Date" as one of their own form fields and should show it.
+    // "Date" is excluded for the Wrapping OCR notebook types (Carding/Drawing/Simplex sub-types,
+    // where it duplicates the separate "Report Date" column) and for every report type under the
+    // "Simplex" sub-department — other screens (e.g. Draw Frame's U% Data Entry) genuinely use
+    // "Date" as one of their own form fields and should show it.
     const screenExcludedReportFields =
-      subDepartment === "Wrapping" && ["Carding", "Drawing", "Simplex"].includes(reportType)
+      (subDepartment === "Wrapping" && ["Carding", "Drawing", "Simplex"].includes(reportType)) ||
+      subDepartment === "Simplex"
         ? globallyExcludedReportFields
         : globallyExcludedReportFields.filter((label) => label !== "Date");
     const excludedFieldKeys = new Set(
@@ -2001,12 +2198,20 @@ function ReportsPage() {
           input_screen: canonicalReport.reportType,
         };
         const generalReportFetcher = (params = {}) => fetchGeneralReportDataRows({ ...baseReportParams, ...params });
-        // Draw Frame's "A%" notebook stores one entry's sample/summary breakdown as nested
-        // rows/manual_json/ocr_json arrays — those describe a single record, not multiple
-        // physical entries, so skip the generic nested-array row expansion for this screen
-        // (unlike Wrapping's OCR notebooks, where each nested row is its own real entry).
-        const isAPercentReport = subDepartment === "Draw Frame" && reportType === "A%";
-        const extractRows = isAPercentReport ? extractResponseRows : normalizeRows;
+        // Draw Frame's "A%" notebook and Simplex's "SMXCots Change Data Entry"/"SMX Breaks Study
+        // Report"/"Stretch %" all store one entry's per-item breakdown as a nested array
+        // (rows/manual_json/ocr_json, `items`, or `tables`) describing a single record, not
+        // multiple physical entries — skip the generic nested-array row expansion for these
+        // screens (unlike Wrapping's OCR notebooks, where each nested row really is its own
+        // separate entry).
+        const skipsNestedRowExpansion =
+          (subDepartment === "Draw Frame" && reportType === "A%") ||
+          (subDepartment === "Simplex" &&
+            ["SMXCots Change Data Entry", "SMX Breaks Study Report", "Stretch %"].includes(reportType)) ||
+          (subDepartment === "Spinning" && ["Count Change", "Ring Frame Log Book"].includes(reportType)) ||
+          (subDepartment === "Autoconer" &&
+            ["Lycra % Checking", "Splice Strength", "Drum wise Appearance"].includes(reportType));
+        const extractRows = skipsNestedRowExpansion ? extractResponseRows : normalizeRows;
 
         let nextRows = [];
         if (reportFetcher) {

@@ -388,6 +388,27 @@ export const fetchAutoconerPendingQualityParameterEntries = async () =>
     { suppressFailure: true }
   );
 
+// "parameter-entries/pending-csp"/"pending-quality" are backend approval-queue views (only
+// entries awaiting review), not the full submitted history — Custom Report needs every entry
+// ever saved, so it reads the plain "parameter-entries" resource instead and splits it by the
+// `inspection_type` field each form stamps on save ("CSP Parameter Entries" / "U% Parameter
+// Entries", see CspParameterEntries.jsx/UPercentParameterEntries.jsx).
+const filterAutoconerParameterEntriesByType = async (inspectionType) => {
+  const response = await fetchAutoconerParameterEntries();
+  const rows = Array.isArray(response) ? response : Array.isArray(response?.data) ? response.data : [];
+  const filtered = rows.filter((row) => String(row?.inspection_type || "").trim() === inspectionType);
+  return {
+    ...(response && typeof response === "object" && !Array.isArray(response) ? response : {}),
+    data: filtered,
+  };
+};
+
+export const fetchAutoconerCspParameterEntriesForReport = async () =>
+  filterAutoconerParameterEntriesByType("CSP Parameter Entries");
+
+export const fetchAutoconerQualityParameterEntriesForReport = async () =>
+  filterAutoconerParameterEntriesByType("U% Parameter Entries");
+
 const buildParameterEntryPayload = (payload) => ({
   inspection_type: payload?.inspection_type,
   entry_date: payload?.entry_date,

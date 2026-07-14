@@ -66,9 +66,6 @@ const formatPercentage = (value) => {
   return Number.isFinite(parsed) ? parsed.toFixed(2) : "0.00";
 };
 
-const getColumnBreakValues = (breakMatrix, columnLabel) =>
-  breakRows.flatMap((rowLabel) => parseBreakEntries(breakMatrix[rowLabel]?.[columnLabel]));
-
 const getTotalBreakPercentages = (breakMatrix) => {
   const columnTotals = breakColumns.reduce((accumulator, columnLabel) => {
     accumulator[columnLabel] = breakRows.reduce(
@@ -554,6 +551,7 @@ const SMXBreaksStudyReport = forwardRef(function SMXBreaksStudyReport(
 
   const buildStudyPayload = () => ({
     s_no: form.simplexNo,
+    entry_id: entryId,
     entry_date: form.date,
     machine_name: form.simplexNo,
     operator_name: form.sName,
@@ -566,11 +564,18 @@ const SMXBreaksStudyReport = forwardRef(function SMXBreaksStudyReport(
     idle_spindles: form.ideals,
     ideals: form.ideals,
     s_name: form.sName,
-    items: breakColumns.map((columnLabel) => ({
-      item_name: columnLabel,
-      status_value: getColumnBreakValues(breakMatrix, columnLabel).join(", "),
-      remarks: "",
-    })),
+    // One item per (length range x break type) cell, so each of the 13 length ranges keeps its
+    // own values per column instead of being flattened together — Custom Report resolves these
+    // back out by matching on both item_name and length_range (see getSmxBreaksStudyCellValue
+    // in ReportsPage.jsx).
+    items: breakRows.flatMap((rowLabel) =>
+      breakColumns.map((columnLabel) => ({
+        item_name: columnLabel,
+        length_range: rowLabel,
+        status_value: getBreakCellValue(breakMatrix, rowLabel, columnLabel),
+        remarks: "",
+      }))
+    ),
     other_field_values: {
       start_time: form.startTime,
       end_time: form.endTime,

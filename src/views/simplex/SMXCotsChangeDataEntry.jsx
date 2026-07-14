@@ -174,6 +174,7 @@ const SMXCotsChangeDataEntry = forwardRef(function SMXCotsChangeDataEntry(
 
   const buildPayload = () => ({
     type: selectedTypeName || form.type,
+    entry_id: entryId,
     entry_date: form.date,
     machine_name: form.mcName,
     items: details.map((detail) => ({

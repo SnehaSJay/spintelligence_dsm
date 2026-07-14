@@ -201,6 +201,7 @@ function CoastWasteCrateRecord({ types, selectedType, onTypeChange, onRegisterAc
     if (!validate()) return false;
     try {
       const payload = {
+        entry_id: entryId,
         inspection_type: "Count Wise Cuts Record",
         entry_date: date,
         machine_no: machineNo,
