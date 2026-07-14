@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const client = require('../connection');
+const { resolveOrCreateProcessParameterEntryId, getCountNameConflict } = require('../utils/processParameterEntryId');
+const { recordPpNotebookSubmission } = require('./submittedNotebooks.routes');
 const sqlServer = require('../config/sqlserver');
 const sqlServerPrep = require('../config/sqlserverPrep');
 const { fetchPrepVarieties, isDatabaseAccessDenied } = require('../utils/prepVariety');
@@ -9,25 +11,27 @@ const SCREEN_ID_PREFIXES = {
   smx_cots_change: 'SX',
   study: 'SS',
   uqc: 'SU',
-  process_parameter: 'SP',
-  wrapping_simplex_notebook: 'WS'
+  wrapping_simplex_notebook: 'WS',
+  wheel_change: 'SXW'
 };
 
 const formatScreenEntryId = (screenKey, rawId) => {
   const prefix = SCREEN_ID_PREFIXES[screenKey];
   const numericId = Number(rawId);
   if (!prefix || !Number.isFinite(numericId)) return null;
-  return `#${prefix}-${String(Math.trunc(numericId)).padStart(4, '0')}`;
+  return `${prefix}-${String(Math.trunc(numericId)).padStart(4, '0')}`;
 };
 
 const withScreenEntryId = (screenKey, record, idField = 'id') => {
   if (!record || typeof record !== 'object') return record;
-  if (record.entry_id) return { ...record };
   const entry_id = formatScreenEntryId(screenKey, record[idField]);
-  return entry_id ? { ...record, entry_id } : { ...record };
+  if (!entry_id) return { ...record };
+  if (record.entry_id && String(record.entry_id).trim().toUpperCase() === entry_id.toUpperCase()) {
+    return { ...record, entry_id };
+  }
+  return { ...record, entry_id };
 };
 const isUniqueViolation = (err) => err && err.code === '23505';
-const ALLOWED_SHIFT_TYPES = new Set(['General', 'Day', 'Half Night', 'Full Night']);
 const toWholeNumberOrNull = (value) => {
   if (value === undefined || value === null || value === '') return null;
   const n = Number(value);
@@ -95,6 +99,33 @@ const toNullableNumber = (value) => {
   if (value === '' || value === null || value === undefined) return null;
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : null;
+};
+
+const pickText = (value) => {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string' || typeof value === 'number') {
+    return String(value).trim();
+  }
+  if (typeof value === 'object') {
+    return String(
+      value.value ??
+      value.label ??
+      value.text ??
+      value.name ??
+      value.count_name ??
+      value.consignee_name ??
+      ''
+    ).trim();
+  }
+  return String(value).trim();
+};
+
+const pickFirstText = (...values) => {
+  for (const value of values) {
+    const text = pickText(value);
+    if (text) return text;
+  }
+  return '';
 };
 
 const ensureWrappingSimplexNotebookTable = async () => {
@@ -195,12 +226,39 @@ const ensureSimplexNotebookTable = async () => {
 const ensureSimplexEntryIdColumns = async () => {
   await client.query(`
     ALTER TABLE IF EXISTS simplex.simplex_inspections
-      ADD COLUMN IF NOT EXISTS entry_id text;
+      ADD COLUMN IF NOT EXISTS entry_id text,
+      ADD COLUMN IF NOT EXISTS type text,
+      ADD COLUMN IF NOT EXISTS entry_date date,
+      ADD COLUMN IF NOT EXISTS machine_name text;
+  `);
+  await client.query(`
+    ALTER TABLE IF EXISTS simplex.simplex_inspections
+      ALTER COLUMN s_no DROP NOT NULL;
   `);
   await client.query(`
     CREATE UNIQUE INDEX IF NOT EXISTS simplex_inspections_entry_id_uq
     ON simplex.simplex_inspections (entry_id)
     WHERE entry_id IS NOT NULL;
+  `);
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS simplex.simplex_inspection_details (
+      id BIGSERIAL PRIMARY KEY,
+      inspection_id BIGINT NOT NULL,
+      item_name TEXT,
+      status_value TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await client.query(`
+    ALTER TABLE IF EXISTS simplex.simplex_inspection_details
+      ADD COLUMN IF NOT EXISTS inspection_id BIGINT,
+      ADD COLUMN IF NOT EXISTS item_name TEXT,
+      ADD COLUMN IF NOT EXISTS status_value TEXT,
+      ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+  `);
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS simplex_inspection_details_inspection_id_idx
+    ON simplex.simplex_inspection_details (inspection_id);
   `);
   await client.query(`
     ALTER TABLE IF EXISTS simplex.smx_breaks_study_header
@@ -804,16 +862,6 @@ router.get('/uqc/master/machine-numbers', getSimplexUqcMasterDropdown);
 router.get('/uqc/master/counts', getCountMasterDropdown);
 router.get('/uqc/master/count-dropdown', getCountMasterDropdown);
 router.get('/uqc/master/count-names', getCountMasterDropdown);
-router.get('/process_parameter/master/counts', getCountMasterDropdown);
-router.get('/process_parameter/master/count-dropdown', getCountMasterDropdown);
-router.get('/process_parameter/master/count-names', getCountMasterDropdown);
-router.get('/process_parameter/master-data', getCountMasterDropdown);
-router.get('/process_parameter/master/dropdown', getCountMasterDropdown);
-router.get('/process-parameter/master/counts', getCountMasterDropdown);
-router.get('/process-parameter/master/count-dropdown', getCountMasterDropdown);
-router.get('/process-parameter/master/count-names', getCountMasterDropdown);
-router.get('/process-parameter/master-data', getCountMasterDropdown);
-router.get('/process-parameter/master/dropdown', getCountMasterDropdown);
 router.get('/study/master/employees', getEmployeeMasterDropdown);
 router.get('/study/master/employee-dropdown', getEmployeeMasterDropdown);
 router.get('/study/master/operator-names', getEmployeeMasterDropdown);
@@ -839,7 +887,6 @@ router.get('/SMXCotsChange/master/dropdown', getSimplexUqcMasterDropdown);
  *             type: object
  *             required:
  *               - type
- *               - s_no
  *               - entry_date
  *               - machine_name
  *               - items
@@ -847,9 +894,6 @@ router.get('/SMXCotsChange/master/dropdown', getSimplexUqcMasterDropdown);
  *               type:
  *                 type: string
  *                 example: SMXCots Change Data Entry
- *               s_no:
- *                 type: string
- *                 example: "2"
  *               entry_date:
  *                 type: string
  *                 format: date
@@ -864,13 +908,10 @@ router.get('/SMXCotsChange/master/dropdown', getSimplexUqcMasterDropdown);
  *                   properties:
  *                     item_name:
  *                       type: string
- *                       example: Cots Damage
+ *                       example: Front Cots Damage
  *                     status_value:
  *                       type: string
- *                       example: OK
- *                     remarks:
- *                       type: string
- *                       example: Good condition
+ *                       example: Damaged
  *     responses:
  *       201:
  *         description: Saved successfully
@@ -888,14 +929,15 @@ const saveSimplexCotsChange = async (req, res) => {
     const {
       entry_id,
       type,
-      s_no,
       entry_date,
       machine_name,
       items
     } = req.body;
 
-    if (!entry_id) {
-      return res.status(400).json({ message: 'entry_id is required and must be unique' });
+    if (!type || !entry_date || !machine_name || !Array.isArray(items) || !items.length) {
+      return res.status(400).json({
+        message: 'Missing required fields: type, entry_date, machine_name, items'
+      });
     }
 
     await client.query('BEGIN');
@@ -903,27 +945,29 @@ const saveSimplexCotsChange = async (req, res) => {
     // ✅ Insert header
     const headerResult = await client.query(
       `INSERT INTO simplex.simplex_inspections
-       (entry_id, type, s_no, entry_date, machine_name)
-       VALUES ($1,$2,$3,$4,$5)
+       (entry_id, type, entry_date, machine_name)
+       VALUES ($1,$2,$3,$4)
        RETURNING id`,
-      [entry_id, type, s_no, entry_date, machine_name]
+      [entry_id || null, type, entry_date, machine_name]
     );
 
     const inspection_id = headerResult.rows[0].id;
+    const normalizedItems = [];
 
     // ✅ Insert items
     for (const item of items) {
+      const item_name = String(item?.item_name || '').trim();
+      const status_value = item?.status_value ?? null;
+      if (!item_name) {
+        throw new Error('Each item must include item_name');
+      }
       await client.query(
         `INSERT INTO simplex.simplex_inspection_details
-         (inspection_id, item_name, status_value, remarks)
-         VALUES ($1,$2,$3,$4)`,
-        [
-          inspection_id,
-          item.item_name,
-          item.status_value,
-          item.remarks
-        ]
+         (inspection_id, item_name, status_value)
+         VALUES ($1,$2,$3)`,
+        [inspection_id, item_name, status_value]
       );
+      normalizedItems.push({ item_name, status_value });
     }
 
     await client.query('COMMIT');
@@ -931,7 +975,11 @@ const saveSimplexCotsChange = async (req, res) => {
     res.status(201).json({
       message: 'Saved successfully',
       inspection_id,
-      entry_id
+      entry_id,
+      type,
+      entry_date,
+      machine_name,
+      items: normalizedItems
     });
 
   } catch (err) {
@@ -940,7 +988,11 @@ const saveSimplexCotsChange = async (req, res) => {
       return res.status(409).json({ message: 'Duplicate entry_id. Please use a unique ID.' });
     }
     console.error(err);
-    res.status(500).json({ message: 'Save failed' });
+    res.status(500).json({
+      message: 'Save failed',
+      error: err.message,
+      code: err.code
+    });
   }
 };
 
@@ -981,10 +1033,12 @@ router.post('/cots-change-data-entry', saveSimplexCotsChange);
  *               data:
  *                 - id: 1
  *                   type: SMXCots Change Data Entry
- *                   s_no: "2"
  *                   entry_date: "2026-04-01"
  *                   machine_name: MC-01
  *                   created_at: "2026-04-01T10:00:00.000Z"
+ *                   items:
+ *                     - item_name: Front Cots Damage
+ *                       status_value: Damaged
  *       500:
  *         description: Server error
  */
@@ -1003,9 +1057,25 @@ const getSimplexCotsChange = async (req, res) => {
 
     // ✅ Get data
     const result = await client.query(
-      `SELECT *
-       FROM simplex.simplex_inspections
-       ORDER BY id DESC
+      `SELECT si.id,
+              si.type,
+              si.entry_date,
+              si.machine_name,
+              si.created_at,
+              COALESCE(items.items, '[]'::json) AS items
+       FROM simplex.simplex_inspections si
+       LEFT JOIN LATERAL (
+         SELECT json_agg(
+                  json_build_object(
+                    'item_name', sid.item_name,
+                    'status_value', sid.status_value
+                  )
+                  ORDER BY sid.id
+                ) AS items
+         FROM simplex.simplex_inspection_details sid
+         WHERE sid.inspection_id = si.id
+       ) items ON TRUE
+       ORDER BY si.id DESC
        LIMIT $1 OFFSET $2`,
       [limit, offset]
     );
@@ -1014,7 +1084,10 @@ const getSimplexCotsChange = async (req, res) => {
       total,
       page,
       limit,
-      data: result.rows.map((row) => withScreenEntryId('smx_cots_change', row))
+      data: result.rows.map((row) => withScreenEntryId('smx_cots_change', {
+        ...row,
+        items: Array.isArray(row.items) ? row.items : []
+      }))
     });
 
   } catch (err) {
@@ -1118,13 +1191,12 @@ router.get('/study/master/machine-names', getStudyMachineNamesFromSpxCots);
  *         application/json:
  *           schema:
  *             type: object
- *             required:
- *               - s_no
- *               - entry_date
- *               - machine_name
- *               - operator_name
- *               - shift
- *             properties:
+*             required:
+*               - s_no
+*               - entry_date
+*               - machine_name
+*               - operator_name
+*             properties:
  *               s_no:
  *                 type: string
  *                 example: "1"
@@ -1136,10 +1208,9 @@ router.get('/study/master/machine-names', getStudyMachineNamesFromSpxCots);
  *                 example: MC-01
  *               operator_name:
  *                 type: string
- *               shift:
- *                 type: string
- *                 enum: [A, B, C]
- *               inspection_items:
+*               shift:
+*                 type: string
+*               inspection_items:
  *                 type: array
  *                 items:
  *                   type: object
@@ -1209,23 +1280,18 @@ router.post('/study', async (req, res, next) => {
       epi_parameters,
       other_field_values
     } = req.body;
+    const normalizedShift = String(shift || '').trim();
 
     if (!entry_id) {
       return res.status(400).json({ message: 'entry_id is required and must be unique' });
     }
 
     // Validation
-    if (!s_no || !entry_date || !machine_name || !operator_name || !shift) {
+    if (!s_no || !entry_date || !machine_name || !operator_name) {
       return res.status(400).json({
-        message: 'Missing required fields: s_no, entry_date, machine_name, operator_name, shift'
+        message: 'Missing required fields: s_no, entry_date, machine_name, operator_name'
       });
     }
-    if (!ALLOWED_SHIFT_TYPES.has(String(shift).trim())) {
-      return res.status(400).json({
-        message: 'shift must be one of: General, Day, Half Night, Full Night'
-      });
-    }
-
     await client.query('BEGIN');
 
     // Insert header
@@ -1234,7 +1300,7 @@ router.post('/study', async (req, res, next) => {
        (entry_id, s_no, entry_date, machine_name, operator_name, shift)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING id`,
-      [entry_id, s_no, entry_date, machine_name, operator_name, shift]
+      [entry_id, s_no, entry_date, machine_name, operator_name, normalizedShift || null]
     );
 
     const study_id = headerResult.rows[0].id;
@@ -1393,7 +1459,7 @@ router.post('/study', async (req, res, next) => {
          VALUES ($1, $2, $3, $4)`,
         [
           study_id,
-          startTime?.hhmm && endTime?.hhmm ? `${startTime.hhmm}-${endTime.hhmm}` : other_field_values.time,
+          startTime?.hhmm || other_field_values.time || null,
           toWholeNumberOrNull(computedBreakCount),
           remarksBlock
         ]
@@ -1659,92 +1725,24 @@ router.get('/uqc/global', async (req, res) => {
     return getSimplexUqcEntries(req, res, { forceGlobal: true });
 });
 
-/**
- * @swagger
- * /simplex/process_parameter:
- *   post:
- *     summary: Create Simplex Process Parameter entry
- *     tags: [Simplex]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - count_name
- *               - consignee_name
- *               - creation_date
- *             properties:
- *               count_name:
- *                 type: string
- *               consignee_name:
- *                 type: string
- *               creation_date:
- *                 type: string
- *                 format: date
- *               machine_no:
- *                 type: string
- *               make:
- *                 type: string
- *               delivery_hank:
- *                 type: number
- *               tpi_tm:
- *                 type: string
- *               speed:
- *                 type: number
- *               bottom_roller_setting:
- *                 type: string
- *               top_roller_setting:
- *                 type: string
- *               break_draft:
- *                 type: number
- *               total_draft:
- *                 type: number
- *               creel_draft:
- *                 type: number
- *               false_twist_grooves:
- *                 type: string
- *               spacer:
- *                 type: string
- *               top_arm_pressure:
- *                 type: number
- *               back_pressure:
- *                 type: string
- *               middle_pressure:
- *                 type: string
- *               front_pressure:
- *                 type: string
- *               coil_inch:
- *                 type: number
- *               lifter_combination_wheel:
- *                 type: string
- *               lifter_wheel:
- *                 type: string
- *               tension_wheel:
- *                 type: string
- *     responses:
- *       201:
- *         description: Created successfully
- *       400:
- *         description: Invalid input
- *       500:
- *         description: Server error
- */
-
 router.post('/process_parameter', async (req, res, next) => {
   try {
     await ensureSimplexEntryIdColumns();
     const data = req.body;
+    const entry_id = await resolveOrCreateProcessParameterEntryId(req.body.entry_id, { forceNew: req.body.force_new === true || req.body.force_new === 'true' });
+    const count_name = pickFirstText(data.count_name, data.countName, data.count, data.count_value);
+    const consignee_name = pickFirstText(data.consignee_name, data.consigneeName, data.consignee, data.consignee_value);
+    const creation_date = pickFirstText(data.creation_date, data.creationDate, data.entry_date, data.entryDate, data.date);
 
-    if (!data.entry_id) {
-      return res.status(400).json({ message: 'entry_id is required and must be unique' });
-    }
-
-    if (!data.count_name || !data.consignee_name || !data.creation_date) {
+    if (!count_name || !consignee_name || !creation_date) {
       return res.status(400).json({
         message: 'count_name, consignee_name and creation_date are required'
       });
+    }
+
+    const conflictingCountName = await getCountNameConflict(entry_id, count_name);
+    if (conflictingCountName) {
+      return res.status(409).json({ message: `This PP id (${entry_id}) already uses count name "${conflictingCountName}". All sub-departments under a PP id must use the same count name.` });
     }
 
     const result = await client.query(
@@ -1770,11 +1768,11 @@ router.post('/process_parameter', async (req, res, next) => {
       )
       RETURNING *`,
       [
-        data.entry_id,
+        entry_id,
         data.type || 'Process Parameter',
-        data.count_name,
-        data.consignee_name,
-        data.creation_date,
+        count_name,
+        consignee_name,
+        creation_date,
         data.machine_no,
         data.make,
         data.delivery_hank,
@@ -1798,9 +1796,22 @@ router.post('/process_parameter', async (req, res, next) => {
       ]
     );
 
+    recordPpNotebookSubmission({
+      notebook: 'Simplex Process Parameter',
+      department: 'Simplex',
+      entryId: entry_id,
+      sourceSchema: 'simplex',
+      sourceTable: 'simplex_process_parameter',
+      submittedByUserId: req.user?.id,
+      submittedByName: req.user?.employee_id,
+      submittedPayload: { count_name, consignee_name, creation_date }
+    }).catch((err) => console.warn('[pp-notebook-log] Simplex Process Parameter failed:', err.message));
+
     res.status(201).json({
       message: 'Simplex entry created successfully',
-      data: withScreenEntryId('process_parameter', result.rows[0])
+      data: result.rows[0],
+      entry_id,
+      process_parameter_id: entry_id
     });
 
   } catch (error) {
@@ -1811,30 +1822,6 @@ router.post('/process_parameter', async (req, res, next) => {
     next(error);
   }
 });
-
-/**
- * @swagger
- * /simplex/process_parameter:
- *   get:
- *     summary: Get all Simplex entries
- *     tags: [Simplex]
- *     parameters:
- *       - in: query
- *         name: page
- *         schema:
- *           type: integer
- *           default: 1
- *       - in: query
- *         name: limit
- *         schema:
- *           type: integer
- *           default: 10
- *     responses:
- *       200:
- *         description: Data retrieved successfully
- *       500:
- *         description: Server error
- */
 
 router.get('/process_parameter', async (req, res, next) => {
   try {
@@ -1857,7 +1844,7 @@ router.get('/process_parameter', async (req, res, next) => {
     );
 
     res.status(200).json({
-      data: result.rows.map((row) => withScreenEntryId('process_parameter', row)),
+      data: result.rows,
       total: parseInt(totalResult.rows[0].count),
       page: pageNum,
       limit: limitNum
@@ -1869,29 +1856,13 @@ router.get('/process_parameter', async (req, res, next) => {
   }
 });
 
-/**
- * @swagger
- * /simplex/process_parameter/{id}:
- *   put:
- *     summary: Update Simplex entry
- *     tags: [Simplex]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: integer
- *     responses:
- *       200:
- *         description: Updated successfully
- *       404:
- *         description: Entry not found
- */
-
 router.put('/process_parameter/:id', async (req, res, next) => {
   try {
     const id = parseInt(req.params.id);
     const data = req.body;
+    const count_name = pickFirstText(data.count_name, data.countName, data.count, data.count_value);
+    const consignee_name = pickFirstText(data.consignee_name, data.consigneeName, data.consignee, data.consignee_value);
+    const creation_date = pickFirstText(data.creation_date, data.creationDate, data.entry_date, data.entryDate, data.date);
 
     const result = await client.query(
       `UPDATE simplex.simplex_process_parameter
@@ -1924,9 +1895,9 @@ router.put('/process_parameter/:id', async (req, res, next) => {
        RETURNING *`,
       [
         data.type || 'Process Parameter',
-        data.count_name,
-        data.consignee_name,
-        data.creation_date,
+        count_name,
+        consignee_name,
+        creation_date,
         data.machine_no,
         data.make,
         data.delivery_hank,
@@ -1957,12 +1928,516 @@ router.put('/process_parameter/:id', async (req, res, next) => {
 
     res.status(200).json({
       message: 'Updated successfully',
-      data: withScreenEntryId('process_parameter', result.rows[0])
+      data: result.rows[0],
+      entry_id: result.rows[0].entry_id,
+      process_parameter_id: result.rows[0].entry_id
     });
 
   } catch (error) {
     console.error(error);
     next(error);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Simplex Wheel Change (existing/proposed L2-approval workflow)
+// ---------------------------------------------------------------------------
+// Mirrors spinning's wheel-change pattern: an operator submits only the
+// "Proposed" values, the backend fills in "Existing" from the last approved
+// entry for that machine, the row sits as 'pending' until an L2 reviewer
+// approves or rejects it, and a fresh submission for the same machine
+// overrides whatever was still pending/rejected. Unlike spinning (which has
+// fixed existing/proposed SQL columns), simplex has no predefined parameter
+// list, so each parameter row is stored as JSON: { key, label, existing, proposed }.
+const ensureSimplexWheelChangeTable = async () => {
+  await client.query(`CREATE SCHEMA IF NOT EXISTS simplex`);
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS simplex.wheel_change (
+      id BIGSERIAL PRIMARY KEY,
+      entry_id TEXT,
+      type TEXT NOT NULL DEFAULT 'Wheel Change',
+      machine_no TEXT,
+      wheel_change_type TEXT,
+      wheel_change_type_label TEXT,
+      entry_date DATE,
+      parameters JSONB NOT NULL DEFAULT '[]'::jsonb,
+      rows JSONB NOT NULL DEFAULT '{}'::jsonb,
+      operator TEXT,
+      remarks TEXT,
+      approval_status TEXT DEFAULT 'approved',
+      review_remarks TEXT,
+      reviewed_by TEXT,
+      reviewed_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await client.query(`
+    ALTER TABLE simplex.wheel_change
+      ADD COLUMN IF NOT EXISTS entry_id TEXT,
+      ADD COLUMN IF NOT EXISTS type TEXT NOT NULL DEFAULT 'Wheel Change',
+      ADD COLUMN IF NOT EXISTS machine_no TEXT,
+      ADD COLUMN IF NOT EXISTS wheel_change_type TEXT,
+      ADD COLUMN IF NOT EXISTS wheel_change_type_label TEXT,
+      ADD COLUMN IF NOT EXISTS entry_date DATE,
+      ADD COLUMN IF NOT EXISTS parameters JSONB NOT NULL DEFAULT '[]'::jsonb,
+      ADD COLUMN IF NOT EXISTS rows JSONB NOT NULL DEFAULT '{}'::jsonb,
+      ADD COLUMN IF NOT EXISTS operator TEXT,
+      ADD COLUMN IF NOT EXISTS remarks TEXT,
+      ADD COLUMN IF NOT EXISTS approval_status TEXT DEFAULT 'approved',
+      ADD COLUMN IF NOT EXISTS review_remarks TEXT,
+      ADD COLUMN IF NOT EXISTS reviewed_by TEXT,
+      ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+  `);
+
+  await client.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS simplex_wheel_change_entry_id_uq
+    ON simplex.wheel_change (entry_id)
+    WHERE entry_id IS NOT NULL;
+  `);
+
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS simplex_wheel_change_entry_date_idx
+    ON simplex.wheel_change (entry_date DESC, id DESC);
+  `);
+
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS simplex_wheel_change_machine_no_idx
+    ON simplex.wheel_change (machine_no, created_at DESC);
+  `);
+};
+
+const normalizeSimplexJsonArray = (value) => {
+  if (Array.isArray(value)) return value;
+  if (value === null || value === undefined || value === '') return [];
+  return [value];
+};
+
+const normalizeSimplexJsonObject = (value) => (
+  value && typeof value === 'object' && !Array.isArray(value) ? value : {}
+);
+
+const normalizeSimplexWheelChangeParameters = (payload = {}) => {
+  const parameters = normalizeSimplexJsonArray(payload.parameters ?? payload.parameter_rows ?? payload.parameterRows);
+  if (parameters.length) return parameters;
+
+  const rowMap = normalizeSimplexJsonObject(payload.rows);
+  return Object.values(rowMap).filter((row) => row && typeof row === 'object');
+};
+
+const normalizeSimplexWheelChangeRows = (payload = {}, parameters = []) => {
+  const rowMap = normalizeSimplexJsonObject(payload.rows);
+  if (Object.keys(rowMap).length) return rowMap;
+
+  return parameters.reduce((acc, row) => {
+    if (row && typeof row === 'object' && row.key) {
+      acc[row.key] = row;
+    }
+    return acc;
+  }, {});
+};
+
+const hydrateSimplexWheelChangeRow = (row) => {
+  const parameters = Array.isArray(row.parameters)
+    ? row.parameters
+    : normalizeSimplexWheelChangeParameters({ parameters: row.parameters, rows: row.rows });
+  const rows = normalizeSimplexWheelChangeRows({ rows: row.rows }, parameters);
+  return {
+    ...row,
+    parameters,
+    rows
+  };
+};
+
+// Only an L2-approved row counts as the trusted "existing" baseline for the
+// next entry on the same machine - a still-pending proposal hasn't been
+// verified yet.
+const fetchLatestApprovedSimplexWheelChange = async (machineNo) => {
+  const value = String(machineNo || '').trim();
+  if (!value) return null;
+
+  const result = await client.query(
+    `SELECT *
+     FROM simplex.wheel_change
+     WHERE LOWER(TRIM(COALESCE(machine_no, ''))) = LOWER(TRIM($1))
+       AND LOWER(TRIM(COALESCE(approval_status, 'approved'))) = 'approved'
+     ORDER BY created_at DESC NULLS LAST, id DESC
+     LIMIT 1`,
+    [value]
+  );
+
+  return result.rows[0] || null;
+};
+
+// Carries each "Proposed" value from the last approved entry on this machine
+// into the new entry's "Existing" field for the same parameter key, so the
+// operator only has to type the new "Proposed" setting each time.
+const withSimplexCarriedForwardExisting = (parameters, previousRow) => {
+  if (!previousRow) return parameters;
+
+  const previousRows = normalizeSimplexJsonObject(previousRow.rows);
+  return parameters.map((param) => {
+    if (!param || typeof param !== 'object' || !param.key) return param;
+    const previous = previousRows[param.key];
+    if (!previous) return param;
+    return { ...param, existing: previous.proposed ?? param.existing ?? null };
+  });
+};
+
+// A machine can only have one proposal awaiting/needing L2 attention at a
+// time. Submitting a new entry for the same machine overrides whatever was
+// still 'pending', or was 'rejected' by L2 (approved rows are never touched -
+// they're the permanent record).
+const supersedePendingSimplexWheelChangeEntry = async (machineNo) => {
+  const value = String(machineNo || '').trim();
+  if (!value) return;
+
+  await client.query(
+    `DELETE FROM simplex.wheel_change
+     WHERE LOWER(TRIM(COALESCE(machine_no, ''))) = LOWER(TRIM($1))
+       AND LOWER(TRIM(COALESCE(approval_status, 'approved'))) IN ('pending', 'rejected')`,
+    [value]
+  );
+};
+
+const createSimplexWheelChangeEntry = async (req, res, next, defaultWheelChangeType = null, defaultWheelChangeTypeLabel = null) => {
+  try {
+    await ensureSimplexWheelChangeTable();
+
+    const payload = req.body || {};
+    const entry_id = String(payload.entry_id ?? payload.entryId ?? '').trim() || null;
+    const type = String(payload.type ?? 'Wheel Change').trim() || 'Wheel Change';
+    const machine_no = String(payload.machine_no ?? payload.machineNo ?? payload.machine ?? '').trim() || null;
+    const wheel_change_type = String(
+      payload.wheel_change_type ?? payload.wheelChangeType ?? defaultWheelChangeType ?? ''
+    ).trim() || null;
+    const wheel_change_type_label = String(
+      payload.wheel_change_type_label ?? payload.wheelChangeTypeLabel ?? defaultWheelChangeTypeLabel ?? ''
+    ).trim() || null;
+    const entry_date = parseNotebookDate(payload.entry_date ?? payload.entryDate ?? payload.date);
+    const operator = String(payload.operator ?? payload.operator_name ?? payload.operatorName ?? '').trim() || null;
+    const remarks = String(payload.remarks ?? payload.remark ?? payload.comments ?? '').trim() || null;
+
+    if (!machine_no) {
+      return res.status(400).json({ message: 'machine_no is required' });
+    }
+
+    let parameters = normalizeSimplexWheelChangeParameters(payload);
+    const previousRow = await fetchLatestApprovedSimplexWheelChange(machine_no);
+    parameters = withSimplexCarriedForwardExisting(parameters, previousRow);
+    // Rebuild the "rows" keyed map from the (carry-forward-applied) parameters
+    // rather than payload.rows verbatim - otherwise the stored rows map would
+    // keep whatever stale "existing" the frontend originally submitted, even
+    // though the parameters array now has the correct carried-forward value.
+    const rows = parameters.reduce((acc, param) => {
+      if (param && typeof param === 'object' && param.key) {
+        acc[param.key] = param;
+      }
+      return acc;
+    }, {});
+
+    await supersedePendingSimplexWheelChangeEntry(machine_no);
+
+    const result = await client.query(
+      `INSERT INTO simplex.wheel_change (
+         entry_id, type, machine_no, wheel_change_type, wheel_change_type_label, entry_date, parameters, rows,
+         operator, remarks, approval_status
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9, $10, 'pending')
+       RETURNING *`,
+      [
+        entry_id,
+        type,
+        machine_no,
+        wheel_change_type,
+        wheel_change_type_label,
+        entry_date,
+        JSON.stringify(parameters),
+        JSON.stringify(rows),
+        operator,
+        remarks
+      ]
+    );
+
+    res.status(201).json({
+      message: 'Simplex wheel change entry created successfully',
+      data: withScreenEntryId('wheel_change', hydrateSimplexWheelChangeRow(result.rows[0])),
+      entry_id: result.rows[0].entry_id
+    });
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      return res.status(409).json({ message: 'Duplicate entry_id. Please use a unique ID.' });
+    }
+    console.error('Simplex wheel change insert error:', error);
+    next(error);
+  }
+};
+
+const getSimplexWheelChangeEntries = async (req, res, next, defaultWheelChangeType = null) => {
+  try {
+    await ensureSimplexWheelChangeTable();
+
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 10));
+    const offset = (page - 1) * limit;
+    const requestedType = String(req.query.wheel_change_type ?? req.query.wheelChangeType ?? defaultWheelChangeType ?? '').trim();
+    const requestedMachineNo = String(req.query.machine_no ?? req.query.machineNo ?? '').trim();
+    const requestedApprovalStatus = String(req.query.approval_status ?? req.query.approvalStatus ?? req.query.status ?? '').trim().toLowerCase();
+    // The frontend looks up "what was last saved" by Mixing before a machine
+    // is even picked, so the mixing value has to be matched inside the
+    // rows.mixing JSONB blob (there's no dedicated mixing column).
+    const requestedMixing = String(req.query.variety ?? req.query.variety_name ?? req.query.mixing ?? '').trim();
+
+    const conditions = [];
+    const filterParams = [];
+    if (requestedType) {
+      filterParams.push(requestedType);
+      conditions.push(`wheel_change_type = $${filterParams.length}`);
+    }
+    if (requestedMachineNo) {
+      filterParams.push(requestedMachineNo);
+      conditions.push(`LOWER(TRIM(COALESCE(machine_no, ''))) = LOWER(TRIM($${filterParams.length}))`);
+    }
+    if (requestedApprovalStatus) {
+      filterParams.push(requestedApprovalStatus);
+      conditions.push(`LOWER(TRIM(COALESCE(approval_status, 'approved'))) = $${filterParams.length}`);
+    }
+    if (requestedMixing) {
+      filterParams.push(requestedMixing);
+      conditions.push(`(LOWER(TRIM(COALESCE(rows->'mixing'->>'existing', ''))) = LOWER(TRIM($${filterParams.length}))
+        OR LOWER(TRIM(COALESCE(rows->'mixing'->>'proposed', ''))) = LOWER(TRIM($${filterParams.length})))`);
+    }
+    const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const [dataResult, totalResult] = await Promise.all([
+      client.query(
+        `SELECT *
+         FROM simplex.wheel_change
+         ${whereClause}
+         ORDER BY entry_date DESC NULLS LAST, id DESC
+         LIMIT $${filterParams.length + 1} OFFSET $${filterParams.length + 2}`,
+        [...filterParams, limit, offset]
+      ),
+      client.query(
+        `SELECT COUNT(*) FROM simplex.wheel_change ${whereClause}`,
+        filterParams
+      )
+    ]);
+
+    const total = parseInt(totalResult.rows[0].count, 10) || 0;
+
+    res.status(200).json({
+      data: dataResult.rows.map((row) => withScreenEntryId('wheel_change', hydrateSimplexWheelChangeRow(row))),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit)
+    });
+  } catch (error) {
+    console.error('Simplex wheel change fetch error:', error);
+    next(error);
+  }
+};
+
+router.post('/wheel-change', (req, res, next) => createSimplexWheelChangeEntry(req, res, next));
+router.get('/wheel-change', (req, res, next) => getSimplexWheelChangeEntries(req, res, next));
+
+// Wheel-change approvals flip data other screens may treat as the trusted
+// record, so approval/rejection is restricted to L2 reviewers server-side.
+// Admin accounts (role "admin" or employee_id like ADMIN001) get the same
+// access as L2.
+const isSimplexAdminReviewer = (req) => {
+  const role = String(req.user?.role || '').trim().toLowerCase();
+  if (role === 'admin') return true;
+
+  const employeeId = String(req.user?.employee_id || '').trim().toLowerCase();
+  return /^admin\s*0*\d+$/.test(employeeId);
+};
+
+const parseSimplexPositiveInt = (value) => {
+  const n = Number(value);
+  return Number.isInteger(n) && n > 0 ? n : null;
+};
+
+const getSimplexReviewerLevel = async (req) => {
+  const tokenLevel = String(req.user?.level || '').trim().toUpperCase();
+  if (tokenLevel === 'L1' || tokenLevel === 'L2' || tokenLevel === 'L3') return tokenLevel;
+
+  const requesterId = parseSimplexPositiveInt(req.user?.id);
+  if (!requesterId) return null;
+
+  const result = await client.query(
+    `SELECT COALESCE(level, '') AS level
+     FROM users.user_details
+     WHERE id = $1`,
+    [requesterId]
+  );
+  const level = String(result.rows[0]?.level || '').trim().toUpperCase();
+  return level === 'L1' || level === 'L2' || level === 'L3' ? level : null;
+};
+
+const requireSimplexL2Reviewer = async (req, res) => {
+  if (isSimplexAdminReviewer(req)) return true;
+
+  const level = await getSimplexReviewerLevel(req);
+  if (level !== 'L2') {
+    res.status(403).json({ message: 'Only L2 reviewers can access wheel change approvals' });
+    return false;
+  }
+  return true;
+};
+
+/**
+ * @swagger
+ * /simplex/wheel-change/approvals:
+ *   get:
+ *     summary: Pending (or approved/rejected) simplex wheel change entries
+ *     tags: [Simplex Wheel Change Approvals]
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           default: pending
+ *     responses:
+ *       200:
+ *         description: Success
+ */
+router.get('/wheel-change/approvals', async (req, res, next) => {
+  try {
+    if (!(await requireSimplexL2Reviewer(req, res))) return;
+
+    await ensureSimplexWheelChangeTable();
+    const status = String(req.query.approval_status || req.query.approvalStatus || req.query.status || 'pending').trim().toLowerCase();
+
+    const result = await client.query(
+      `SELECT *
+       FROM simplex.wheel_change
+       WHERE LOWER(TRIM(COALESCE(approval_status, 'approved'))) = $1
+       ORDER BY created_at DESC NULLS LAST, id DESC`,
+      [status]
+    );
+
+    const data = result.rows.map((row) => withScreenEntryId('wheel_change', hydrateSimplexWheelChangeRow(row)));
+
+    res.json({ data, total: data.length, status });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * @swagger
+ * /simplex/wheel-change/approvals/{id}/approve:
+ *   post:
+ *     summary: Approve a pending simplex wheel change entry
+ *     tags: [Simplex Wheel Change Approvals]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *     responses:
+ *       200:
+ *         description: Entry approved
+ *       404:
+ *         description: Entry not found
+ */
+router.post('/wheel-change/approvals/:id/approve', async (req, res, next) => {
+  try {
+    if (!(await requireSimplexL2Reviewer(req, res))) return;
+
+    const id = parseSimplexPositiveInt(req.params.id);
+    if (!id) {
+      return res.status(400).json({ message: 'id must be a numeric wheel change entry id' });
+    }
+
+    const reviewerLabel = String(req.user?.employee_id || req.user?.name || req.user?.username || req.user?.id || '').trim();
+
+    const result = await client.query(
+      `UPDATE simplex.wheel_change
+       SET approval_status = 'approved',
+           reviewed_by = $2,
+           reviewed_at = NOW()
+       WHERE id = $1
+       RETURNING *`,
+      [id, reviewerLabel || null]
+    );
+
+    if (!result.rowCount) {
+      return res.status(404).json({ message: 'Wheel change entry not found' });
+    }
+
+    res.json({
+      message: 'Wheel change entry approved',
+      data: withScreenEntryId('wheel_change', hydrateSimplexWheelChangeRow(result.rows[0]))
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * @swagger
+ * /simplex/wheel-change/approvals/{id}/reject:
+ *   post:
+ *     summary: Reject a pending simplex wheel change entry
+ *     tags: [Simplex Wheel Change Approvals]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               reason:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Entry rejected
+ *       404:
+ *         description: Entry not found
+ */
+router.post('/wheel-change/approvals/:id/reject', async (req, res, next) => {
+  try {
+    if (!(await requireSimplexL2Reviewer(req, res))) return;
+
+    const id = parseSimplexPositiveInt(req.params.id);
+    if (!id) {
+      return res.status(400).json({ message: 'id must be a numeric wheel change entry id' });
+    }
+
+    const reason = String(req.body?.reason || req.body?.remarks || req.body?.review_remarks || '').trim() || null;
+    const reviewerLabel = String(req.user?.employee_id || req.user?.name || req.user?.username || req.user?.id || '').trim();
+
+    const result = await client.query(
+      `UPDATE simplex.wheel_change
+       SET approval_status = 'rejected',
+           review_remarks = $2,
+           reviewed_by = $3,
+           reviewed_at = NOW()
+       WHERE id = $1
+       RETURNING *`,
+      [id, reason, reviewerLabel || null]
+    );
+
+    if (!result.rowCount) {
+      return res.status(404).json({ message: 'Wheel change entry not found' });
+    }
+
+    res.json({
+      message: 'Wheel change entry rejected',
+      data: withScreenEntryId('wheel_change', hydrateSimplexWheelChangeRow(result.rows[0]))
+    });
+  } catch (err) {
+    next(err);
   }
 });
 

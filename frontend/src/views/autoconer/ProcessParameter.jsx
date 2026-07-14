@@ -175,7 +175,11 @@ const isVersionComplete = (version) =>
   );
 
 const buildPayload = (form, entryId = "") => ({
-  entry_id: (form.paramId || entryId) || undefined,
+  // entryId (the parent page's authoritative selectedEntryId) must win over
+  // form.paramId — the parent resets entryId to "" for a genuinely new PP,
+  // but this component's own paramId only ever gets *set*, never cleared,
+  // when entryId flips back to empty, so it can go stale otherwise.
+  entry_id: (entryId || form.paramId) || undefined,
   count_name: form.countName,
   consignee_name: form.consigneeName,
   creation_date: form.creationDate,
@@ -246,7 +250,6 @@ const ProcessParameter = forwardRef(function ProcessParameter(
       setVersions([]);
       setForm({ ...createDefaultForm(safeSelectedType), paramId: entryId || "" });
       setExpandedVersionId(null);
-      setSavedProcessParameterId(entryId || "");
       return;
     }
     const rows = Array.isArray(response?.data) ? response.data : [];
@@ -311,11 +314,9 @@ const ProcessParameter = forwardRef(function ProcessParameter(
   }, [safeSelectedType]);
 
   useEffect(() => {
-    if (!entryId) return;
-    setForm((current) => ({
-      ...current,
-      paramId: entryId,
-    }));
+    setForm((current) =>
+      current.paramId === entryId ? current : { ...current, paramId: entryId || "" }
+    );
   }, [entryId]);
 
   useEffect(() => {

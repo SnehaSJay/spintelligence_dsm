@@ -14,7 +14,6 @@ import {
     isThresholdTicketRecord,
     transformTicket,
 } from "../../utils/ticketTransformer";
-import { isSupervisorNavUser } from "../../utils/accessControl";
 import {
     applyStoredTicketStatuses,
     getStatusClassKey,
@@ -23,8 +22,29 @@ import {
     TICKET_STATUS_OPTIONS,
 } from "../../utils/ticketStatus";
 
+const formatDateTime = (dateString) => {
+    if (!dateString) return "-";
+    const date = new Date(dateString);
+    if (Number.isNaN(date.getTime())) return String(dateString);
+    return date.toLocaleString("en-US", {
+        timeZone: "Asia/Kolkata",
+        month: "short",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+    });
+};
+
+// Resolves the logged-in user's id the same way authSlice does when it
+// stores the session, so it matches whatever id the backend expects for
+// user_id-scoped ticket queries.
+const getAuthUserId = (user) =>
+    user?.id || user?.user_id || user?.userId || user?.employee_id || user?.employeeId || "";
+
 export default function operatorboard() {
     const authUser = useSelector((state) => state.auth?.user);
+    const authUserId = getAuthUserId(authUser);
     const authToken = useSelector((state) => state.auth?.token);
     const isAuthHydrated = useSelector((state) => state.auth?.isHydrated);
     const [ticketData, setTicketData] = useState([]);
@@ -59,7 +79,6 @@ export default function operatorboard() {
         ).trim();
 
     const router = useRouter();
-    const shouldUseSupervisorDashboard = isSupervisorNavUser(authUser);
     const openCalendarPicker = (inputRef) => {
         const input = inputRef.current;
         if (!input) return;
@@ -156,27 +175,19 @@ export default function operatorboard() {
         if (!isAuthHydrated) {
             return;
         }
-        if (!authToken) {
+        if (!authToken || !authUserId) {
             setLoading(false);
-            return;
-        }
-        if (shouldUseSupervisorDashboard) {
-            router.replace("/supervisordashboard");
             return;
         }
         fetchTickets();
         fetchSubmissionTickets();
         fetchProcessParameterTickets();
-    }, [authToken, isAuthHydrated, shouldUseSupervisorDashboard]);
-
-    if (shouldUseSupervisorDashboard) {
-        return null;
-    }
+    }, [authToken, authUserId, isAuthHydrated]);
 
     const fetchTickets = async () => {
         try {
             setThresholdError("");
-            const response = await getOperatorTickets({ page: 1, limit: 500, _ts: Date.now() });
+            const response = await getOperatorTickets({ page: 1, limit: 500, user_id: authUserId, _ts: Date.now() });
 
             const ticketsArray = Array.isArray(response)
                 ? response
@@ -244,7 +255,7 @@ export default function operatorboard() {
     const fetchSubmissionTickets = async () => {
         try {
             setSubmissionError("");
-            const response = await getSubmissionTickets({ page: 1, limit: 500, _ts: Date.now() });
+            const response = await getSubmissionTickets({ page: 1, limit: 500, user_id: authUserId, _ts: Date.now() });
             const ticketsArray = Array.isArray(response)
                 ? response
                 : response?.data?.tickets ||
@@ -271,7 +282,7 @@ export default function operatorboard() {
     const fetchProcessParameterTickets = async () => {
         try {
             setProcessParameterError("");
-            const response = await getProcessParameterTickets({ page: 1, limit: 500, _ts: Date.now() });
+            const response = await getProcessParameterTickets({ page: 1, limit: 500, user_id: authUserId, _ts: Date.now() });
             const ticketsArray = Array.isArray(response)
                 ? response
                 : response?.data?.tickets ||
@@ -338,7 +349,7 @@ export default function operatorboard() {
     };
 
     useEffect(() => {
-        if (!isAuthHydrated || !authToken || shouldUseSupervisorDashboard || typeof window === "undefined") return;
+        if (!isAuthHydrated || !authToken || typeof window === "undefined") return;
 
         const refreshFromServer = () => {
             fetchTickets();
@@ -358,7 +369,7 @@ export default function operatorboard() {
             window.removeEventListener("focus", refreshFromServer);
             document.removeEventListener("visibilitychange", handleVisibilityChange);
         };
-    }, [authToken, isAuthHydrated, shouldUseSupervisorDashboard]);
+    }, [authToken, isAuthHydrated]);
 
     if (loading) return <p>Loading tickets...</p>;
 
@@ -627,7 +638,7 @@ export default function operatorboard() {
                                         <td>{t.machine}</td>
                                         <td>{t.entryId}</td>
                                         <td>{t.completionThresholdHours}</td>
-                                        <td>{t.entryCreatedAt}</td>
+                                        <td>{t.entryCreatedAt === "-" ? "-" : formatDateTime(t.entryCreatedAt)}</td>
                                         <td>{t.timeLaggedHours}</td>
                                     </>
                                 ) : (
