@@ -517,6 +517,7 @@ const startSubmittedNotebookAckWorker = () => {
   const intervalMs = Number(process.env.NOTEBOOK_ACK_WORKER_INTERVAL_MS || 15 * 60 * 1000);
   const run = async () => {
     try {
+      await db.initPromise.catch(() => {});
       const created = await generateOverdueNotebookTickets();
       if (created.length) {
         console.log(`[submitted-notebooks] generated ${created.length} overdue acknowledgement ticket(s)`);
@@ -536,6 +537,7 @@ const startPpNotebookBreachWorker = () => {
   const intervalMs = Number(process.env.PP_NOTEBOOK_TAT_WORKER_INTERVAL_MS || 15 * 60 * 1000);
   const run = async () => {
     try {
+      await db.initPromise.catch(() => {});
       const { created, expired } = await generatePpNotebookBatchIncompleteTickets();
       if (created.length || expired.length) {
         console.log(`[pp-notebooks] created ${created.length} incomplete-batch ticket(s), expired ${expired.length}`);
@@ -555,6 +557,7 @@ const startSubmissionFrequencyWorker = () => {
   const intervalMs = Number(process.env.SUBMISSION_FREQUENCY_WORKER_INTERVAL_MS || 15 * 60 * 1000);
   const run = async () => {
     try {
+      await db.initPromise.catch(() => {});
       const { created_count } = await checkSubmissionFrequencyTickets();
       if (created_count) {
         console.log(`[submission-frequency] created ${created_count} missed-submission ticket(s)`);
