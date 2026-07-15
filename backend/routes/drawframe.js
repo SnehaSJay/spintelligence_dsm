@@ -2471,160 +2471,33 @@ router.put('/header/:ins_id', async (req, res, next) => {
     const entry_scope = String(type || '').toLowerCase().includes('finisher') ? 'finisher' : 'breaker';
 
     const result = await client.query(
-      `INSERT INTO drawframe.drawframe_qc_header (
-        entry_id, entry_scope, type, count_name, consignee_name, creation_date,
-        make, no_of_ends, bottom_roll_setting,
-        breaker_draft, total_draft, hank,
-        web_tension_draft, trumpet_size, delivery_speed, pressure_bar
-      )
-      VALUES (
-        $1,$2,$3,$4,$5,$6,
-        $7,$8,$9,
-        $10,$11,$12,
-        $13,$14,$15,$16
-      )
-      RETURNING *`,
-      [
-        entry_id,
-        entry_scope,
-        type,
-        count_name,
-        consignee_name,
-        creation_date,
-        make,
-        no_of_ends,
-        bottom_roll_setting,
-        breaker_draft,
-        total_draft,
-        hank,
-        web_tension_draft,
-        trumpet_size,
-        delivery_speed,
-        pressure_bar
-      ]
-    );
-
-    // PP_SUB_DEPARTMENTS (ticketing_system's completion tracking) expects Breaker and
-    // Finisher to be logged as two distinct notebooks — hardcoding 'Drawframe QC Header'
-    // for both meant a real Finisher submission was indistinguishable from a Breaker one,
-    // so the batch-completion checker could never see "Drawframe Finisher Drawing
-    // Inspection" as actually done.
-    recordPpNotebookSubmission({
-      notebook: entry_scope === 'finisher' ? 'Drawframe Finisher Drawing Inspection' : 'Drawframe QC Header',
-      department: 'Drawframe',
-      entryId: entry_id,
-      sourceSchema: 'drawframe',
-      sourceTable: 'drawframe_qc_header',
-      submittedByUserId: req.user?.id,
-      submittedByName: req.user?.employee_id,
-      submittedPayload: { count_name, consignee_name, creation_date }
-    }).catch((err) => console.warn('[pp-notebook-log] Drawframe QC Header failed:', err.message));
-
-    res.status(201).json({
-      message: 'Drawframe entry created successfully',
-      data: result.rows[0],
-      entry_id,
-      process_parameter_id: entry_id
-    });
-
-  } catch (error) {
-    console.error(error);
-    next(error);
-  }
-});
-
-router.get('/header', async (req, res, next) => {
-  try {
-    const { page = 1, limit = 10 } = req.query;
-
-    const pageNum = Math.max(1, parseInt(page) || 1);
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 10));
-    const offset = (pageNum - 1) * limitNum;
-
-    const result = await client.query(
-      `SELECT *
-       FROM drawframe.drawframe_qc_header
-       ORDER BY created_at DESC, ins_id DESC
-       OFFSET $1 LIMIT $2`,
-      [offset, limitNum]
-    );
-
-    const totalResult = await client.query(
-      `SELECT COUNT(*) FROM drawframe.drawframe_qc_header`
-    );
-
-    res.status(200).json({
-      data: result.rows,
-      total: parseInt(totalResult.rows[0].count),
-      page: pageNum,
-      limit: limitNum
-    });
-
-  } catch (error) {
-    console.error(error);
-    next(error);
-  }
-});
-
-router.put('/header/:ins_id', async (req, res, next) => {
-  try {
-    const id = parseInt(req.params.ins_id, 10);
-
-    if (!Number.isInteger(id) || id <= 0) {
-      return res.status(400).json({
-        message: 'Invalid ID supplied'
-      });
-    }
-
-    const {
-      type,
-      count_name,
-      consignee_name,
-      creation_date,
-      make,
-      no_of_ends,
-      bottom_roll_setting,
-      breaker_draft,
-      total_draft,
-      hank,
-      web_tension_draft,
-      trumpet_size,
-      delivery_speed,
-      pressure_bar
-    } = req.body;
-
-    if (!count_name || !consignee_name || !creation_date) {
-      return res.status(400).json({
-        message: 'count_name, consignee_name and creation_date are required'
-      });
-    }
-
-    const result = await client.query(
       `UPDATE drawframe.drawframe_qc_header
-       SET type = $1,
-           entry_scope = $2,
-           count_name = $3,
-           consignee_name = $4,
-           creation_date = $5,
-           make = $6,
-           no_of_ends = $7,
-           bottom_roll_setting = $8,
-           breaker_draft = $9,
-           total_draft = $10,
-           hank = $11,
-           web_tension_draft = $12,
-           trumpet_size = $13,
-           insert_size = $14,
-           web_funnel_size = $15,
-           delivery_hank = $16,
-           delivery_speed = $17,
-           pressure_bar = $18,
-           scanning_rolls_size = $19
-       WHERE ins_id = $20
+       SET entry_id = $1,
+           type = $2,
+           entry_scope = $3,
+           count_name = $4,
+           consignee_name = $5,
+           creation_date = $6,
+           make = $7,
+           no_of_ends = $8,
+           bottom_roll_setting = $9,
+           breaker_draft = $10,
+           total_draft = $11,
+           hank = $12,
+           web_tension_draft = $13,
+           trumpet_size = $14,
+           insert_size = $15,
+           web_funnel_size = $16,
+           delivery_hank = $17,
+           delivery_speed = $18,
+           pressure_bar = $19,
+           scanning_rolls_size = $20
+       WHERE ins_id = $21
        RETURNING *`,
       [
+        entry_id,
         type,
-        entry_scope || null,
+        entry_scope,
         count_name,
         consignee_name,
         creation_date,
@@ -2646,17 +2519,31 @@ router.put('/header/:ins_id', async (req, res, next) => {
       ]
     );
 
-    // ✅ Not found
     if (result.rowCount === 0) {
-      return res.status(404).json({
-        message: 'Drawframe entry not found'
-      });
+      return res.status(404).json({ message: 'Drawframe entry not found' });
     }
 
-    // ✅ Success
+    // PP_SUB_DEPARTMENTS (ticketing_system's completion tracking) expects Breaker and
+    // Finisher to be logged as two distinct notebooks — hardcoding 'Drawframe QC Header'
+    // for both meant a real Finisher submission was indistinguishable from a Breaker one,
+    // so the batch-completion checker could never see "Drawframe Finisher Drawing
+    // Inspection" as actually done.
+    recordPpNotebookSubmission({
+      notebook: entry_scope === 'finisher' ? 'Drawframe Finisher Drawing Inspection' : 'Drawframe QC Header',
+      department: 'Drawframe',
+      entryId: entry_id,
+      sourceSchema: 'drawframe',
+      sourceTable: 'drawframe_qc_header',
+      submittedByUserId: req.user?.id,
+      submittedByName: req.user?.employee_id,
+      submittedPayload: { count_name, consignee_name, creation_date }
+    }).catch((err) => console.warn('[pp-notebook-log] Drawframe QC Header failed:', err.message));
+
     res.status(200).json({
       message: 'Drawframe entry updated successfully',
-      data: withScreenEntryId('header', result.rows[0], 'ins_id')
+      data: withScreenEntryId('header', result.rows[0], 'ins_id'),
+      entry_id,
+      process_parameter_id: entry_id
     });
 
   } catch (error) {
