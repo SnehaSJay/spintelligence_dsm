@@ -1441,38 +1441,6 @@ router.post('/speed-checking', async (req, res, next) => {
  *         description: Internal server error
  */
 
-router.get('/speed-checking', async (req, res, next) => {
-  try {
-    await ensureSpinningEntryIdColumns();
-    const result = await client.query(`
-      SELECT
-        entry_id AS id,
-        entry_id,
-        InspectionDate,
-        MachineNo,
-        EmployeeName,
-        Display_Speed,
-        Spindle_Speed,
-        Difference,
-        LHS_TextRemarks,
-        encode(LHS_Audio, 'base64') as LHS_Audio,
-        RHS_TextRemarks,
-        encode(RHS_Audio, 'base64') as RHS_Audio,
-        CreatedAt
-      FROM spinning.speed_checking
-      ORDER BY CreatedAt DESC;
-    `);
-
-    res.json({
-      count: result.rowCount,
-      data: result.rows.map((row) => withScreenEntryId('speed_checking', row))
-    });
-
-  } catch (err) {
-    next(err);
-  }
-});
-
 /**
  * @swagger
  * /spinning/speed-checking:
