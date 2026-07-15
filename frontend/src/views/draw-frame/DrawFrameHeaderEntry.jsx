@@ -356,7 +356,7 @@ function getEntrySortValue(entry) {
 }
 
 const DrawFrameHeaderEntry = forwardRef(function DrawFrameHeaderEntry(
-  { entryId = "", nextEntryIdPreview = "", typeOptions, selectedType, onTypeChange, onSubmitSuccess, lockedCountName = "" },
+  { entryId = "", nextEntryIdPreview = "", typeOptions, selectedType, onTypeChange, onSubmitSuccess, lockedCountName = "", user },
   ref
 ) {
   const router = useRouter();
@@ -601,6 +601,10 @@ const DrawFrameHeaderEntry = forwardRef(function DrawFrameHeaderEntry(
         ...activeConfig.buildPayload(form, entryId),
         entry_id: paramId,
         param_id: paramId,
+        // drawframe_qc_header now has its own "operator" column (see backend) — persist it
+        // directly rather than relying solely on the submitted-notebook recording below, which
+        // has proven fragile for this screen (some entries never got recorded).
+        user_name: user?.name || user?.full_name || user?.user_name || user?.username || "",
       };
       const isFinisher = activeType === "PP - Finisher Drawing";
       const response = selectedExistingEntry
@@ -820,73 +824,6 @@ const DrawFrameHeaderEntry = forwardRef(function DrawFrameHeaderEntry(
         onClose={handleSuccessClose}
       />
 
-      <div className={styles.headerEntryList}>
-        {recentEntries.length ? (
-          recentEntries.map((entry, index) => (
-            <div key={`${entry.id}-${index}`} className={styles.headerEntryCard}>
-              <div className={styles.headerEntryCardHeader}>
-                <button
-                  type="button"
-                  className={`${styles.headerEntryMetaBlock} ${styles.headerEntrySelect}`}
-                  onClick={() => handleEntrySelect(entry)}
-                >
-                  <span className={styles.headerEntryMetaLabel}>Param ID</span>
-                  <span className={styles.headerEntryMetaValue}>{displaySavedValue(entry.paramId || entry.id)}</span>
-                </button>
-                <button
-                  type="button"
-                  className={`${styles.headerEntryMetaMain} ${styles.headerEntrySelect}`}
-                  onClick={() => handleEntrySelect(entry)}
-                >
-                  <span className={styles.headerEntryMetaLabel}>Consignee Name</span>
-                  <span className={styles.headerEntryMetaValue}>{displaySavedValue(entry.consigneeName)}</span>
-                </button>
-                <button
-                  type="button"
-                  className={`${styles.headerEntryMetaMain} ${styles.headerEntrySelect}`}
-                  onClick={() => handleEntrySelect(entry)}
-                >
-                  <span className={styles.headerEntryMetaLabel}>Count Name</span>
-                  <span className={styles.headerEntryMetaValue}>{displaySavedValue(entry.countName)}</span>
-                </button>
-                <div className={styles.headerEntryCardStatus}>
-                  {isEntryComplete(entry) ? <FaCheckCircle className={styles.headerEntryStatusIcon} /> : null}
-                </div>
-                <button
-                  type="button"
-                  className={styles.headerEntryToggle}
-                  onClick={() => handleEntryToggle(entry)}
-                  aria-label={
-                    String(expandedEntryId) === String(entry.id)
-                      ? "Collapse saved entry details"
-                      : "Expand saved entry details"
-                  }
-                >
-                  {String(expandedEntryId) === String(entry.id) ? <HiChevronUp /> : <HiChevronDown />}
-                </button>
-              </div>
-
-              {String(expandedEntryId) === String(entry.id) ? (
-                <div className={styles.headerEntryCardDetails}>
-                  <div className={styles.headerEntryDetailsGrid}>
-                    {entry.details.map((detail) => (
-                      <div key={`${entry.id}-${detail.label}`} className={styles.headerEntryDetailItem}>
-                        <span className={styles.headerEntryMetaLabel}>{detail.label}</span>
-                        <span className={styles.headerEntryMetaValue}>{displaySavedValue(detail.value)}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <div className={styles.headerEntryCardDate}>
-                    {formatDisplayDate(entry.creationDate) || "-"}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          ))
-        ) : (
-          <p className={styles.messageInfo}>No entries found.</p>
-        )}
-      </div>
     </>
   );
 });

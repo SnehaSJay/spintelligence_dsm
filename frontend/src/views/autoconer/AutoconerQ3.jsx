@@ -747,7 +747,6 @@ const AutoconerQ3 = forwardRef(function AutoconerQ3(
         {isSubmitting ? <div className={styles.loadingMessage}>Submitting...</div> : null}
       </div>
 
-      {savedVersionsPortal ? createPortal(historySection, savedVersionsPortal) : historySection}
     </>
   );
 });
