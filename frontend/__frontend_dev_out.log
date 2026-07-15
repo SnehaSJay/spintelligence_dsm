@@ -7,3 +7,4 @@
  GET /process-parameter 304 in 7.1s (next.js: 6.8s, application-code: 244ms)
  GET / 200 in 342ms (next.js: 310ms, application-code: 32ms)
  GET /process-parameter 200 in 149ms (next.js: 92ms, application-code: 57ms)
+✓ Compiled in 8.9s
