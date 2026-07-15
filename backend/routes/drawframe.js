@@ -2457,6 +2457,147 @@ router.put('/header/:ins_id', async (req, res, next) => {
       });
     }
 
+    const entry_id = await resolveOrCreateProcessParameterEntryId(req.body.entry_id, { forceNew: req.body.force_new === true || req.body.force_new === 'true' });
+
+    const conflictingCountName = await getCountNameConflict(entry_id, count_name);
+    if (conflictingCountName) {
+      return res.status(409).json({ message: `This PP id (${entry_id}) already uses count name "${conflictingCountName}". All sub-departments under a PP id must use the same count name.` });
+    }
+
+    // The Process Parameter matrix's "DF Breaker"/"DF Finisher" status columns split on this
+    // column, not on `type` — without it every entry here is invisible to that "done" check
+    // no matter what `type` says, even though the row itself saved fine.
+    const entry_scope = String(type || '').toLowerCase().includes('finisher') ? 'finisher' : 'breaker';
+
+    const result = await client.query(
+      `INSERT INTO drawframe.drawframe_qc_header (
+        entry_id, entry_scope, type, count_name, consignee_name, creation_date,
+        make, no_of_ends, bottom_roll_setting,
+        breaker_draft, total_draft, hank,
+        web_tension_draft, trumpet_size, delivery_speed, pressure_bar
+      )
+      VALUES (
+        $1,$2,$3,$4,$5,$6,
+        $7,$8,$9,
+        $10,$11,$12,
+        $13,$14,$15,$16
+      )
+      RETURNING *`,
+      [
+        entry_id,
+        entry_scope,
+        type,
+        count_name,
+        consignee_name,
+        creation_date,
+        make,
+        no_of_ends,
+        bottom_roll_setting,
+        breaker_draft,
+        total_draft,
+        hank,
+        web_tension_draft,
+        trumpet_size,
+        delivery_speed,
+        pressure_bar
+      ]
+    );
+
+    // PP_SUB_DEPARTMENTS (ticketing_system's completion tracking) expects Breaker and
+    // Finisher to be logged as two distinct notebooks — hardcoding 'Drawframe QC Header'
+    // for both meant a real Finisher submission was indistinguishable from a Breaker one,
+    // so the batch-completion checker could never see "Drawframe Finisher Drawing
+    // Inspection" as actually done.
+    recordPpNotebookSubmission({
+      notebook: entry_scope === 'finisher' ? 'Drawframe Finisher Drawing Inspection' : 'Drawframe QC Header',
+      department: 'Drawframe',
+      entryId: entry_id,
+      sourceSchema: 'drawframe',
+      sourceTable: 'drawframe_qc_header',
+      submittedByUserId: req.user?.id,
+      submittedByName: req.user?.employee_id,
+      submittedPayload: { count_name, consignee_name, creation_date }
+    }).catch((err) => console.warn('[pp-notebook-log] Drawframe QC Header failed:', err.message));
+
+    res.status(201).json({
+      message: 'Drawframe entry created successfully',
+      data: result.rows[0],
+      entry_id,
+      process_parameter_id: entry_id
+    });
+
+  } catch (error) {
+    console.error(error);
+    next(error);
+  }
+});
+
+router.get('/header', async (req, res, next) => {
+  try {
+    const { page = 1, limit = 10 } = req.query;
+
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 10));
+    const offset = (pageNum - 1) * limitNum;
+
+    const result = await client.query(
+      `SELECT *
+       FROM drawframe.drawframe_qc_header
+       ORDER BY created_at DESC, ins_id DESC
+       OFFSET $1 LIMIT $2`,
+      [offset, limitNum]
+    );
+
+    const totalResult = await client.query(
+      `SELECT COUNT(*) FROM drawframe.drawframe_qc_header`
+    );
+
+    res.status(200).json({
+      data: result.rows,
+      total: parseInt(totalResult.rows[0].count),
+      page: pageNum,
+      limit: limitNum
+    });
+
+  } catch (error) {
+    console.error(error);
+    next(error);
+  }
+});
+
+router.put('/header/:ins_id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.ins_id, 10);
+
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({
+        message: 'Invalid ID supplied'
+      });
+    }
+
+    const {
+      type,
+      count_name,
+      consignee_name,
+      creation_date,
+      make,
+      no_of_ends,
+      bottom_roll_setting,
+      breaker_draft,
+      total_draft,
+      hank,
+      web_tension_draft,
+      trumpet_size,
+      delivery_speed,
+      pressure_bar
+    } = req.body;
+
+    if (!count_name || !consignee_name || !creation_date) {
+      return res.status(400).json({
+        message: 'count_name, consignee_name and creation_date are required'
+      });
+    }
+
     const result = await client.query(
       `UPDATE drawframe.drawframe_qc_header
        SET type = $1,

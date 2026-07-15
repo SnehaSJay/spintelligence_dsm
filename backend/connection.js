@@ -236,6 +236,74 @@ const initPromise = (async () => {
   `);
 
   await pool.query(`
+    CREATE SCHEMA IF NOT EXISTS users;
+  `);
+
+  await pool.query(`
+    ALTER TABLE IF EXISTS users.user_details
+      ADD COLUMN IF NOT EXISTS level varchar(5) NOT NULL DEFAULT 'L1';
+  `);
+
+  await pool.query(`
+    UPDATE users.user_details
+    SET level = 'L1'
+    WHERE level IS NULL OR btrim(level) = '';
+  `);
+
+  await pool.query(`
+    ALTER TABLE IF EXISTS users.user_details
+      ADD COLUMN IF NOT EXISTS top_department varchar(50);
+  `);
+
+  await pool.query(`
+    ALTER TABLE IF EXISTS users.user_details
+      ADD COLUMN IF NOT EXISTS employee_type varchar(10);
+  `);
+
+  const mixingCreatedAtTables = [
+    'mixing.cotton_hvi_data_entry',
+    'mixing.fibre_data_entry',
+    'mixing.afis_data_entry',
+    'mixing.afis6_cotton_data_entry',
+    'mixing.afis6_mmf_data_entry',
+    'mixing.moisture_data_entry',
+    'mixing.openness_inspection',
+    'mixing.mixing_qc_header',
+  ];
+  for (const table of mixingCreatedAtTables) {
+    await pool.query(`
+      ALTER TABLE IF EXISTS ${table}
+        ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+    `);
+  }
+
+  await pool.query(`
+    ALTER TABLE IF EXISTS mixing.afis6_cotton_data_entry
+      ADD COLUMN IF NOT EXISTS sc_nep_count_g NUMERIC,
+      ADD COLUMN IF NOT EXISTS crimp_percent NUMERIC;
+  `);
+
+  await pool.query(`
+    ALTER TABLE IF EXISTS mixing.afis6_mmf_data_entry
+      ADD COLUMN IF NOT EXISTS crimp_percent NUMERIC;
+  `);
+
+  await pool.query(`
+    ALTER TABLE IF EXISTS blowroom.drop_test
+      ADD COLUMN IF NOT EXISTS average_weight NUMERIC;
+  `);
+
+  await pool.query(`
+    ALTER TABLE IF EXISTS mixing.openness_inspection
+      ADD COLUMN IF NOT EXISTS br_line_no VARCHAR(100);
+  `);
+
+  await pool.query(`
+    ALTER TABLE IF EXISTS mixing.openness_entries
+      ADD COLUMN IF NOT EXISTS average_volume NUMERIC;
+  `);
+
+  await pool.query(`
     CREATE SEQUENCE IF NOT EXISTS ticketing_system.ticket_seq
       START WITH 1
       INCREMENT BY 1;

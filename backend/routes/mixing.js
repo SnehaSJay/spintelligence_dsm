@@ -527,18 +527,46 @@ const ensureMixingTimestampColumnsHaveTimezone = async () => {
   `);
 };
 
-// Each table's setup runs independently, isolated in its own try/catch — if any single table has
-// drifted out of sync with what this function assumes (e.g. it's actually a view now, from a schema
-// change made outside this codebase), that failure must not block every other Mixing table's setup
-// from running, which would otherwise 500 every Mixing route that shares this function (they all
-// call it before touching their own table).
-const runMixingSchemaStep = async (label, fn) => {
-  try {
-    await fn();
-  } catch (error) {
-    console.error(`ensureMixingEntryIdColumns: skipping "${label}" step after error:`, error.message);
+// This is one-time idempotent schema setup (add-column-if-not-exists, drop+recreate a view),
+// not per-request work — it used to run on every single POST to a Mixing route, which under
+// concurrent requests raced on the view's DROP/CREATE and intermittently failed with
+// "duplicate key value violates unique constraint pg_type_typname_nsp_index". Memoizing to a
+// single shared promise means every caller awaits the same one-time run instead of each
+// kicking off its own.
+let ensureMixingEntryIdColumnsPromise = null;
+const ensureMixingEntryIdColumns = () => {
+  if (!ensureMixingEntryIdColumnsPromise) {
+    ensureMixingEntryIdColumnsPromise = ensureMixingEntryIdColumnsImpl().catch((err) => {
+      ensureMixingEntryIdColumnsPromise = null;
+      throw err;
+    });
   }
+  return ensureMixingEntryIdColumnsPromise;
 };
+
+const ensureMixingEntryIdColumnsImpl = async () => {
+  await client.query(`
+    ALTER TABLE mixing.cotton_hvi_data_entry
+      ADD COLUMN IF NOT EXISTS entry_id TEXT;
+  `);
+  await client.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS cotton_hvi_data_entry_entry_id_uq
+    ON mixing.cotton_hvi_data_entry (entry_id)
+    WHERE entry_id IS NOT NULL;
+  `);
+  await client.query(`
+    WITH numbered AS (
+      SELECT
+        ctid,
+        ROW_NUMBER() OVER (ORDER BY inspection_date, invoice_date, lot_no, invoice_no, ctid) AS rn
+      FROM mixing.cotton_hvi_data_entry
+      WHERE entry_id IS NULL OR BTRIM(entry_id) = ''
+    )
+    UPDATE mixing.cotton_hvi_data_entry t
+    SET entry_id = LPAD(numbered.rn::text, 4, '0')
+    FROM numbered
+    WHERE t.ctid = numbered.ctid;
+  `);
 
 const ensureMixingEntryIdColumns = async () => {
   await runMixingSchemaStep('timestamp columns', () => ensureMixingTimestampColumnsHaveTimezone());
@@ -2104,6 +2132,14 @@ router.post('/openness', async (req, res, next) => {
       const entryNo = i + 1;
       const stageNo = Math.ceil(entryNo / perStage);
       const e = entries[i];
+      const volume1 = Number(e.volume_1);
+      const volume2 = Number(e.volume_2);
+      const providedAverageVolume = Number(e.average_volume);
+      const averageVolume = Number.isFinite(providedAverageVolume)
+        ? providedAverageVolume
+        : Number.isFinite(volume1) && Number.isFinite(volume2)
+          ? (volume1 + volume2) / 2
+          : null;
 
       await client.query(
         `INSERT INTO mixing.openness_entries

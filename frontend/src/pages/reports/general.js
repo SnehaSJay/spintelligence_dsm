@@ -76,6 +76,178 @@ const uniqueReportFields = (fields) =>
     return key && index === list.findIndex((item) => getCanonicalFieldKey(item) === key);
   });
 
+const findEntryIdLikeValue = (row) => {
+  if (!row || typeof row !== "object") return null;
+  const denylist = new Set(["id", "_id"]);
+  const candidateKey = Object.keys(row).find((key) => {
+    if (denylist.has(key)) return false;
+    const normalized = normalizeLookup(key);
+    return normalized.includes("entryid") || normalized.includes("entrycode") || normalized.includes("entryno");
+  });
+  if (!candidateKey) return null;
+  const value = row[candidateKey];
+  return value !== null && typeof value !== "undefined" && value !== "" ? value : null;
+};
+
+const BLEND_FIELD_PATTERN = /^blend-\d+$/i;
+// By the time a row reaches here it has already been through normalizeDashboardRows, which
+// flattens each mixing_qc_blends row into its own report row with plain "blend_no"/
+// "percentage" keys — there is never a surviving nested "blends" array to look into, and never
+// more than one blend per row. "Blend-1" (the % typed into the form) and "Blend No." (the
+// blend's sequence number) are simply two different flat columns already on that row.
+const BLEND_NO_FIELD_LABEL = "blend no.";
+const BLEND_FIELD_PATTERN = /^blend-\d+$/i;
+// By the time a row reaches here it has already been through normalizeDashboardRows, which
+// flattens each mixing_qc_blends row into its own report row with plain "blend_no"/
+// "percentage" keys — there is never a surviving nested "blends" array to look into, and never
+// more than one blend per row. "Blend-1" (the % typed into the form) and "Blend No." (the
+// blend's sequence number) are simply two different flat columns already on that row.
+const BLEND_NO_FIELD_LABEL = "blend no.";
+
+const getBlendFieldValue = (row, field) => {
+  const label = String(field?.label || field?.key || "").trim();
+
+  if (normalizeLookup(label) === normalizeLookup(BLEND_NO_FIELD_LABEL)) {
+    return row?.blend_no ?? null;
+  }
+
+  if (!BLEND_FIELD_PATTERN.test(label)) return undefined;
+  return row?.percentage ?? null;
+};
+
+const SAMPLE_FIELD_PATTERN = /^sample\s*(\d+)$/i;
+
+const getSampleFieldValue = (row, field) => {
+  const match = SAMPLE_FIELD_PATTERN.exec(String(field?.label || field?.key || "").trim());
+  if (!match) return undefined;
+  const sampleNo = Number(match[1]);
+  const sampleIndex = sampleNo - 1;
+
+  const samplesRaw = row?.samples;
+  const samples = Array.isArray(samplesRaw)
+    ? samplesRaw
+    : typeof samplesRaw === "string"
+      ? (() => {
+          try {
+            const parsed = JSON.parse(samplesRaw);
+            return Array.isArray(parsed) ? parsed : null;
+          } catch {
+            return null;
+          }
+        })()
+      : null;
+  if (samples) {
+    const objectSample = samples.find(
+      (item) => item && typeof item === "object" && Number(item.sample_no) === sampleNo
+    );
+    if (objectSample) {
+      const objectValue = objectSample.value ?? objectSample.sample_value;
+      if (objectValue !== null && typeof objectValue !== "undefined" && objectValue !== "") return objectValue;
+    } else {
+      const value = samples[sampleIndex];
+      if (value !== null && typeof value !== "undefined" && value !== "") return value;
+    }
+  }
+
+  const directKeys = [
+    `sample_${sampleNo}`,
+    `sample${sampleNo}`,
+    `sampleNo${sampleNo}`,
+    `Sample ${sampleNo}`,
+  ];
+  for (const key of directKeys) {
+    if (row?.[key] !== null && typeof row?.[key] !== "undefined" && row?.[key] !== "") return row[key];
+  }
+
+  return null;
+};
+
+const WASTE_ROW_FIELD_KEYS = {
+  "wastekgsvalue": "waste_kgs_value",
+  "wastekgspercent": "waste_kgs_percent",
+  "wastetype": "waste_type",
+};
+
+const getWasteRowFieldValue = (row, field) => {
+  const canonical = normalizeLookup(field?.label || field?.key || "");
+  const entryKey = WASTE_ROW_FIELD_KEYS[canonical];
+  if (!entryKey) return undefined;
+
+  if (row?.[entryKey] !== null && typeof row?.[entryKey] !== "undefined" && row?.[entryKey] !== "") {
+    return row[entryKey];
+  }
+
+  const wasteRows = Array.isArray(row?.waste_rows) ? row.waste_rows : [];
+  const firstRow = wasteRows.find(
+    (item) => item && typeof item === "object" && item[entryKey] !== null && typeof item[entryKey] !== "undefined" && item[entryKey] !== ""
+  );
+  return firstRow ? firstRow[entryKey] : undefined;
+};
+
+const TYPE_ROW_FIELD_KEYS = {
+  "cylinderspeed": "cylinder_speed",
+  "lickerinspeed": "lickerin_speed",
+  "flatspeed": "flat_speed",
+  "dofferspeed": "doffer_speed",
+  "deliveryspeed": "delivery_speed",
+  "wingsetting": "wing_setting_1",
+  "wingsettling1": "wing_setting_1",
+  "wingsettling2": "wing_setting_2",
+  "1stlickerinspeed": "lickerin_speed_1",
+  "2ndlickerinspeed": "lickerin_speed_2",
+  "3rdlickerinspeed": "lickerin_speed_3",
+  "mcno": "mc_no",
+  "mcproduction": "mc_production",
+};
+
+const getTypeRowFieldValue = (row, field) => {
+  const canonical = normalizeLookup(field?.label || field?.key || "");
+  const entryKey = TYPE_ROW_FIELD_KEYS[canonical];
+  if (!entryKey) return undefined;
+
+  if (row?.[entryKey] !== null && typeof row?.[entryKey] !== "undefined" && row?.[entryKey] !== "") {
+    return row[entryKey];
+  }
+
+  const typeRows = Array.isArray(row?.type_rows) ? row.type_rows : [];
+  const firstRow = typeRows.find(
+    (item) => item && typeof item === "object" && item[entryKey] !== null && typeof item[entryKey] !== "undefined" && item[entryKey] !== ""
+  );
+  return firstRow ? firstRow[entryKey] : undefined;
+};
+
+const SYNC_ENTRY_FIELD_KEYS = {
+  "runtime(seconds)": "value_a",
+  "idletime(seconds)": "value_b",
+  "subtotaltime": "value_c",
+  "syncpercentage": "sync_percentage",
+};
+
+const getSyncEntryFieldValue = (row, field) => {
+  const canonical = normalizeLookup(field?.label || field?.key || "");
+
+  if (canonical === "numberofrowsn" || canonical === "numberofnepsentries") {
+    if (row?.number_of_entries !== null && typeof row?.number_of_entries !== "undefined" && row?.number_of_entries !== "") {
+      return row.number_of_entries;
+    }
+    const entries = Array.isArray(row?.entries) ? row.entries : null;
+    return entries ? entries.length : undefined;
+  }
+
+  const entryKey = SYNC_ENTRY_FIELD_KEYS[canonical];
+  if (!entryKey) return undefined;
+
+  if (row?.[entryKey] !== null && typeof row?.[entryKey] !== "undefined" && row?.[entryKey] !== "") {
+    return row[entryKey];
+  }
+
+  const entries = Array.isArray(row?.entries) ? row.entries : [];
+  const firstEntry = entries.find(
+    (entry) => entry && typeof entry === "object" && entry[entryKey] !== null && typeof entry[entryKey] !== "undefined" && entry[entryKey] !== ""
+  );
+  return firstEntry ? firstEntry[entryKey] : undefined;
+};
+
 const getReportFieldValue = (row, field) => {
   const keys = [
     field?.key,
