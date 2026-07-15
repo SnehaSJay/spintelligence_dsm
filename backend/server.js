@@ -430,6 +430,7 @@ const startSubmittedNotebookAckWorker = () => {
   const intervalMs = Number(process.env.NOTEBOOK_ACK_WORKER_INTERVAL_MS || 15 * 60 * 1000);
   const run = async () => {
     try {
+      await db.initPromise.catch(() => {});
       const created = await generateOverdueNotebookTickets();
       if (created.length) {
         console.log(`[submitted-notebooks] generated ${created.length} overdue acknowledgement ticket(s)`);

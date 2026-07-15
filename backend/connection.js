@@ -794,5 +794,6 @@ module.exports = {
   query,
   withRequestContext,
   pool,
-  supabaseMirrorPool
+  supabaseMirrorPool,
+  initPromise
 };
