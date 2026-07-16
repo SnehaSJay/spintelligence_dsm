@@ -6,7 +6,6 @@ import SearchableSelect from "@/components/SearchableSelect";
 import styles from "@/styles/u%dataentry.module.css";
 import { sanitizeNumericInput } from "@/utils/inputValidation";
 import {
-  STATIC_DEPARTMENT_OPTIONS,
   STATIC_MC_NO_OPTIONS,
   STATIC_SHIFT_OPTIONS,
   STATIC_VARIETY_OPTIONS,
@@ -18,7 +17,6 @@ const initialForm = () => ({
   date: new Date().toISOString().split("T")[0],
   shift: "",
   variety: "",
-  department: "",
   mc_no: "",
   u_percent: "",
   cvm: "",
@@ -28,7 +26,6 @@ const initialForm = () => ({
 });
 
 const SHIFT_OPTIONS = STATIC_SHIFT_OPTIONS.map((item) => item.value);
-const DEPARTMENT_OPTIONS = ["Comber", "Drawing", "Preparatory"];
 const MC_NO_OPTIONS = ["MC-01", "MC-02", "MC-03", "CB-01", "CB-02", "CB-03", "CB-04"];
 const VARIETY_FALLBACK_OPTIONS = ["Cotton", "WPSF 0.90", "WPSF 1.20", "PSF Blend"];
 
@@ -43,7 +40,6 @@ const UPercentDataEntry = forwardRef(function UPercentDataEntry(
   const [formMessage, setFormMessage] = useState("");
   const [shiftOptions, setShiftOptions] = useState(SHIFT_OPTIONS);
   const [varietyOptions, setVarietyOptions] = useState(VARIETY_FALLBACK_OPTIONS);
-  const [departmentOptions, setDepartmentOptions] = useState(DEPARTMENT_OPTIONS);
   const [mcNoOptions, setMcNoOptions] = useState(MC_NO_OPTIONS);
 
   const handleChange = (field, value) => {
@@ -87,9 +83,6 @@ const UPercentDataEntry = forwardRef(function UPercentDataEntry(
         const nextVarieties = dropdown.varietyNames?.length
           ? dropdown.varietyNames
           : dropdown.varieties.map((item) => item.variety_name).filter(Boolean);
-        const nextDepartments = dropdown.departmentNames?.length
-          ? dropdown.departmentNames
-          : dropdown.departments.map((item) => item.dept_name).filter(Boolean);
         const nextMcNos = Array.isArray(dropdown.mcNos)
           ? dropdown.mcNos
               .map((item) => ({
@@ -101,7 +94,6 @@ const UPercentDataEntry = forwardRef(function UPercentDataEntry(
 
         if (nextShifts.length) setShiftOptions(nextShifts);
         if (nextVarieties.length) setVarietyOptions(nextVarieties);
-        if (nextDepartments.length) setDepartmentOptions(nextDepartments);
         if (nextMcNos.length) setMcNoOptions(nextMcNos);
       } catch (_error) {
         try {
@@ -138,7 +130,6 @@ const UPercentDataEntry = forwardRef(function UPercentDataEntry(
     if (!String(form.date || "").trim()) nextErrors.date = true;
     if (!String(form.shift || "").trim()) nextErrors.shift = true;
     if (!String(form.variety || "").trim()) nextErrors.variety = true;
-    if (!String(form.department || "").trim()) nextErrors.department = true;
     if (!String(form.mc_no || "").trim()) nextErrors.mc_no = true;
     if (!String(form.u_percent || "").trim()) nextErrors.u_percent = true;
     if (!String(form.cvm || "").trim()) nextErrors.cvm = true;
@@ -154,7 +145,6 @@ const UPercentDataEntry = forwardRef(function UPercentDataEntry(
     { label: "Entry ID", value: entryId || "-" },
     { label: "Shift", value: form.shift },
     { label: "Variety", value: form.variety },
-    { label: "Department", value: form.department },
     { label: "MC No.", value: form.mc_no },
     { label: "U%", value: form.u_percent },
     { label: "CVM", value: form.cvm },
@@ -173,7 +163,6 @@ const UPercentDataEntry = forwardRef(function UPercentDataEntry(
           entry_date: form.date,
           shift: form.shift,
           variety: form.variety,
-          department: form.department,
           mc_no: form.mc_no,
           u_percent: form.u_percent,
           cvm: form.cvm,
@@ -240,18 +229,6 @@ const UPercentDataEntry = forwardRef(function UPercentDataEntry(
             options={varietyOptions}
             placeholder="Select"
             ariaLabel="Variety"
-          />
-        </div>
-
-        <div>
-          <label>Department</label>
-          <SearchableSelect
-            value={form.department}
-            onChange={(value) => handleChange("department", value)}
-            className={errors.department ? styles.errorField : ""}
-            options={departmentOptions}
-            placeholder="Select Department"
-            ariaLabel="Department"
           />
         </div>
 

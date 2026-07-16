@@ -2175,6 +2175,9 @@ router.post('/header', async (req, res, next) => {
     });
 
   } catch (error) {
+    if (isUniqueViolation(error)) {
+      return res.status(409).json({ message: 'Duplicate entry_id. Please use a unique ID.' });
+    }
     console.error(error);
     next(error);
   }
@@ -2742,6 +2745,9 @@ router.post('/finisher', async (req, res, next) => {
     });
 
   } catch (error) {
+    if (isUniqueViolation(error)) {
+      return res.status(409).json({ message: 'Duplicate entry_id. Please use a unique ID.' });
+    }
     console.error(error);
     next(error);
   }
