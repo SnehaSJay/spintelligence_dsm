@@ -21,7 +21,12 @@ app.use((req, res, next) => {
   }
   next();
 });
-
+app.use((req, res, next) => {
+  console.log("Origin:", req.headers.origin);
+  console.log("Method:", req.method);
+  console.log("URL:", req.url);
+  next();
+});
 app.use(cors({
   origin: (origin, callback) => {
     // Read allowlist from env each request so config changes take effect on restart.
