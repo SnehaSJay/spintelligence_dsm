@@ -222,19 +222,13 @@ export const fetchComberMasterVarieties = async ({ prefix = "" } = {}) => {
 export const fetchComberUqcMasterDropdown = async ({
     prefix = "",
     variety_prefix = "",
-    department_prefix = "",
     mc_no_prefix = "",
-    department = "",
-    department_code = "",
 } = {}) => {
     try {
         const response = await apiConfig.get("/comber/uqc/master/dropdown", {
             prefix,
             variety_prefix,
-            department_prefix,
             mc_no_prefix,
-            department,
-            department_code,
         });
 
         const payload = response?.data || {};
@@ -262,32 +256,16 @@ export const fetchComberUqcMasterDropdown = async ({
                 variety_name: row.value,
             }));
 
-        const departments = Array.isArray(payload.departments) && payload.departments.length
-            ? payload.departments
-                .map((row) => ({
-                    dept_code: String(row?.dept_code || "").trim(),
-                    dept_name: String(row?.dept_name || row?.name || row || "").trim(),
-                }))
-                .filter((row) => row.dept_name)
-            : normalizeOptionRows(optionGroups.department).map((row) => ({
-                dept_code: "",
-                dept_name: row.value,
-            }));
-
         const mcNos = Array.isArray(payload.mc_nos) && payload.mc_nos.length
             ? payload.mc_nos
                 .map((row) => ({
                     mc_no: String(row?.mc_no || row?.value || "").trim(),
                     mc_name: String(row?.mc_name || row?.label || row?.mc_no || "").trim(),
-                    dept_code: String(row?.dept_code || "").trim(),
-                    dept_name: String(row?.dept_name || "").trim(),
                 }))
                 .filter((row) => row.mc_no || row.mc_name)
             : normalizeOptionRows(optionGroups.mc_no).map((row) => ({
                 mc_no: row.value,
                 mc_name: row.label,
-                dept_code: "",
-                dept_name: "",
             }));
 
         return {
@@ -296,11 +274,6 @@ export const fetchComberUqcMasterDropdown = async ({
             varietyNames: uniqueStrings([
                 ...(Array.isArray(payload.variety_names) ? payload.variety_names : []),
                 ...varieties.map((row) => row.variety_name),
-            ]),
-            departments,
-            departmentNames: uniqueStrings([
-                ...(Array.isArray(payload.department_names) ? payload.department_names : []),
-                ...departments.map((row) => row.dept_name),
             ]),
             mcNos,
         };

@@ -574,12 +574,23 @@ const getOptionText = (value) => {
       ""
   ).trim();
 };
-const cleanRfLabel = (value) =>
-  String(value || "")
-    .trim()
+// Mirrors the backend's formatRfMachineName so every source (COTS RF list,
+// machine master, wheel-change dropdown, static fallback) renders the same
+// "R/F NO 01" shape instead of raw machine names like "1/R.F.NO.01".
+const cleanRfLabel = (value) => {
+  const text = String(value || "").trim();
+  if (!text) return "";
+
+  const rfMatch = text.match(/\bR\s*\/?\s*F\s*(?:NO\.?|NUMBER|#)?\s*0*(\d{1,3})\b/i);
+  if (rfMatch) {
+    return `R/F NO ${String(Number(rfMatch[1])).padStart(2, "0")}`;
+  }
+
+  return text
     .replace(/^\d+\s*[,/-]\s*/g, "")
     .replace(/^\d+\s*\/\s*/g, "")
     .trim();
+};
 const normalizeMachineOptions = (payload) => {
   const rows = Array.isArray(payload)
     ? payload
@@ -641,6 +652,7 @@ const normalizeMachineOptions = (payload) => {
     })
     .filter((option) => {
       if (!option || seen.has(option.value)) return false;
+      if (option.deptCode === "48") return false;
       seen.add(option.value);
       return true;
     });
@@ -1103,7 +1115,10 @@ const WheelChange = forwardRef(function WheelChange(
       const machineOptionSources = [];
 
       machineOptionSources.push(
-        STATIC_RF_NO_OPTIONS.map((value) => ({ value, label: value }))
+        STATIC_RF_NO_OPTIONS.map((value) => {
+          const label = cleanRfLabel(`R/F NO ${value}`);
+          return { value: label, label };
+        })
       );
 
       if (cotsRfResult.status === "fulfilled") {

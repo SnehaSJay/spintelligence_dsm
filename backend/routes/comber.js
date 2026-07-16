@@ -323,56 +323,30 @@ router.get('/uqc/master/dropdown', async (req, res, next) => {
     }
 
     const varietyPrefix = String(req.query.variety_prefix || req.query.prefix || '').trim();
-    const departmentPrefix = String(req.query.department_prefix || req.query.prefix || '').trim();
     const mcNoPrefix = String(req.query.mc_no_prefix || req.query.prefix || '').trim();
-    const department = String(req.query.department || '').trim();
-    const departmentCode = String(req.query.department_code || '').trim();
 
-    const [varieties, departmentResult, mcResult] = await Promise.all([
+    const [varieties, mcResult] = await Promise.all([
       fetchPrepVarieties(sqlServerPrep, varietyPrefix),
-      sqlServer.query(
-        `SELECT DISTINCT
-           CAST(d.DEPTCODE AS VARCHAR(50)) AS dept_code,
-           LTRIM(RTRIM(CAST(d.DEPTNAME AS VARCHAR(255)))) AS dept_name
-         FROM dbo.dept_mai d
-         WHERE LTRIM(RTRIM(CAST(d.DEPTNAME AS VARCHAR(255)))) <> ''
-           AND (@prefix = '' OR LTRIM(RTRIM(CAST(d.DEPTNAME AS VARCHAR(255)))) LIKE @deptPrefix)
-         ORDER BY dept_name`,
-        { prefix: departmentPrefix, deptPrefix: `%${departmentPrefix}%` }
-      ),
       sqlServer.query(
         `SELECT
            CAST(m.MCCODE AS VARCHAR(50)) AS mc_no,
-           LTRIM(RTRIM(CAST(m.MCNAME AS VARCHAR(255)))) AS mc_name,
-           CAST(m.DEPTCODE AS VARCHAR(50)) AS dept_code,
-           LTRIM(RTRIM(CAST(d.DEPTNAME AS VARCHAR(255)))) AS dept_name
+           LTRIM(RTRIM(CAST(m.MCNAME AS VARCHAR(255)))) AS mc_name
          FROM dbo.MCMASTER m
          JOIN dbo.dept_mai d ON m.DEPTCODE = d.DEPTCODE
          WHERE m.compcode = '1'
            AND (@prefix = '' OR CAST(m.MCCODE AS VARCHAR(50)) LIKE @mcNoPrefix)
-           AND (@department = '' OR LTRIM(RTRIM(CAST(d.DEPTNAME AS VARCHAR(255)))) LIKE @departmentLike)
-           AND (@departmentCode = '' OR CAST(d.DEPTCODE AS VARCHAR(50)) = @departmentCode)
+           AND UPPER(LTRIM(RTRIM(CAST(d.DEPTNAME AS VARCHAR(255))))) LIKE UPPER('%Comber%')
          ORDER BY CASE WHEN ISNUMERIC(CAST(m.MCCODE AS VARCHAR(50))) = 1 THEN CAST(m.MCCODE AS INT) ELSE 2147483647 END, m.MCCODE`,
         {
           prefix: mcNoPrefix,
-          mcNoPrefix: `%${mcNoPrefix}%`,
-          department,
-          departmentLike: `%${department}%`,
-          departmentCode
+          mcNoPrefix: `%${mcNoPrefix}%`
         }
       )
     ]);
 
-    const departments = (departmentResult.recordset || []).map((r) => ({
-      dept_code: String(r.dept_code || '').trim(),
-      dept_name: String(r.dept_name || '').trim()
-    })).filter((r) => r.dept_name);
-
     const mcNos = (mcResult.recordset || []).map((r) => ({
       mc_no: String(r.mc_no || '').trim(),
-      mc_name: String(r.mc_name || '').trim(),
-      dept_code: String(r.dept_code || '').trim(),
-      dept_name: String(r.dept_name || '').trim()
+      mc_name: String(r.mc_name || '').trim()
     })).filter((r) => r.mc_no);
 
     const shifts = [
@@ -383,7 +357,6 @@ router.get('/uqc/master/dropdown', async (req, res, next) => {
 
     const shiftOptions = [{ text: '-- Select Shift --', value: '' }, ...shifts.map((s) => ({ text: s.label, value: s.value }))];
     const varietyOptions = [{ text: '-- Select Variety --', value: '' }, ...varieties.map((v) => ({ text: v.variety_name, value: v.variety_name }))];
-    const departmentOptions = [{ text: '-- Select Department --', value: '' }, ...departments.map((d) => ({ text: d.dept_name, value: d.dept_name }))];
     const mcNoOptions = [{ text: '-- Select MC No. --', value: '' }, ...mcNos.map((m) => ({ text: m.mc_name || m.mc_no, value: m.mc_name || m.mc_no }))];
 
     return res.status(200).json({
@@ -392,14 +365,11 @@ router.get('/uqc/master/dropdown', async (req, res, next) => {
       shift_values: shifts.map((s) => s.value),
       varieties,
       variety_names: varieties.map((r) => r.variety_name),
-      departments,
-      department_names: departments.map((r) => r.dept_name),
       mc_nos: mcNos,
       mc_no_values: mcNos.map((r) => r.mc_no),
       options: {
         shift: shiftOptions,
         variety: varietyOptions,
-        department: departmentOptions,
         mc_no: mcNoOptions
       }
     });
@@ -1222,7 +1192,6 @@ router.post('/uqc', async (req, res) => {
             entry_date,
             shift,
             variety,
-            department,
             mc_no,
             u_percent,
             cvm,
@@ -1248,9 +1217,9 @@ router.post('/uqc', async (req, res) => {
 
         const result = await client.query(
             `INSERT INTO comber.u_data_entry
-            (entry_id, entry_type, entry_date, shift, variety, department, mc_no,
+            (entry_id, entry_type, entry_date, shift, variety, mc_no,
              u_percent, cvm, cvm_1m, cvm_3m, remarks)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
             RETURNING *`,
             [
                 entry_id,
@@ -1258,7 +1227,6 @@ router.post('/uqc', async (req, res) => {
                 entry_date,
                 shift,
                 variety,
-                department,
                 mc_no,
                 toNumber(u_percent),
                 toNumber(cvm),

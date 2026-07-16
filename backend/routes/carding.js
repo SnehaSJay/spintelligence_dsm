@@ -359,6 +359,18 @@ const ensureCardWasteStudyTable = async () => {
   `);
 };
 
+const CARD_WASTE_TYPE_DEFAULTS = [
+  'Luckerin waste',
+  'Flat waste',
+  'Fan waste',
+  'Micro dust SFL top',
+  'Micro dust SFL bottom',
+  'Micro dust SFD top',
+  'Micro dust SFD bottom',
+  'Sliver waste',
+  'Lap waste',
+];
+
 const ensureCardWasteTypeMasterTable = async () => {
   if (cardWasteTypeMasterReady) return;
 
@@ -382,6 +394,20 @@ const ensureCardWasteTypeMasterTable = async () => {
     ON carding.card_waste_type_master (waste_type_key)
     WHERE waste_type_key IS NOT NULL;
   `);
+
+  for (const wasteType of CARD_WASTE_TYPE_DEFAULTS) {
+    const wasteTypeKey = wasteType.toLowerCase();
+    await client.query(
+      `INSERT INTO carding.card_waste_type_master (waste_type, waste_type_key, sort_order)
+       VALUES (
+         $1,
+         $2,
+         COALESCE((SELECT MAX(sort_order) FROM carding.card_waste_type_master), 0) + 1
+       )
+       ON CONFLICT (waste_type_key) DO NOTHING`,
+      [wasteType, wasteTypeKey]
+    );
+  }
 
   cardWasteTypeMasterReady = true;
 };

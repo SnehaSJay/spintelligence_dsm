@@ -144,6 +144,15 @@ const normalizeWasteType = (value) => {
 
 const BR_WASTE_TYPE_CLEANUP_PREFIXES = ['fla', 'flat str', 'flat stri'];
 
+const BR_WASTE_TYPE_DEFAULTS = [
+  'Dropping waste in MO',
+  'Dropping waste in RK',
+  'Dropping waste in flexi clean',
+  'Dropping waste in KB',
+  'Dropping waste in Vario clean',
+  'Dropping waste in GBR',
+];
+
 const ensureBlowroomWasteTypeMasterTable = async () => {
   if (brWasteTypeMasterReady) return;
 
@@ -170,6 +179,25 @@ const ensureBlowroomWasteTypeMasterTable = async () => {
     );
   }
 
+  await client.query(`
+    ALTER TABLE blowroom.br_waste_type_master
+      ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 0;
+  `);
+
+  for (const wasteType of BR_WASTE_TYPE_DEFAULTS) {
+    const wasteTypeKey = wasteType.toLowerCase();
+    await client.query(
+      `INSERT INTO blowroom.br_waste_type_master (waste_type, waste_type_key, sort_order)
+       VALUES (
+         $1,
+         $2,
+         COALESCE((SELECT MAX(sort_order) FROM blowroom.br_waste_type_master), 0) + 1
+       )
+       ON CONFLICT (waste_type_key) DO NOTHING`,
+      [wasteType, wasteTypeKey]
+    );
+  }
+
   brWasteTypeMasterReady = true;
 };
 
@@ -182,8 +210,12 @@ const upsertBlowroomWasteType = async (wasteType) => {
 
   const wasteTypeKey = normalizedWasteType.toLowerCase();
   const result = await client.query(
-    `INSERT INTO blowroom.br_waste_type_master (waste_type, waste_type_key)
-     VALUES ($1, $2)
+    `INSERT INTO blowroom.br_waste_type_master (waste_type, waste_type_key, sort_order)
+     VALUES (
+       $1,
+       $2,
+       COALESCE((SELECT MAX(sort_order) FROM blowroom.br_waste_type_master), 0) + 1
+     )
      ON CONFLICT (waste_type_key)
      DO UPDATE SET waste_type = EXCLUDED.waste_type
      RETURNING id, waste_type, waste_type_key, created_at`,

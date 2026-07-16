@@ -13,7 +13,7 @@ import SpinningProcessParameter from "@/views/spinning/processParameterDataEntry
 import AutoconerProcessParameter from "@/views/autoconer/ProcessParameter";
 import AutoconerQ2 from "@/views/autoconer/AutoconerQ2";
 import AutoconerQ3 from "@/views/autoconer/AutoconerQ3";
-import { hasSubDepartmentAccess } from "@/utils/accessControl";
+import { hasSubDepartmentAccess, isFullAccessUser } from "@/utils/accessControl";
 import { normalizeProcessParameterId, resolveProcessParameterDisplayId } from "@/utils/processParameterId";
 import {
   getProcessParameterCountName,
@@ -1020,27 +1020,29 @@ export default function ProcessParameterPage() {
                   <MdPrint /> Print Matrix
                 </button>
               ) : null}
-              <button
-                type="button"
-                className={styles.printMatrixButton}
-                title="Clears this browser's PP id counter and locally-stored Draw Frame/Spinning entries so new PPs start from PP-0001 again. Does not delete backend records (Mixing/Blow Room/Carding/Simplex/Autoconer/Q2/Q3) — those must be removed from the database separately."
-                onClick={() => {
-                  const confirmed = window.confirm(
-                    "This clears the PP id counter and locally-stored Draw Frame/Spinning entries on this browser so new PPs start from PP-0001.\n\n" +
-                      "It does NOT delete backend records (Mixing, Blow Room, Carding, Simplex, Autoconer, AC-Q2, AC-Q3) — those must be deleted from the database first, otherwise their rows and PP ids will still appear.\n\n" +
-                      "Continue?"
-                  );
-                  if (!confirmed) return;
-                  resetProcessParameterLocalState();
-                  setDynamicRows(loadRegistryRows());
-                  loadRemoteStatuses();
-                  setSelectedEntryId("");
-                  setOpenEditTabs([]);
-                  setActiveTab("new");
-                }}
-              >
-                Reset Local PP Data
-              </button>
+              {isFullAccessUser(user) ? (
+                <button
+                  type="button"
+                  className={styles.printMatrixButton}
+                  title="Clears this browser's PP id counter and locally-stored Draw Frame/Spinning entries so new PPs start from PP-0001 again. Does not delete backend records (Mixing/Blow Room/Carding/Simplex/Autoconer/Q2/Q3) — those must be removed from the database separately."
+                  onClick={() => {
+                    const confirmed = window.confirm(
+                      "This clears the PP id counter and locally-stored Draw Frame/Spinning entries on this browser so new PPs start from PP-0001.\n\n" +
+                        "It does NOT delete backend records (Mixing, Blow Room, Carding, Simplex, Autoconer, AC-Q2, AC-Q3) — those must be deleted from the database first, otherwise their rows and PP ids will still appear.\n\n" +
+                        "Continue?"
+                    );
+                    if (!confirmed) return;
+                    resetProcessParameterLocalState();
+                    setDynamicRows(loadRegistryRows());
+                    loadRemoteStatuses();
+                    setSelectedEntryId("");
+                    setOpenEditTabs([]);
+                    setActiveTab("new");
+                  }}
+                >
+                  Reset Local PP Data
+                </button>
+              ) : null}
               <div className={styles.currentDate}>Current Date : {currentDate}</div>
             </div>
           </div>
