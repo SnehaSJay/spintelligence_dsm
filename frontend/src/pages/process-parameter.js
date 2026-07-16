@@ -1361,7 +1361,7 @@ export default function ProcessParameterPage() {
                 />
               ) : (
                 <div className={styles.messageBox}>
-                  Open the selected department to view its process parameter form.
+                  Select Sub Department to view respective process parameter form.
                 </div>
               )}
               {showFooter ? (
