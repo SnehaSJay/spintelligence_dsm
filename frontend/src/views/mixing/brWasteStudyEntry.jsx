@@ -165,6 +165,9 @@ const BrWasteStudyEntry = forwardRef(function BrWasteStudyEntry({
     fetchWasteTypesApi = null,
     saveWasteTypeApi = saveBlowroomMasterWasteType,
     entryTypeLabel = "BR Waste Study Entry",
+    customFieldsDepartment = "Quality Control",
+    customFieldsSubDepartment = "Blow Room",
+    customFieldsNotebook = entryTypeLabel,
     useBlowroomRedux = true,
     showEntryId = true,
     variety: externalVariety,
@@ -1106,9 +1109,9 @@ const BrWasteStudyEntry = forwardRef(function BrWasteStudyEntry({
             )}
 
             <NotebookCustomFields
-                department="Quality Control"
-                subDepartment="Blow Room"
-                notebook="BR Waste Study Entry"
+                department={customFieldsDepartment}
+                subDepartment={customFieldsSubDepartment}
+                notebook={customFieldsNotebook}
                 entryId={entryId}
                 values={customFieldValues}
                 onChange={handleCustomFieldChange}

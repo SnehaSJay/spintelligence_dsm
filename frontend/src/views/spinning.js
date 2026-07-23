@@ -6,6 +6,7 @@ import Image from "next/image";
 
 import Footer from "../components/Footer";
 import InputScreenUploadButton from "@/components/InputScreenUploadButton";
+import NotebookCustomFields from "@/components/NotebookCustomFields";
 import PreviewModal from "@/components/PreviewModal";
 import SearchableSelect from "@/components/SearchableSelect";
 import SuccessModal from "@/components/SuccessModal";
@@ -18,6 +19,7 @@ import {
     fetchSpinningMachineNumberOptions,
     fetchSpinningRingFrameShifts,
 } from "@/apis/spinning";
+import { saveNotebookCustomFieldValuesApi } from "@/apis/notebookCustomFieldsApi";
 import { fetchEmployeeOptions, normalizeEmployeeOptions } from "@/apis/employeeMaster";
 import { sanitizeIntegerInput, sanitizeNumericInput, sanitizeSpindleListInput, sanitizeSpindleNumberInput } from "@/utils/inputValidation";
 import { filterOptionsByDepartmentAccess } from "@/utils/screenAccess";
@@ -300,6 +302,23 @@ function SpinningDepartment() {
         checkingOptions.find((item) => item.name === value || item.displayName === value) || null;
 
     const [checkingType, setCheckingType] = useState(findCheckingOption(queryType)?.name || checkingOptions[0]?.name || "");
+    const [customFieldValues, setCustomFieldValues] = useState({});
+    const handleCustomFieldChange = (fieldId, value) => {
+        setCustomFieldValues((prev) => ({ ...prev, [fieldId]: value }));
+    };
+    const saveCustomFields = async (linkedEntryId) => {
+        const targetEntryId = linkedEntryId || entryId;
+        const customFieldEntries = Object.entries(customFieldValues).filter(([, v]) => String(v ?? "").trim() !== "");
+        if (!targetEntryId || !customFieldEntries.length) return;
+        try {
+            await saveNotebookCustomFieldValuesApi(
+                targetEntryId,
+                customFieldEntries.map(([customFieldId, value]) => ({ custom_field_id: customFieldId, value }))
+            );
+        } catch (customFieldError) {
+            console.error("Failed to save custom field values:", customFieldError);
+        }
+    };
     const [selectedMachine, setSelectedMachine] = useState("");
     const [displaySpeed, setDisplaySpeed] = useState("");
     const [spindleSpeed, setSpindleSpeed] = useState("");
@@ -810,6 +829,7 @@ function SpinningDepartment() {
         // and the router.push made it look like a whole new form/screen had opened.
         clearFormValues();
         setDate(getTodayDate());
+        setCustomFieldValues({});
     };
 
     const validate = () => {
@@ -1065,6 +1085,7 @@ function SpinningDepartment() {
                     responseData?.entry_id ?? responseData?.entryId ?? entryId ?? ""
                 ).trim();
                 setConfirmedEntryId(realEntryId);
+                await saveCustomFields(realEntryId || entryId);
                 await recordSubmittedNotebook({
                     department: "Quality Control",
                     subDepartment: "Spinning",
@@ -1741,6 +1762,17 @@ function SpinningDepartment() {
                             </>
                         )}
                     </div>
+
+                    {!(isProcessParameter || isWheelChange) ? (
+                        <NotebookCustomFields
+                            department="Quality Control"
+                            subDepartment="Spinning"
+                            notebook={checkingType}
+                            entryId={entryId}
+                            values={customFieldValues}
+                            onChange={handleCustomFieldChange}
+                        />
+                    ) : null}
                         </>
                     )}
 

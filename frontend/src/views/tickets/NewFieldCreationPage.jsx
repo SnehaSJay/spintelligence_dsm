@@ -6,6 +6,7 @@ import {
     toggleNotebookCustomFieldApi,
     updateNotebookCustomFieldApi,
 } from "@/apis/notebookCustomFieldsApi";
+import SuccessModal from "@/components/SuccessModal";
 import styles from "@/styles/newFieldCreation.module.css";
 
 // Departments this page groups under. Update this list if the actual set changes.
@@ -17,11 +18,11 @@ const SUB_DEPARTMENTS = [
     "Mixing",
     "Blow Room",
     "Carding",
+    "Comber",
     "Draw Frame",
     "Simplex",
     "Spinning",
     "Autoconer",
-    "Comber",
     "Individual Card Performance",
 ];
 
@@ -95,6 +96,8 @@ const NOTEBOOKS_BY_SUB_DEPARTMENT = {
         "Nati Data Entry",
         "U% Data Entry",
         "Comber Nolis %",
+        "Comber NRE%",
+        "Comber Efficiency",
     ],
     "Individual Card Performance": [
         "Individual Card Performance Data",
@@ -108,6 +111,8 @@ const FIELD_TYPES = [
     { value: "dropdown", label: "Dropdown" },
     { value: "special", label: "Special Characters" },
 ];
+
+const DECIMAL_PLACES_OPTIONS = [0, 1, 2, 3, 4, 5, 6];
 
 const FILTER_CASCADE = ["department", "subDepartment", "notebook"];
 
@@ -123,6 +128,7 @@ const NewFieldCreationPage = () => {
     const [filters, setFilters] = useState({ department: "", subDepartment: "", notebook: "" });
     const [fieldLabel, setFieldLabel] = useState("");
     const [fieldType, setFieldType] = useState("text");
+    const [decimalPlaces, setDecimalPlaces] = useState(2);
     const [dropdownOptions, setDropdownOptions] = useState([""]);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState("");
@@ -136,6 +142,7 @@ const NewFieldCreationPage = () => {
     const [editingField, setEditingField] = useState(null);
     const [editLabel, setEditLabel] = useState("");
     const [editType, setEditType] = useState("text");
+    const [editDecimalPlaces, setEditDecimalPlaces] = useState(2);
     const [editOptions, setEditOptions] = useState([""]);
     const [isSavingEdit, setIsSavingEdit] = useState(false);
     const [deletingId, setDeletingId] = useState(null);
@@ -196,6 +203,7 @@ const NewFieldCreationPage = () => {
                 notebook: filters.notebook,
                 field_label: fieldLabel.trim(),
                 field_type: fieldType,
+                decimal_places: fieldType === "number" ? decimalPlaces : undefined,
                 field_options: fieldType === "dropdown"
                     ? dropdownOptions.map((item) => item.trim()).filter(Boolean)
                     : [],
@@ -204,6 +212,7 @@ const NewFieldCreationPage = () => {
             setFieldLabel("");
             setDropdownOptions([""]);
             setFieldType("text");
+            setDecimalPlaces(2);
             await loadExistingFields();
         } catch (err) {
             setSubmitError(err?.response?.data?.error || err?.message || "Unable to create field.");
@@ -211,6 +220,12 @@ const NewFieldCreationPage = () => {
             setIsSubmitting(false);
         }
     };
+
+    useEffect(() => {
+        if (!submitSuccess) return undefined;
+        const timer = setTimeout(() => setSubmitSuccess(""), 1500);
+        return () => clearTimeout(timer);
+    }, [submitSuccess]);
 
     const handleToggleField = async (id) => {
         setTogglingId(id);
@@ -227,6 +242,7 @@ const NewFieldCreationPage = () => {
         setEditingField(field);
         setEditLabel(field.field_label);
         setEditType(field.field_type);
+        setEditDecimalPlaces(Number.isInteger(field.decimal_places) ? field.decimal_places : 2);
         setEditOptions(Array.isArray(field.field_options) && field.field_options.length ? field.field_options : [""]);
     };
 
@@ -243,6 +259,7 @@ const NewFieldCreationPage = () => {
             await updateNotebookCustomFieldApi(editingField.id, {
                 field_label: editLabel.trim(),
                 field_type: editType,
+                decimal_places: editType === "number" ? editDecimalPlaces : undefined,
                 field_options: editType === "dropdown"
                     ? editOptions.map((item) => item.trim()).filter(Boolean)
                     : [],
@@ -341,6 +358,22 @@ const NewFieldCreationPage = () => {
                                         ))}
                                     </select>
                                 </div>
+                                {editType === "number" ? (
+                                    <div className={styles.formField}>
+                                        <label htmlFor={`edit-decimal-places-${field.id}`}>Decimal Places</label>
+                                        <select
+                                            id={`edit-decimal-places-${field.id}`}
+                                            className={styles.formSelect}
+                                            value={editDecimalPlaces}
+                                            onChange={(event) => setEditDecimalPlaces(Number(event.target.value))}
+                                            disabled={Boolean(field.db_column_name)}
+                                        >
+                                            {DECIMAL_PLACES_OPTIONS.map((count) => (
+                                                <option key={count} value={count}>{count}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                ) : null}
                                 {editType === "dropdown" ? (
                                     <div className={styles.formField}>
                                         <label>Dropdown Options</label>
@@ -524,7 +557,6 @@ const NewFieldCreationPage = () => {
                 ) : (
                     <div className={styles.creationCard}>
                         <h2>Enter new field</h2>
-                        {submitSuccess ? <p className={styles.formSuccess}>{submitSuccess}</p> : null}
                         {submitError ? <p className={styles.formError}>{submitError}</p> : null}
                         <form onSubmit={handleCreateField}>
                             <div className={styles.formField}>
@@ -552,6 +584,21 @@ const NewFieldCreationPage = () => {
                                     ))}
                                 </select>
                             </div>
+                            {fieldType === "number" ? (
+                                <div className={styles.formField}>
+                                    <label htmlFor="field-decimal-places">Decimal Places</label>
+                                    <select
+                                        id="field-decimal-places"
+                                        className={styles.formSelect}
+                                        value={decimalPlaces}
+                                        onChange={(event) => setDecimalPlaces(Number(event.target.value))}
+                                    >
+                                        {DECIMAL_PLACES_OPTIONS.map((count) => (
+                                            <option key={count} value={count}>{count}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            ) : null}
                             {fieldType === "dropdown" ? (
                                 <div className={styles.formField}>
                                     <label>Dropdown Options</label>
@@ -626,6 +673,13 @@ const NewFieldCreationPage = () => {
                     </div>
                 </div>
             ) : null}
+
+            <SuccessModal
+                open={Boolean(submitSuccess)}
+                message={submitSuccess}
+                onClose={() => setSubmitSuccess("")}
+                hideButton
+            />
         </section>
     );
 };
